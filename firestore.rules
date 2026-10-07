@@ -1,0 +1,315 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users/{userId}/projects/{projectId}/enclosures
+    // Document ID: {enclosureId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - position: map (required) { lat: number, lng: number }
+    //   - uid: string (required, immutable)
+    //   - swapSides: bool (optional)
+    //   - enclosureTypeId: string (optional)
+    //   - trayAssignments: map (optional)
+    //   - routeSideOverrides: map (optional)
+    //
+    // Collection: users/{userId}/projects/{projectId}/routes
+    // Document ID: {routeId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - path: list (required) [{ lat: number, lng: number }]
+    //   - capacity: number (required)
+    //   - cores: list (required) [{ id: number, color: string, status: string, label: string, owner: string, priority: string, details: string, splices: map }]
+    //   - startEnclosureId: string (optional)
+    //   - endEnclosureId: string (optional)
+    //   - tier: string (optional)
+    //   - fiberType: string (optional)
+    //   - tierSharing: string (optional)
+    //   - tierSharingPartners: list (optional)
+    //   - markStart: number (optional)
+    //   - markEnd: number (optional)
+    //   - totalLength: number (optional)
+    //   - uid: string (required, immutable)
+    //
+    // Collection: users/{userId}/loops
+    // Document ID: {loopId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - position: map (required) { lat: number, lng: number }
+    //   - routeId: string (required)
+    //   - length: number (required)
+    //   - uid: string (required, immutable)
+    //
+    // Collection: users/{userId}/fiberColorConfigs
+    // Document ID: {configId}
+    // Fields:
+    //   - id: string (required)
+    //   - fiberTypeId: string (required)
+    //   - tier: string (required)
+    //   - color: string (required)
+    //   - uid: string (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return userExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((userExists() && getUserData().role == 'Admin') ||
+          (request.auth.token.email == "vpunpum@gmail.com") ||
+          (request.auth.token.email == "verayut_p@uih.co.th"));
+    }
+
+    function canAccessProject(projectData) {
+      return isAdmin() || 
+             (userExists() && 'owners' in projectData && getUserData().owner in projectData.owners) || 
+             (userExists() && 'owner' in projectData && getUserData().owner == projectData.owner) || 
+             request.auth.uid == projectData.uid;
+    }
+
+    function canEditProject(projectData) {
+      return isAdmin() || 
+             (userExists() && getUserData().role in ['Design', 'Sub-contract'] && (
+               ('owners' in projectData && getUserData().owner in projectData.owners) ||
+               ('owner' in projectData && getUserData().owner == projectData.owner)
+             )) || 
+             request.auth.uid == projectData.uid;
+    }
+
+    function canDeleteProject(projectData) {
+      return isAdmin() || 
+             request.auth.uid == projectData.uid;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && (resource == null || !('uid' in resource.data) || request.auth.uid == resource.data.uid);
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidPoint(point) {
+      return point is map && point.keys().hasAll(['lat', 'lng']) && point.lat is number && point.lng is number;
+    }
+
+    function isValidPath(path) {
+      return path is list && path.size() <= 1000;
+    }
+
+    function isValidCoreConnection(conn) {
+      return conn is map && conn.keys().hasAll(['routeId', 'coreId']) && conn.routeId is string && conn.coreId is number;
+    }
+
+    function isValidSplices(splices) {
+      return splices is map && splices.size() <= 100;
+    }
+
+    function isValidCore(core) {
+      return core is map && core.keys().hasAll(['id', 'color', 'status', 'label', 'owner', 'priority', 'details']) &&
+        core.id is number && core.color is string && core.color.size() <= 20 &&
+        core.status in ['used', 'bad', 'reserved'] &&
+        core.label is string && core.label.size() <= 100 &&
+        core.owner in ['None', 'ITEL', 'SYMC', 'UIH'] &&
+        core.priority in ['Low', 'Medium', 'High'] &&
+        core.details is string && core.details.size() <= 1000 &&
+        (!('splices' in core) || isValidSplices(core.splices));
+    }
+
+    function isValidCores(cores, capacity) {
+      return cores is list && cores.size() == capacity;
+    }
+
+    // Domain Validators
+    function isValidNode(data) {
+      return hasRequiredFields(['id', 'name', 'position', 'uid']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidPoint(data.position) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100 &&
+             (!('swapSides' in data) || data.swapSides is bool) &&
+             (!('enclosureTypeId' in data) || (data.enclosureTypeId is string && data.enclosureTypeId.size() <= 100)) &&
+             (!('trayAssignments' in data) || data.trayAssignments is map) &&
+             (!('routeSideOverrides' in data) || data.routeSideOverrides is map);
+    }
+
+    function isValidRoute(data) {
+      return hasRequiredFields(['id', 'name', 'path', 'capacity', 'cores', 'uid']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidPath(data.path) &&
+             data.capacity is number && data.capacity > 0 && data.capacity <= 1000 &&
+             isValidCores(data.cores, data.capacity) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100 &&
+             (!('startEnclosureId' in data) || (data.startEnclosureId is string && data.startEnclosureId.size() <= 100)) &&
+             (!('endEnclosureId' in data) || (data.endEnclosureId is string && data.endEnclosureId.size() <= 100)) &&
+             (!('tier' in data) || (data.tier is string && data.tier.size() <= 100)) &&
+             (!('fiberType' in data) || (data.fiberType is string && data.fiberType.size() <= 100)) &&
+             (!('tierSharing' in data) || data.tierSharing in ['Tier 1', 'Tier 2']) &&
+             (!('tierSharingPartners' in data) || data.tierSharingPartners is list) &&
+             (!('markStart' in data) || data.markStart is number) &&
+             (!('markEnd' in data) || data.markEnd is number) &&
+             (!('totalLength' in data) || data.totalLength is number);
+    }
+
+    function isValidLoop(data) {
+      return hasRequiredFields(['id', 'name', 'position', 'routeId', 'length', 'uid']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidPoint(data.position) &&
+             data.routeId is string && data.routeId.size() > 0 && data.routeId.size() <= 100 &&
+             data.length is number && data.length >= 0 &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100;
+    }
+
+    function isValidColorConfig(data) {
+      return hasRequiredFields(['id', 'fiberTypeId', 'tier', 'color', 'uid']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.fiberTypeId is string && data.fiberTypeId.size() > 0 && data.fiberTypeId.size() <= 100 &&
+             data.tier in ['Tier 1', 'Tier 2'] &&
+             data.color is string && data.color.size() > 0 && data.color.size() <= 20 &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 100;
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['id', 'email', 'role']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+             data.role in ['Admin', 'Design', 'Viewer', 'Sub-contract'] &&
+             (!('owner' in data) || data.owner in ['None', 'ITEL', 'SYMC', 'UIH']) &&
+             (!('requiresPasswordChange' in data) || data.requiresPasswordChange is bool) &&
+             (!('isApproved' in data) || data.isApproved is bool) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    function isValidLog(data) {
+      return hasRequiredFields(['id', 'userId', 'userEmail', 'action', 'description', 'timestamp']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 100 &&
+             data.userEmail is string && data.userEmail.size() > 0 && data.userEmail.size() <= 100 &&
+             data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() <= 1000 &&
+             data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 100;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidLog(request.resource.data) && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (request.auth.uid == userId && request.resource.data.role != 'Admin' && request.resource.data.owner == 'None'));
+      allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
+                       (isOwner(userId) && isValidUser(request.resource.data) && 
+                        request.resource.data.role == resource.data.role && 
+                        request.resource.data.owner == resource.data.owner &&
+                        request.resource.data.isApproved == resource.data.isApproved &&
+                        request.resource.data.email == resource.data.email);
+      allow delete: if isAdmin();
+
+      // Allow reading old projects for migration
+      match /projects/{projectId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+        
+        match /{document=**} {
+          allow read: if isOwner(userId) || isAdmin();
+          allow delete: if isOwner(userId) || isAdmin();
+        }
+      }
+    }
+
+    match /enclosureTypes/{typeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /ownerConfigs/{ownerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /fiberTypes/{typeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /fiberColorConfigs/{configId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidColorConfig(request.resource.data) && uidUnchanged();
+      allow update: if isAdmin() && isValidColorConfig(request.resource.data) && uidNotModified();
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && canAccessProject(resource.data);
+      allow create: if isAuthenticated() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
+      allow update: if isAuthenticated() && canEditProject(resource.data) && uidNotModified();
+      allow delete: if isAuthenticated() && canDeleteProject(resource.data);
+
+      match /enclosures/{enclosureId} {
+        allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAuthenticated() && isValidNode(request.resource.data) && uidUnchanged();
+        allow update: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) && isValidNode(request.resource.data) && uidNotModified();
+        allow delete: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+      }
+      
+      match /routes/{routeId} {
+        allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAuthenticated() && isValidRoute(request.resource.data) && uidUnchanged();
+        allow update: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) && isValidRoute(request.resource.data) && uidNotModified();
+        allow delete: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+      }
+
+      match /loops/{loopId} {
+        allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAuthenticated() && isValidLoop(request.resource.data) && uidUnchanged();
+        allow update: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) && isValidLoop(request.resource.data) && uidNotModified();
+        allow delete: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+      }
+    }
+  }
+}

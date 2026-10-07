@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none">
+  <!-- S Emblem: Height = 60, centered at Y = 40 (from Y = 10 to Y = 70) -->
+  <g transform="translate(6, -12)">
+    <!-- Upper Prism -->
+    <polygon points="12,49 36,22 36,49" fill="#eb5527" />
+    <polygon points="36,22 68,22 68,49" fill="#db3b15" />
+    <polygon points="36,22 68,49 36,49" fill="#f57038" />
+
+    <!-- Lower Prism -->
+    <polygon points="12,55 12,82 44,82" fill="#db3b15" />
+    <polygon points="12,55 44,82 44,55" fill="#f57038" />
+    <polygon points="44,55 44,82 68,55" fill="#eb5527" />
+  </g>
+
+  <!-- Wordmark SYMPHONY -->
+  <text 
+    x="84" 
+    y="49" 
+    fill="#18181b" 
+    font-family="system-ui, -apple-system, 'Montserrat', 'Arial Black', sans-serif" 
+    font-weight="900" 
+    font-size="31" 
+    letter-spacing="2"
+  >
+    SYMPHONY
+  </text>
+</svg>

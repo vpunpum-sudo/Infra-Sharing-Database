@@ -1,0 +1,8 @@
+{
+  "name": "Fiber Sharing Database",
+  "description": "Fiber Sharing Database - Web app for managing Fiber Optic infrastructure, drawing routes, defining splice nodes, and managing core statuses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

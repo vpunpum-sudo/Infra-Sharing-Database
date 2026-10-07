@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือการใช้งานระบบและการทำงานทั้งหมด - Fiber Infra Sharing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0284c7;
+            --primary-dark: #0369a1;
+            --primary-light: #e0f2fe;
+            --brand-400: #38bdf8;
+            --brand-500: #0ea5e9;
+            --brand-600: #0284c7;
+            --slate-950: #020617;
+            --slate-900: #0f172a;
+            --slate-850: #172033;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-600: #475569;
+            --slate-500: #64748b;
+            --slate-400: #94a3b8;
+            --slate-300: #cbd5e1;
+            --slate-200: #e2e8f0;
+            --slate-100: #f1f5f9;
+            --slate-50: #f8fafc;
+            --emerald-500: #10b981;
+            --emerald-600: #059669;
+            --emerald-500-20: rgba(16, 185, 129, 0.2);
+            --amber-500: #f59e0b;
+            --amber-600: #d97706;
+            --amber-500-20: rgba(245, 158, 11, 0.2);
+            --rose-500: #f43f5e;
+            --rose-600: #e11d48;
+            --rose-500-20: rgba(244, 63, 94, 0.2);
+            --purple-500: #a855f7;
+            --purple-500-20: rgba(168, 85, 247, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--slate-800);
+            background-color: #f1f5f9;
+            line-height: 1.65;
+            font-size: 15px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        h1, h2, h3, h4, h5, .font-heading {
+            font-family: 'Prompt', sans-serif;
+            color: var(--slate-900);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Top Action Bar */
+        .top-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background: rgba(15, 23, 42, 0.96);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: white;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .top-toolbar .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .top-toolbar .logo-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+        }
+
+        .btn-print {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: #0284c7;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Prompt', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+        }
+
+        .btn-print:hover {
+            background: #0369a1;
+            transform: translateY(-1px);
+        }
+
+        /* Container Layout */
+        .page-container {
+            max-width: 1000px;
+            margin: 30px auto 60px;
+            background: white;
+            padding: 50px 60px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Cover Page Section */
+        .doc-cover {
+            border-bottom: 2px solid var(--slate-100);
+            padding-bottom: 36px;
+            margin-bottom: 36px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 14px;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .badge-primary {
+            background: var(--primary-light);
+            color: var(--primary-dark);
+        }
+
+        .badge-success {
+            background: #ecfdf5;
+            color: var(--emerald-600);
+            border: 1px solid rgba(5, 150, 105, 0.2);
+        }
+
+        .badge-amber {
+            background: #fffbeb;
+            color: var(--amber-600);
+            border: 1px solid rgba(217, 119, 6, 0.2);
+        }
+
+        .badge-purple {
+            background: #faf5ff;
+            color: #7e22ce;
+            border: 1px solid rgba(126, 34, 206, 0.2);
+        }
+
+        .badge-rose {
+            background: #fff1f2;
+            color: var(--rose-600);
+            border: 1px solid rgba(225, 29, 72, 0.2);
+        }
+
+        .doc-title {
+            font-size: 32px;
+            line-height: 1.3;
+            color: var(--slate-900);
+            margin-bottom: 10px;
+            font-weight: 800;
+        }
+
+        .doc-subtitle {
+            font-size: 17px;
+            color: var(--slate-500);
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            background: var(--slate-50);
+            border: 1px solid var(--slate-200);
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .meta-item .meta-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--slate-500);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 2px;
+        }
+
+        .meta-item .meta-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--slate-800);
+        }
+
+        /* TOC Section */
+        .toc-box {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border: 1px solid var(--slate-200);
+            border-radius: 14px;
+            padding: 24px 28px;
+            margin-bottom: 40px;
+        }
+
+        .toc-title {
+            font-size: 17px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--slate-900);
+        }
+
+        .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px 20px;
+        }
+
+        .toc-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--slate-700);
+            text-decoration: none;
+            padding: 4px 0;
+            transition: color 0.2s;
+        }
+
+        .toc-item:hover {
+            color: var(--primary);
+        }
+
+        .toc-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Chapter / Module Sections */
+        .section-block {
+            margin-bottom: 50px;
+            page-break-inside: avoid;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--slate-100);
+            margin-bottom: 18px;
+        }
+
+        .section-icon {
+            width: 38px;
+            height: 38px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            flex-shrink: 0;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .section-title {
+            font-size: 21px;
+            color: var(--slate-900);
+        }
+
+        .section-desc {
+            font-size: 14.5px;
+            color: var(--slate-600);
+            margin-bottom: 18px;
+            line-height: 1.7;
+        }
+
+        /* ==========================================================================
+           REAL UI SYSTEM MOCKUP FRAMES (Exact App Interface Simulation)
+           ========================================================================== */
+        .ui-window {
+            background: #020617;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            margin: 22px 0;
+            font-family: 'Sarabun', sans-serif;
+            color: #f8fafc;
+        }
+
+        .ui-window-header {
+            background: #0f172a;
+            padding: 10px 16px;
+            border-bottom: 1px solid #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .ui-window-controls {
+            display: flex;
+            gap: 6px;
+        }
+
+        .ui-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .ui-dot.red { background: #ef4444; }
+        .ui-dot.yellow { background: #f59e0b; }
+        .ui-dot.green { background: #10b981; }
+
+        .ui-window-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #94a3b8;
+            font-family: 'Prompt', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ui-window-body {
+            padding: 18px;
+            background: #090d16;
+        }
+
+        .ui-caption {
+            font-size: 12px;
+            color: #64748b;
+            padding: 8px 16px;
+            background: #0f172a;
+            border-top: 1px solid #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 500;
+        }
+
+        /* Common Real UI Widgets */
+        .ui-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .ui-badge-itel { background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); }
+        .ui-badge-symc { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .ui-badge-uih  { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .ui-badge-admin { background: rgba(2, 132, 199, 0.2); color: #38bdf8; border: 1px solid rgba(2, 132, 199, 0.4); }
+
+        .ui-status-used { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .ui-status-bad { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+        .ui-status-reserved { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        /* Real UI: Dashboard Project Grid */
+        .mockup-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #0f172a;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: 1px solid #1e293b;
+            margin-bottom: 16px;
+        }
+
+        .mockup-project-cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+
+        .mockup-card {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 14px;
+            padding: 16px;
+            position: relative;
+        }
+
+        .mockup-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .mockup-card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #f8fafc;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .mockup-stats-row {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .mockup-stat-pill {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Real UI: Map Mockup */
+        .mockup-map-container {
+            position: relative;
+            height: 320px;
+            background: #0a0f1d;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #1e293b;
+        }
+
+        .mockup-map-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .mockup-road {
+            position: absolute;
+            background: #1e293b;
+            border-radius: 4px;
+        }
+
+        .mockup-sidebar {
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            bottom: 12px;
+            width: 170px;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(8px);
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 10px;
+            z-index: 10;
+        }
+
+        .mockup-floating-tools {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(8px);
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 6px 10px;
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+        }
+
+        .mockup-btn {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Prompt', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Real UI: Core Manager Table */
+        .mockup-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+
+        .mockup-table th {
+            text-align: left;
+            padding: 8px 10px;
+            background: #0f172a;
+            color: #94a3b8;
+            font-family: 'Prompt', sans-serif;
+            font-weight: 600;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .mockup-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #172033;
+            color: #e2e8f0;
+        }
+
+        /* Real UI: Splice Manager Dual Column */
+        .mockup-splice-grid {
+            display: grid;
+            grid-template-columns: 1fr 60px 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .mockup-splice-column {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .mockup-core-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            margin-bottom: 5px;
+            background: #172033;
+            border-radius: 6px;
+            border: 1px solid #1e293b;
+            font-size: 11.5px;
+        }
+
+        .color-bullet {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+
+        /* Feature Cards Grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin: 18px 0;
+        }
+
+        .feature-card {
+            background: var(--slate-50);
+            border: 1px solid var(--slate-200);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .feature-card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .feature-card-icon {
+            width: 28px;
+            height: 28px;
+            background: white;
+            border: 1px solid var(--slate-200);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 14px;
+        }
+
+        .feature-card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--slate-900);
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .feature-card-body {
+            font-size: 13px;
+            color: var(--slate-600);
+            line-height: 1.6;
+        }
+
+        /* Data Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 18px 0;
+            font-size: 13.5px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--slate-200);
+        }
+
+        .data-table th {
+            background: var(--slate-900);
+            color: white;
+            text-align: left;
+            padding: 10px 14px;
+            font-family: 'Prompt', sans-serif;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--slate-200);
+            color: var(--slate-700);
+            vertical-align: middle;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tr:nth-child(even) {
+            background: var(--slate-50);
+        }
+
+        /* Callout Box */
+        .callout-box {
+            background: var(--primary-light);
+            border-left: 4px solid var(--primary);
+            padding: 14px 18px;
+            border-radius: 0 10px 10px 0;
+            margin: 18px 0;
+            font-size: 13.5px;
+            color: #0369a1;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .callout-box strong {
+            color: #0c4a6e;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        /* Color Palette Grid */
+        .color-palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+            margin: 16px 0;
+        }
+
+        .color-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: white;
+            border: 1px solid var(--slate-200);
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+
+        .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.15);
+            flex-shrink: 0;
+        }
+
+        /* Workflow Step Guide */
+        .workflow-timeline {
+            position: relative;
+            padding-left: 28px;
+            margin: 20px 0;
+        }
+
+        .workflow-timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 6px;
+            bottom: 6px;
+            width: 2px;
+            background: var(--slate-200);
+        }
+
+        .workflow-step {
+            position: relative;
+            margin-bottom: 18px;
+        }
+
+        .workflow-step:last-child {
+            margin-bottom: 0;
+        }
+
+        .workflow-step-num {
+            position: absolute;
+            left: -28px;
+            top: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 3px white;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .workflow-step-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--slate-900);
+            margin-bottom: 2px;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .workflow-step-desc {
+            font-size: 13px;
+            color: var(--slate-600);
+            line-height: 1.6;
+        }
+
+        /* Document Footer */
+        .doc-footer {
+            margin-top: 50px;
+            padding-top: 24px;
+            border-top: 2px solid var(--slate-100);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--slate-500);
+            font-size: 12.5px;
+        }
+
+        /* Print Media Styles */
+        @media print {
+            .top-toolbar {
+                display: none !important;
+            }
+
+            body {
+                background: white;
+                font-size: 13px;
+            }
+
+            .page-container {
+                max-width: 100%;
+                padding: 0;
+                margin: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .section-block {
+                page-break-inside: avoid;
+                margin-bottom: 28px;
+            }
+
+            .ui-window {
+                page-break-inside: avoid;
+                box-shadow: none;
+                border-color: #cbd5e1;
+            }
+
+            h1, h2, h3, h4 {
+                page-break-after: avoid;
+            }
+
+            table {
+                page-break-inside: avoid;
+            }
+
+            @page {
+                size: A4;
+                margin: 12mm 12mm 12mm 12mm;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .page-container {
+                padding: 24px 18px;
+                margin: 10px;
+            }
+            .toc-grid, .mockup-project-cards {
+                grid-template-columns: 1fr;
+            }
+            .doc-title {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sticky Toolbar for Screen Viewers -->
+    <div class="top-toolbar">
+        <div class="logo-group">
+            <div class="logo-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                    <path d="M2 12h20"></path>
+                </svg>
+            </div>
+            <div>
+                <div style="font-family: 'Prompt', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 0.04em;">FIBER INFRA SHARING</div>
+                <div style="font-size: 11px; color: var(--brand-400); font-weight: 500;">User Manual with Real System Mockup Views</div>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="btn-print" onclick="window.print();">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                </svg>
+                บันทึกเป็น PDF / พิมพ์เอกสาร
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Printable Document Container -->
+    <div class="page-container">
+
+        <!-- Cover Page Section -->
+        <div class="doc-cover">
+            <span class="badge badge-primary">Official System Manual & Specifications</span>
+            <h1 class="doc-title">คู่มืออธิบายฟังก์ชันการทำงานทั้งหมด (ภาพประกอบจากระบบจริง)<br>ระบบบริหารจัดการโครงข่ายร่วม (Fiber Infra Sharing)</h1>
+            <p class="doc-subtitle">Comprehensive Technical Specification & Real System UI Operations Guide</p>
+
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <div class="meta-label">ชื่อระบบ (System Name)</div>
+                    <div class="meta-value">FIBER INFRA SHARING</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">สถาปัตยกรรม (Architecture)</div>
+                    <div class="meta-value">React + Tailwind + Google Cloud Firestore</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">พันธมิตรร่วม (Partners)</div>
+                    <div class="meta-value">ITEL, SYMC, UIH</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">วันที่จัดทำ (Updated Date)</div>
+                    <div class="meta-value">27 สิงหาคม 2026</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table of Contents -->
+        <div class="toc-box">
+            <h3 class="toc-title">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
+                สารบัญหัวข้อหลัก (Table of Contents)
+            </h3>
+            <div class="toc-grid">
+                <a href="#sec1" class="toc-item"><span class="toc-num">1</span> การจัดการสิทธิ์และผู้ใช้งาน (User & Role RBAC)</a>
+                <a href="#sec2" class="toc-item"><span class="toc-num">2</span> แดชบอร์ดโครงการ (Project Dashboard)</a>
+                <a href="#sec3" class="toc-item"><span class="toc-num">3</span> ระบบแผนที่และวาดโครงข่าย (GIS Network Map)</a>
+                <a href="#sec4" class="toc-item"><span class="toc-num">4</span> การจัดการสายและคอร์ (Route & Core Manager)</a>
+                <a href="#sec5" class="toc-item"><span class="toc-num">5</span> การสไปลซ์และผังเชื่อมต่อ (Splice Manager)</a>
+                <a href="#sec6" class="toc-item"><span class="toc-num">6</span> การตั้งค่ามาตรฐานระบบ (System Settings)</a>
+                <a href="#sec7" class="toc-item"><span class="toc-num">7</span> บันทึกประวัติกิจกรรมระบบ (Audit & Activity Logs)</a>
+            </div>
+        </div>
+
+        <!-- Section 1: User & Access Management -->
+        <div id="sec1" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">01</div>
+                <div>
+                    <h2 class="section-title">1. การจัดการบัญชีผู้ใช้งานและระบบสิทธิ์ (User & Access RBAC)</h2>
+                    <span class="badge badge-success">Security & Governance</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                ระบบถูกออกแบบด้วยมาตรฐานความปลอดภัยระดับองค์กร (Enterprise Grade) รองรับการแบ่งแยกสิทธิ์ตามบทบาท (Role-Based Access Control) และการระบุสังกัดองค์กรพันธมิตร (Organization Owner) เพื่อป้องกันการเข้าถึงและแก้ไขข้อมูลข้ามหน่วยงานโดยไม่ได้รับอนุญาต
+            </p>
+
+            <!-- Real UI Simulation 1: User Management Screen -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        User Management & Approval Console
+                    </div>
+                    <div style="font-size: 11px; color: #38bdf8; font-weight: 700;">ADMIN VIEW</div>
+                </div>
+                <div class="ui-window-body">
+                    <table class="mockup-table">
+                        <thead>
+                            <tr>
+                                <th>USER EMAIL</th>
+                                <th>ROLE</th>
+                                <th>ORGANIZATION</th>
+                                <th>STATUS</th>
+                                <th style="text-align: right;">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 700; color: #f8fafc;">vpunpum@gmail.com</div>
+                                    <div style="font-size: 10px; color: #64748b;">UID: auth_9a8f712c</div>
+                                </td>
+                                <td><span class="ui-badge ui-badge-admin">Admin</span></td>
+                                <td><span class="ui-badge" style="background:#334155; color:#cbd5e1;">None (Global)</span></td>
+                                <td><span class="ui-badge ui-status-used">Active / Approved</span></td>
+                                <td style="text-align: right;">
+                                    <span style="font-size: 11px; color: #64748b;">Primary Admin</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 700; color: #f8fafc;">somchai.eng@itel.co.th</div>
+                                    <div style="font-size: 10px; color: #64748b;">UID: auth_4b12d890</div>
+                                </td>
+                                <td><span class="ui-badge ui-badge-itel">Editor</span></td>
+                                <td><span class="ui-badge ui-badge-itel">ITEL</span></td>
+                                <td><span class="ui-badge ui-status-used">Approved</span></td>
+                                <td style="text-align: right;">
+                                    <button class="mockup-btn" style="background:#334155; padding: 3px 8px; font-size:10px;">Edit Role</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 700; color: #f8fafc;">wichai.tech@symc.co.th</div>
+                                    <div style="font-size: 10px; color: #64748b;">UID: auth_1120ab55</div>
+                                </td>
+                                <td><span class="ui-badge ui-badge-symc">Viewer</span></td>
+                                <td><span class="ui-badge ui-badge-symc">SYMC</span></td>
+                                <td><span class="ui-badge ui-status-used">Approved</span></td>
+                                <td style="text-align: right;">
+                                    <button class="mockup-btn" style="background:#334155; padding: 3px 8px; font-size:10px;">Edit Role</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 700; color: #f8fafc;">new.field@uih.co.th</div>
+                                    <div style="font-size: 10px; color: #64748b;">UID: auth_77cda123</div>
+                                </td>
+                                <td><span class="ui-badge" style="background:#1e293b; color:#94a3b8;">Pending...</span></td>
+                                <td><span class="ui-badge ui-badge-uih">UIH</span></td>
+                                <td><span class="ui-badge ui-status-reserved">Pending Approval</span></td>
+                                <td style="text-align: right;">
+                                    <button class="mockup-btn" style="background:#059669; padding: 3px 8px; font-size:10px; margin-right:4px;">Approve</button>
+                                    <button class="mockup-btn" style="background:#e11d48; padding: 3px 8px; font-size:10px;">Reject</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าจอจัดการผู้ใช้งานและการอนุมัติสิทธิ์ (User Management Console)</span>
+                    <span class="mono">Source: /src/components/UserManagement.tsx</span>
+                </div>
+            </div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">บทบาท (Role)</th>
+                        <th style="width: 45%;">สิทธิ์การใช้งาน (Permissions)</th>
+                        <th style="width: 40%;">ขอบเขตหน้าที่ (Scope of Work)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Admin</strong></td>
+                        <td>เข้าถึงทุกฟังก์ชัน, จัดการผู้ใช้งาน, อนุมัติสมาชิก, แก้ไขโครงข่าย, จัดการ Splice, แก้ไข System Settings และดู Audit Logs</td>
+                        <td>ผู้ดูแลระบบส่วนกลาง (System Administrator)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Editor</strong></td>
+                        <td>วาดและแก้ไขเส้นทาง (Routes), วาง Enclosure, ทำการสไปลซ์สาย (Splicing), แก้ไขสถานะ Core ที่ตนเองได้รับมอบหมาย</td>
+                        <td>วิศวกรโครงข่ายและช่างเทคนิคภาคสนาม (Field Engineer)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Viewer</strong></td>
+                        <td>ดูข้อมูลบนแผนที่, ตรวจสอบสถานะคอร์, ดูไดอะแกรมการสไปลซ์ (Read-Only), ส่งออกเอกสาร PDF</td>
+                        <td>ผู้บริหาร, ผู้ตรวจสอบ หรือทีมประสานงาน (Monitor & Audit)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 2: Projects Dashboard -->
+        <div id="sec2" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">02</div>
+                <div>
+                    <h2 class="section-title">2. แดชบอร์ดและการจัดการโครงการ (Project Dashboard)</h2>
+                    <span class="badge badge-primary">Project Management</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                ระบบจัดการโครงการแยกพื้นที่และโครงข่ายออกเป็นอิสระ (Multi-Project Isolation) ทำให้สามารถบริหารจัดการเส้นทางและจุดเชื่อมต่อตามเขตพื้นที่ (Zone/Province) หรืองานติดตั้งเฉพาะทางได้อย่างมีระเบียบ
+            </p>
+
+            <!-- Real UI Simulation 2: Dashboard View -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+                        FIBER INFRA SHARING &bull; Projects Dashboard
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="mockup-btn" style="background:#0284c7; padding: 3px 10px; font-size:11px;">+ New Project</button>
+                    </div>
+                </div>
+                <div class="ui-window-body">
+                    <div class="mockup-topbar">
+                        <div>
+                            <div style="font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">WELCOME BACK</div>
+                            <div style="font-size: 16px; font-weight: 800; color: #f8fafc; font-family:'Prompt',sans-serif;">vpunpum@gmail.com</div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <span class="ui-badge ui-badge-admin">Admin Role</span>
+                            <span class="ui-badge ui-badge-itel">Partner: ITEL</span>
+                        </div>
+                    </div>
+
+                    <div class="mockup-project-cards">
+                        <!-- Project Card 1 -->
+                        <div class="mockup-card" style="border-left: 3px solid #0ea5e9;">
+                            <div class="mockup-card-header">
+                                <div>
+                                    <div class="mockup-card-title">Bangkok Central Backbone Ring 01</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top:2px;">Sukhumvit - Rama 9 - Asoke Metro Area</div>
+                                </div>
+                                <span class="ui-badge ui-badge-itel">Tier 1</span>
+                            </div>
+                            <div class="mockup-stats-row">
+                                <div class="mockup-stat-pill">📍 14 Enclosures</div>
+                                <div class="mockup-stat-pill">⚡ 28 Routes</div>
+                                <div class="mockup-stat-pill">📏 45.8 km</div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid #1e293b; padding-top: 10px;">
+                                <div style="font-size: 11px; color: #64748b;">Updated: Today, 15:45</div>
+                                <button class="mockup-btn" style="background:#0284c7; font-size:11px;">Open Map &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Project Card 2 -->
+                        <div class="mockup-card" style="border-left: 3px solid #a855f7;">
+                            <div class="mockup-card-header">
+                                <div>
+                                    <div class="mockup-card-title">EEC Industrial Smart Ring (Chonburi)</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top:2px;">Amata City - Laem Chabang Port</div>
+                                </div>
+                                <span class="ui-badge ui-badge-symc">Tier 2</span>
+                            </div>
+                            <div class="mockup-stats-row">
+                                <div class="mockup-stat-pill">📍 8 Enclosures</div>
+                                <div class="mockup-stat-pill">⚡ 16 Routes</div>
+                                <div class="mockup-stat-pill">📏 32.4 km</div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid #1e293b; padding-top: 10px;">
+                                <div style="font-size: 11px; color: #64748b;">Updated: 26 Aug 2026</div>
+                                <button class="mockup-btn" style="background:#0284c7; font-size:11px;">Open Map &rarr;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าจอแดชบอร์ดโครงการ (Projects Dashboard Overview)</span>
+                    <span class="mono">Source: /src/components/ProjectsDashboard.tsx</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: GIS Network Map Interface -->
+        <div id="sec3" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">03</div>
+                <div>
+                    <h2 class="section-title">3. ระบบแผนที่และการวาดโครงข่าย (GIS Network Map Interface)</h2>
+                    <span class="badge badge-primary">GIS & Interactive Mapping</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                แผนที่ภูมิสารสนเทศแบบโต้ตอบความละเอียดสูง (Google Maps Dark Mode Integration) ช่วยให้วิศวกรสามารถวางแผนและติดตามเส้นทางกายภาพได้อย่างแม่นยำ พร้อมเครื่องมือวาดเส้นทางและตรวจจับพิกัดอัตโนมัติ
+            </p>
+
+            <!-- Real UI Simulation 3: Interactive GIS Map -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                        Network GIS Map View &bull; Bangkok Central Ring
+                    </div>
+                    <div style="font-size: 11px; color: #10b981; font-weight: 700;">● GPS LIVE SYNC</div>
+                </div>
+                <div class="ui-window-body" style="padding: 0;">
+                    <div class="mockup-map-container">
+                        <div class="mockup-map-grid"></div>
+
+                        <!-- Roads -->
+                        <div class="mockup-road" style="top: 80px; left: 0; right: 0; height: 18px; opacity: 0.7;"></div>
+                        <div class="mockup-road" style="top: 220px; left: 0; right: 0; height: 16px; opacity: 0.7;"></div>
+                        <div class="mockup-road" style="left: 360px; top: 0; bottom: 0; width: 18px; opacity: 0.7;"></div>
+                        <div class="mockup-road" style="left: 640px; top: 0; bottom: 0; width: 16px; opacity: 0.7;"></div>
+
+                        <!-- Sidebar in Map -->
+                        <div class="mockup-sidebar">
+                            <div style="font-size: 11px; font-weight: 800; color: #38bdf8; font-family:'Prompt',sans-serif; margin-bottom: 8px;">INFRA EXPLORER</div>
+                            <div style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">ROUTES (2)</div>
+                            <div style="background: #1e293b; padding: 4px 6px; border-radius: 6px; font-size: 10px; margin: 4px 0; border-left: 2px solid #0ea5e9;">
+                                <strong>RT-ASOKE-01</strong> (24F)
+                            </div>
+                            <div style="background: #1e293b; padding: 4px 6px; border-radius: 6px; font-size: 10px; margin: 4px 0; border-left: 2px solid #a855f7;">
+                                <strong>RT-RAMA9-02</strong> (48F)
+                            </div>
+                            <div style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-top: 8px;">ENCLOSURES (3)</div>
+                            <div style="font-size: 10px; color: #cbd5e1; padding: 2px 0;">📍 ENC-01 (JB-60F)</div>
+                            <div style="font-size: 10px; color: #cbd5e1; padding: 2px 0;">📍 ENC-02 (MH-96F)</div>
+                            <div style="font-size: 10px; color: #cbd5e1; padding: 2px 0;">📍 ENC-03 (FDB-24F)</div>
+                        </div>
+
+                        <!-- Fiber Routes (SVG Polylines) -->
+                        <svg style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;">
+                            <!-- Glowing Route 1 -->
+                            <path d="M 220,89 L 368,89 L 368,228 L 540,228" fill="none" stroke="#0ea5e9" stroke-width="4" stroke-linecap="round" filter="drop-shadow(0 0 6px rgba(14,165,233,0.8))"/>
+                            <!-- Glowing Route 2 -->
+                            <path d="M 368,89 L 648,89 L 648,228" fill="none" stroke="#a855f7" stroke-width="4" stroke-linecap="round" filter="drop-shadow(0 0 6px rgba(168,85,247,0.8))"/>
+                        </svg>
+
+                        <!-- Enclosure Marker 1 -->
+                        <div style="position: absolute; left: 200px; top: 72px; background: #0f172a; border: 2px solid #0ea5e9; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 800; color: white; display: flex; align-items: center; gap: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                            <span style="color:#38bdf8;">📦</span> ENC-01 (Asoke Junction)
+                        </div>
+
+                        <!-- Enclosure Marker 2 -->
+                        <div style="position: absolute; left: 350px; top: 72px; background: #0f172a; border: 2px solid #38bdf8; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 800; color: white; display: flex; align-items: center; gap: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                            <span style="color:#38bdf8;">📦</span> ENC-02 (Manhole 04)
+                        </div>
+
+                        <!-- Loop Marker -->
+                        <div style="position: absolute; left: 350px; top: 150px; background: #0f172a; border: 1px dashed #f59e0b; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; color: #fbbf24;">
+                            🔄 Loop 50m (Slack)
+                        </div>
+
+                        <!-- Floating Action Toolbar -->
+                        <div class="mockup-floating-tools">
+                            <button class="mockup-btn" style="background:#0284c7;">+ Enclosure</button>
+                            <button class="mockup-btn" style="background:#0284c7;">+ Route</button>
+                            <button class="mockup-btn" style="background:#0284c7;">+ Loop</button>
+                            <button class="mockup-btn" style="background:#334155;">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าจอแผนที่ GIS แสดงแนวเส้นเคเบิล, โหนดพักสาย และจุดขดสายสำรอง</span>
+                    <span class="mono">Source: /src/components/FiberMap.tsx</span>
+                </div>
+            </div>
+
+            <div class="workflow-timeline">
+                <div class="workflow-step">
+                    <div class="workflow-step-num">1</div>
+                    <div class="workflow-step-title">การวางจุดพักสาย / กล่องเชื่อมต่อ (Enclosure Placement)</div>
+                    <div class="workflow-step-desc">
+                        เลือกเครื่องมือ <strong>+ Enclosure</strong> แล้วคลิกบนแผนที่เพื่อระบุพิกัด ละติจูด/ลองจิจูด พร้อมกรอกชื่อสถานที่ (Location Name), ประเภทจุดติดตั้ง (Manhole, Pole, Handhole) และเลือกชนิดกล่อง (Enclosure Type)
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="workflow-step-num">2</div>
+                    <div class="workflow-step-title">การวาดแนวเส้นทางสายเคเบิล (Route Polyline Drawing)</div>
+                    <div class="workflow-step-desc">
+                        เลือกเครื่องมือ <strong>+ Route</strong> แล้วคลิกตามแนวถนนเพื่อวาด Polyline ระบบจะทำการเชื่อมโยงจุดเริ่มต้น (Start Enclosure) และจุดสิ้นสุด (End Enclosure) เข้ากับโหนดพักสายโดยอัตโนมัติ
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="workflow-step-num">3</div>
+                    <div class="workflow-step-title">การระบุขดสายสำรอง (Fiber Slack Loop Placement)</div>
+                    <div class="workflow-step-desc">
+                        เลือกเครื่องมือ <strong>+ Loop</strong> คลิกบนแนวเส้นทาง ระบบจะ Snap เข้าหาเส้นเคเบิลที่ใกล้ที่สุดภายในระยะ 100 เมตร และให้ระบุระยะขดสาย (เช่น 50m, 100m) เพื่อความถูกต้องในการคำนวณ Optical Distance
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Route & Core Management -->
+        <div id="sec4" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">04</div>
+                <div>
+                    <h2 class="section-title">4. การจัดการข้อมูลสายและคอร์ไฟเบอร์ (Route & Core Management)</h2>
+                    <span class="badge badge-primary">Cable & Core Specification</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                โครงสร้างการแบ่งปันสายไฟเบอร์รองรับทั้งโมเดล <strong>Tier 1 (3 พันธมิตร: ITEL, SYMC, UIH ร่วมถือครอง)</strong> และ <strong>Tier 2 (2 พันธมิตรจับคู่ร่วมถือครอง)</strong> พร้อมระบบตารางบริหารจัดการสถานะคอร์อย่างละเอียด
+            </p>
+
+            <!-- Real UI Simulation 4: Core Manager Window -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg>
+                        Core Management & Status Table &bull; Route: RT-ASOKE-01 (24 Cores)
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <span class="ui-badge ui-badge-itel">Tier 1 Sharing</span>
+                    </div>
+                </div>
+                <div class="ui-window-body">
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background: #0f172a; padding: 10px; border-radius: 10px; border: 1px solid #1e293b; margin-bottom: 12px;">
+                        <div><span style="font-size:10px; color:#64748b; font-weight:700;">START ENCLOSURE:</span><div style="font-size:12px; font-weight:700;">ENC-01 (Asoke)</div></div>
+                        <div><span style="font-size:10px; color:#64748b; font-weight:700;">END ENCLOSURE:</span><div style="font-size:12px; font-weight:700;">ENC-02 (Manhole 04)</div></div>
+                        <div><span style="font-size:10px; color:#64748b; font-weight:700;">DISTANCE MARK:</span><div style="font-size:12px; font-weight:700;">0.00 km &rarr; 3.45 km</div></div>
+                        <div><span style="font-size:10px; color:#64748b; font-weight:700;">TOTAL SLACK LOOPS:</span><div style="font-size:12px; font-weight:700; color:#fbbf24;">100 m</div></div>
+                    </div>
+
+                    <table class="mockup-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 10%;">CORE</th>
+                                <th style="width: 20%;">COLOR CODE</th>
+                                <th style="width: 18%;">STATUS</th>
+                                <th style="width: 15%;">PRIORITY</th>
+                                <th style="width: 15%;">OWNER</th>
+                                <th style="width: 22%;">CIRCUIT / NOTE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="font-weight: 800;">#01</td>
+                                <td><span class="color-bullet" style="background:#2563eb;"></span> Blue (น้ำเงิน)</td>
+                                <td><span class="ui-badge ui-status-used">● Used</span></td>
+                                <td><span style="color:#ef4444; font-weight:700; font-size:11px;">High</span></td>
+                                <td><span class="ui-badge ui-badge-itel">ITEL</span></td>
+                                <td class="mono" style="font-size: 11px;">CKT-ITEL-BKK-001</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 800;">#02</td>
+                                <td><span class="color-bullet" style="background:#ea580c;"></span> Orange (ส้ม)</td>
+                                <td><span class="ui-badge ui-status-used">● Used</span></td>
+                                <td><span style="color:#ef4444; font-weight:700; font-size:11px;">High</span></td>
+                                <td><span class="ui-badge ui-badge-symc">SYMC</span></td>
+                                <td class="mono" style="font-size: 11px;">CKT-SYMC-METRO-09</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 800;">#03</td>
+                                <td><span class="color-bullet" style="background:#16a34a;"></span> Green (เขียว)</td>
+                                <td><span class="ui-badge ui-status-reserved">● Reserved</span></td>
+                                <td><span style="color:#f59e0b; font-weight:700; font-size:11px;">Medium</span></td>
+                                <td><span class="ui-badge ui-badge-uih">UIH</span></td>
+                                <td style="font-size: 11px; color:#94a3b8;">Pending Migration</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 800;">#04</td>
+                                <td><span class="color-bullet" style="background:#854d0e;"></span> Brown (น้ำตาล)</td>
+                                <td><span class="ui-badge ui-status-bad">● Bad / Loss</span></td>
+                                <td><span style="color:#94a3b8; font-weight:700; font-size:11px;">Low</span></td>
+                                <td><span class="ui-badge" style="background:#334155; color:#cbd5e1;">None</span></td>
+                                <td style="font-size: 11px; color:#fb7185;">High Attenuation 18dB</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าจอจัดการรายละเอียดคอร์ไฟเบอร์ (Core Manager Table Dialog)</span>
+                    <span class="mono">Source: /src/components/CoreManager.tsx</span>
+                </div>
+            </div>
+
+            <h4 style="margin: 18px 0 8px; font-size: 15px;">รหัสสีมาตรฐานใยแก้วนำแสง (12-Fiber Color Code Standard):</h4>
+            <div class="color-palette-grid">
+                <div class="color-chip"><div class="color-dot" style="background:#2563eb;"></div>#1 Blue (น้ำเงิน)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#ea580c;"></div>#2 Orange (ส้ม)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#16a34a;"></div>#3 Green (เขียว)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#854d0e;"></div>#4 Brown (น้ำตาล)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#64748b;"></div>#5 Slate (เทา)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#f8fafc; border:1px solid #cbd5e1;"></div>#6 White (ขาว)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#dc2626;"></div>#7 Red (แดง)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#0f172a;"></div>#8 Black (ดำ)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#eab308;"></div>#9 Yellow (เหลือง)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#9333ea;"></div>#10 Violet (ม่วง)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#f43f5e;"></div>#11 Rose (ชมพู)</div>
+                <div class="color-chip"><div class="color-dot" style="background:#06b6d4;"></div>#12 Aqua (ฟ้า)</div>
+            </div>
+        </div>
+
+        <!-- Section 5: Splice Manager & Schematics -->
+        <div id="sec5" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">05</div>
+                <div>
+                    <h2 class="section-title">5. ระบบจัดการการสไปลซ์และผังเชื่อมต่อ (Splice Manager)</h2>
+                    <span class="badge badge-primary">Splicing Engine & Schematics</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                เครื่องมือสไปลซ์สายขั้นสูง (Advanced Fiber Splicing Engine) ที่ช่วยจัดการการเชื่อมต่อภายในตู้ Enclosure ได้ทั้งแบบรายคอร์ (Core-to-Core) และแบบยกหลอด (Tube-to-Tube Bulk Splice) พร้อมสร้าง Schematic Diagram แบบอินเตอร์แอคทีฟ
+            </p>
+
+            <!-- Real UI Simulation 5: Splice Manager -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+                        Splice Manager & Joint Diagram &bull; ENC-01 (JB-60F Asoke)
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="mockup-btn" style="background:#059669; padding: 3px 8px; font-size:10px;">Splice Tube</button>
+                        <button class="mockup-btn" style="background:#334155; padding: 3px 8px; font-size:10px;">Export PDF</button>
+                    </div>
+                </div>
+                <div class="ui-window-body">
+                    <div class="mockup-splice-grid">
+                        <!-- Route A Column -->
+                        <div class="mockup-splice-column">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <div style="font-weight:700; font-size:12px; color:#38bdf8;">ROUTE A: RT-ASOKE-01</div>
+                                <span class="ui-badge ui-badge-itel">Main Port 1</span>
+                            </div>
+                            <div style="font-size:10.5px; color:#94a3b8; margin-bottom:6px; font-weight:700;">TUBE 1 (Blue Tube - 12 Cores)</div>
+                            <div class="mockup-core-item">
+                                <div><span class="color-bullet" style="background:#2563eb;"></span> Core 1 (Blue)</div>
+                                <span style="font-size:10px; color:#34d399;">● Spliced</span>
+                            </div>
+                            <div class="mockup-core-item">
+                                <div><span class="color-bullet" style="background:#ea580c;"></span> Core 2 (Orange)</div>
+                                <span style="font-size:10px; color:#34d399;">● Spliced</span>
+                            </div>
+                            <div class="mockup-core-item">
+                                <div><span class="color-bullet" style="background:#16a34a;"></span> Core 3 (Green)</div>
+                                <span style="font-size:10px; color:#fbbf24;">● Spliced</span>
+                            </div>
+                        </div>
+
+                        <!-- Center Splicing Lines Simulation -->
+                        <div style="text-align:center;">
+                            <svg width="60" height="110" viewBox="0 0 60 110">
+                                <path d="M 0,22 Q 30,22 60,22" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+                                <circle cx="30" cy="22" r="3.5" fill="#38bdf8"/>
+
+                                <path d="M 0,55 Q 30,55 60,55" fill="none" stroke="#ea580c" stroke-width="2.5"/>
+                                <circle cx="30" cy="55" r="3.5" fill="#fb923c"/>
+
+                                <path d="M 0,88 Q 30,88 60,88" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+                                <circle cx="30" cy="88" r="3.5" fill="#4ade80"/>
+                            </svg>
+                        </div>
+
+                        <!-- Route B Column -->
+                        <div class="mockup-splice-column">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <div style="font-weight:700; font-size:12px; color:#a855f7;">ROUTE B: RT-RAMA9-02</div>
+                                <span class="ui-badge ui-badge-symc">Main Port 2</span>
+                            </div>
+                            <div style="font-size:10.5px; color:#94a3b8; margin-bottom:6px; font-weight:700;">TUBE 1 (Blue Tube - 12 Cores)</div>
+                            <div class="mockup-core-item">
+                                <span style="font-size:10px; color:#34d399;">Spliced ●</span>
+                                <div>Core 1 (Blue) <span class="color-bullet" style="background:#2563eb; margin-left:6px; margin-right:0;"></span></div>
+                            </div>
+                            <div class="mockup-core-item">
+                                <span style="font-size:10px; color:#34d399;">Spliced ●</span>
+                                <div>Core 2 (Orange) <span class="color-bullet" style="background:#ea580c; margin-left:6px; margin-right:0;"></span></div>
+                            </div>
+                            <div class="mockup-core-item">
+                                <span style="font-size:10px; color:#34d399;">Spliced ●</span>
+                                <div>Core 3 (Green) <span class="color-bullet" style="background:#16a34a; margin-left:6px; margin-right:0;"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าต่างเชื่อมต่อสายและผังการสไปลซ์ (Splice Tool & Connection Diagram)</span>
+                    <span class="mono">Source: /src/components/SpliceManager.tsx</span>
+                </div>
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-card-header">
+                        <div class="feature-card-icon">⚡</div>
+                        <div class="feature-card-title">เครื่องมือสไปลซ์ (Splicing Tool)</div>
+                    </div>
+                    <div class="feature-card-body">
+                        เลือก Route A และ Route B แล้วจับคู่ Core เพื่อทำการสไปลซ์ หรือเลือก <strong>Splice Tube</strong> เพื่อเชื่อมต่อพร้อมกัน 12 คอร์ในคลิกเดียว
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-card-header">
+                        <div class="feature-card-icon">📐</div>
+                        <div class="feature-card-title">ไดอะแกรมผังเส้นทาง (Diagram View)</div>
+                    </div>
+                    <div class="feature-card-body">
+                        แสดงกราฟิกเส้นโยงการสไปลซ์แบบ Bezier Curves แสดงสีตามมาตรฐาน รองรับการขยาย/ยุบหลอด (Expand/Collapse) และปุ่ม <strong>Export PDF</strong>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-card-header">
+                        <div class="feature-card-icon">🎛️</div>
+                        <div class="feature-card-title">จำลองฮาร์ดแวร์จริง (Physical View)</div>
+                    </div>
+                    <div class="feature-card-body">
+                        จำลองหน้าตากล่อง Enclosure พร้อม Port เข้า/ออก (Main Port 1,2,6 และ Drop Port 3,4,5) ระบุ Route และ Owner ประจำพอร์ต
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-card-header">
+                        <div class="feature-card-icon">🗂️</div>
+                        <div class="feature-card-title">การจัดสรรถาด (Splice Trays)</div>
+                    </div>
+                    <div class="feature-card-body">
+                        กำหนดสิทธิเจ้าของถาดสไปลซ์ (Tray Owner: ITEL / SYMC / UIH) ให้ช่างภาคสนามทราบขอบเขตการทำงานในแต่ละถาดอย่างแม่นยำ
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 6: System Settings -->
+        <div id="sec6" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">06</div>
+                <div>
+                    <h2 class="section-title">6. การตั้งค่ามาตรฐานระบบ (System Settings)</h2>
+                    <span class="badge badge-primary">Hardware & Cable Specifications</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                เมนูปรับแต่งการตั้งค่าฮาร์ดแวร์ส่วนกลาง เพื่อให้ข้อมูลอุปกรณ์และชนิดสายไฟเบอร์เป็นไปตามมาตรฐานวิศวกรรมเดียวกันทั้งระบบ
+            </p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">หมวดการตั้งค่า</th>
+                        <th style="width: 35%;">พารามิเตอร์ที่กำหนดได้</th>
+                        <th style="width: 40%;">ผลกระทบต่อระบบ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Enclosure Types</strong></td>
+                        <td>ชื่อรุ่นกล่อง, ความจุสูงสุด (เช่น 60, 96, 144 Cores), จำนวนถาดสไปลซ์ (Splice Trays), อัปโหลดรูปภาพไอคอนอุปกรณ์จริง</td>
+                        <td>กำหนดข้อจำกัดความจุและการแสดงผลไอคอนบนแผนที่และโมดูลสไปลซ์</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fiber Types</strong></td>
+                        <td>ชื่อชนิดสาย (เช่น 24 Cores, 48 Cores, 96 Cores), จำนวนหลอด (Tubes), จำนวนคอร์ต่อหลอด (Cores per Tube)</td>
+                        <td>ใช้เป็น Master Data ในการสร้าง Route ใหม่และการแบ่งหลอดบน Diagram</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fiber Color Configs</strong></td>
+                        <td>การจับคู่ชนิดสาย, ระดับ Tier (Tier 1 / Tier 2) และโค้ดสีเส้นทาง</td>
+                        <td>กำหนดโทนสีของเส้นทางที่จะแสดงบนแผนที่ GIS และหน้าต่างภาพรวมโครงข่าย</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 7: Audit Logging & Activity Tracker -->
+        <div id="sec7" class="section-block">
+            <div class="section-header">
+                <div class="section-icon">07</div>
+                <div>
+                    <h2 class="section-title">7. ระบบบันทึกประวัติกิจกรรมและการตรวจสอบย้อนหลัง (Audit & Activity Logs)</h2>
+                    <span class="badge badge-purple">Audit Trail & Compliance</span>
+                </div>
+            </div>
+            <p class="section-desc">
+                ทุกการกระทำสำคัญภายในระบบ (การสร้างเส้นทาง, การลบโหนด, การแก้ไขสถานะคอร์, การสไปลซ์สาย) จะถูกส่งเข้าสู่ระบบ <strong>Activity Logging Engine</strong> โดยอัตโนมัติ เพื่อเก็บบันทึกประวัติและใช้ในการตรวจสอบย้อนหลัง (Audit Trail)
+            </p>
+
+            <!-- Real UI Simulation 7: Log Viewer -->
+            <div class="ui-window">
+                <div class="ui-window-header">
+                    <div class="ui-window-controls">
+                        <div class="ui-dot red"></div>
+                        <div class="ui-dot yellow"></div>
+                        <div class="ui-dot green"></div>
+                    </div>
+                    <div class="ui-window-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        System Activity Logs & Real-Time Audit Tracker
+                    </div>
+                    <div style="font-size: 11px; color: #a855f7; font-weight: 700;">AUDIT CONSOLE</div>
+                </div>
+                <div class="ui-window-body">
+                    <table class="mockup-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 22%;">TIMESTAMP</th>
+                                <th style="width: 26%;">USER</th>
+                                <th style="width: 20%;">ACTION</th>
+                                <th style="width: 32%;">DESCRIPTION / METADATA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono" style="font-size: 11px; color: #94a3b8;">2026-08-27 15:45:12</td>
+                                <td style="font-weight: 700; color: #f8fafc;">vpunpum@gmail.com</td>
+                                <td><span class="ui-badge" style="background:#0284c7; color:white;">splice_tubes</span></td>
+                                <td style="font-size: 11.5px; color: #cbd5e1;">Spliced Tube 1 of RT-ASOKE-01 to RT-RAMA9-02 at ENC-01</td>
+                            </tr>
+                            <tr>
+                                <td class="mono" style="font-size: 11px; color: #94a3b8;">2026-08-27 15:32:04</td>
+                                <td style="font-weight: 700; color: #f8fafc;">somchai.eng@itel.co.th</td>
+                                <td><span class="ui-badge ui-status-used">update_core</span></td>
+                                <td style="font-size: 11.5px; color: #cbd5e1;">Updated Core #1 on RT-ASOKE-01 (Status: Used, Owner: ITEL)</td>
+                            </tr>
+                            <tr>
+                                <td class="mono" style="font-size: 11px; color: #94a3b8;">2026-08-27 14:10:55</td>
+                                <td style="font-weight: 700; color: #f8fafc;">vpunpum@gmail.com</td>
+                                <td><span class="ui-badge ui-badge-symc">create_route</span></td>
+                                <td style="font-size: 11.5px; color: #cbd5e1;">Created route RT-RAMA9-02 (48 Cores, Tier 2, Amata Ring)</td>
+                            </tr>
+                            <tr>
+                                <td class="mono" style="font-size: 11px; color: #94a3b8;">2026-08-27 11:20:18</td>
+                                <td style="font-weight: 700; color: #f8fafc;">vpunpum@gmail.com</td>
+                                <td><span class="ui-badge ui-status-reserved">approve_user</span></td>
+                                <td style="font-size: 11.5px; color: #cbd5e1;">Approved account for wichai.tech@symc.co.th (Role: Viewer)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ui-caption">
+                    <span>ภาพแสดงหน้าต่างบันทึกกิจกรรมระบบ (System Audit & Activity Logs)</span>
+                    <span class="mono">Source: /src/components/LogViewer.tsx & /src/services/logService.ts</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Footer -->
+        <div class="doc-footer">
+            <div>
+                <strong>ระบบบริหารจัดการโครงข่ายร่วม (Fiber Infra Sharing)</strong><br>
+                <span>พัฒนาสำหรับบริหารจัดการโครงข่ายใยแก้วนำแสงร่วม: ITEL &bull; SYMC &bull; UIH</span>
+            </div>
+            <div style="text-align: right;">
+                <span>เอกสารนี้ถูกสร้างโดยระบบเมื่อ: 27 สิงหาคม 2026</span><br>
+                <span class="mono">Version 1.2 &bull; Production Ready</span>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

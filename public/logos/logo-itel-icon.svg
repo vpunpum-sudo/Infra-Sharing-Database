@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <radialGradient id="itel-real-globe-icon" cx="42%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="15%" stop-color="#7dc4f7" />
+      <stop offset="42%" stop-color="#1e78d6" />
+      <stop offset="78%" stop-color="#0f4ba3" />
+      <stop offset="100%" stop-color="#072b6b" />
+    </radialGradient>
+    <linearGradient id="itel-orbit-silver-icon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="35%" stop-color="#e2e8f0" />
+      <stop offset="70%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+    <linearGradient id="itel-metal-letters-icon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="48%" stop-color="#e2e8f0" />
+      <stop offset="52%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(-12, 4)">
+    <ellipse cx="62" cy="46" rx="58" ry="18" stroke="url(#itel-orbit-silver-icon)" stroke-width="2.5" transform="rotate(-16 62 46)" fill="none" opacity="0.8" />
+    <path d="M 88,14 L 81,11 L 86,19 Z" fill="#64748b" />
+    <circle cx="62" cy="46" r="38" fill="url(#itel-real-globe-icon)" />
+    <path d="M 38,30 Q 60,16 86,30 Q 60,22 38,30 Z" fill="#ffffff" opacity="0.85" />
+    <path d="M 6,56 Q 50,76 116,42" stroke="url(#itel-orbit-silver-icon)" stroke-width="3" fill="none" />
+    <g transform="translate(62, 54) rotate(-10)">
+      <text x="0" y="0" text-anchor="middle" fill="url(#itel-metal-letters-icon)" stroke="#0f172a" stroke-width="1.2" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="14.5" letter-spacing="1.2">
+        INTERLINK
+      </text>
+    </g>
+  </g>
+</svg>

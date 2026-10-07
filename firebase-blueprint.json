@@ -1,0 +1,228 @@
+{
+  "entities": {
+    "Point": {
+      "title": "Point",
+      "description": "Geographic coordinates",
+      "type": "object",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
+      },
+      "required": ["lat", "lng"]
+    },
+    "EnclosureType": {
+      "title": "EnclosureType",
+      "description": "A type of fiber enclosure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "capacity": { "type": "number" },
+        "spliceTrays": { "type": "number" },
+        "icon": { "type": "string", "description": "Base64 or URL of the icon" }
+      },
+      "required": ["id", "name", "color"]
+    },
+    "FiberType": {
+      "title": "FiberType",
+      "description": "A type of fiber optic cable",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "tubes": { "type": "number" },
+        "cores": { "type": "number" }
+      },
+      "required": ["id", "name", "color"]
+    },
+    "OwnerConfig": {
+      "title": "OwnerConfig",
+      "description": "Custom logo and branding settings for an infrastructure owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string", "description": "Base64 or URL of the owner logo" },
+        "primaryColor": { "type": "string" },
+        "description": { "type": "string" },
+        "zoom": { "type": "number", "description": "Zoom / Scale percentage for the logo (default 100, 120 for UIH)" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "code", "name"]
+    },
+    "FiberNode": {
+      "title": "FiberNode",
+      "description": "A node representing a splice point or demand point",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "position": { "$ref": "#/entities/Point" },
+        "uid": { "type": "string", "description": "The owner's user ID" },
+        "swapSides": { "type": "boolean" },
+        "enclosureTypeId": { "type": "string" },
+        "trayAssignments": { "type": "object" },
+        "routeSideOverrides": { "type": "object" }
+      },
+      "required": ["id", "name", "position", "uid"]
+    },
+    "CoreConnection": {
+      "title": "CoreConnection",
+      "description": "Connection to another core",
+      "type": "object",
+      "properties": {
+        "routeId": { "type": "string" },
+        "coreId": { "type": "number" }
+      },
+      "required": ["routeId", "coreId"]
+    },
+    "Core": {
+      "title": "Core",
+      "description": "A single fiber core",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "color": { "type": "string" },
+        "status": { "type": "string", "enum": ["used", "bad", "reserved"] },
+        "label": { "type": "string" },
+        "owner": { "type": "string", "enum": ["None", "ITEL", "SYMC", "UIH"] },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "details": { "type": "string" },
+        "splices": {
+          "type": "object",
+          "description": "Map of nodeId to CoreConnection",
+          "additionalProperties": { "$ref": "#/entities/CoreConnection" }
+        }
+      },
+      "required": ["id", "color", "status", "label", "owner", "priority", "details"]
+    },
+    "Route": {
+      "title": "Route",
+      "description": "A fiber optic route",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "path": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Point" }
+        },
+        "capacity": { "type": "number" },
+        "cores": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Core" }
+        },
+        "startEnclosureId": { "type": "string" },
+        "endEnclosureId": { "type": "string" },
+        "tier": { "type": "string" },
+        "fiberType": { "type": "string" },
+        "tierSharing": { "type": "string", "enum": ["Tier 1", "Tier 2"] },
+        "tierSharingPartners": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["ITEL", "SYMC", "UIH"] }
+        },
+        "markStart": { "type": "number" },
+        "markEnd": { "type": "number" },
+        "totalLength": { "type": "number" },
+        "uid": { "type": "string", "description": "The owner's user ID" }
+      },
+      "required": ["id", "name", "path", "capacity", "cores", "uid"]
+    },
+    "FiberLoop": {
+      "title": "FiberLoop",
+      "description": "A loop of fiber optic cable",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "position": { "$ref": "#/entities/Point" },
+        "routeId": { "type": "string" },
+        "length": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "name", "position", "routeId", "length", "uid"]
+    },
+    "FiberColorConfig": {
+      "title": "FiberColorConfig",
+      "description": "Color configuration for a specific fiber type and tier",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fiberTypeId": { "type": "string" },
+        "tier": { "type": "string" },
+        "color": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "fiberTypeId", "tier", "color", "uid"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User account information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Design", "Viewer", "Sub-contract"] },
+        "owner": { "type": "string", "enum": ["None", "ITEL", "SYMC", "UIH"] }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "UserLog": {
+      "title": "UserLog",
+      "description": "User activity log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "userId", "userEmail", "action", "description", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User account information"
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "#/entities/UserLog" },
+      "description": "User activity logs"
+    },
+    "/users/{userId}/projects/{projectId}/enclosures/{enclosureId}": {
+      "schema": { "$ref": "#/entities/FiberNode" },
+      "description": "Enclosures within a project"
+    },
+    "/users/{userId}/projects/{projectId}/routes/{routeId}": {
+      "schema": { "$ref": "#/entities/Route" },
+      "description": "Routes within a project"
+    },
+    "/users/{userId}/projects/{projectId}/loops/{loopId}": {
+      "schema": { "$ref": "#/entities/FiberLoop" },
+      "description": "Loops within a project"
+    },
+    "/fiberColorConfigs/{configId}": {
+      "schema": { "$ref": "#/entities/FiberColorConfig" },
+      "description": "Global fiber color configurations"
+    },
+    "/enclosureTypes/{typeId}": {
+      "schema": { "$ref": "#/entities/EnclosureType" },
+      "description": "Global enclosure types"
+    },
+    "/fiberTypes/{typeId}": {
+      "schema": { "$ref": "#/entities/FiberType" },
+      "description": "Global fiber types"
+    },
+    "/ownerConfigs/{ownerId}": {
+      "schema": { "$ref": "#/entities/OwnerConfig" },
+      "description": "Custom logo and branding settings for each infrastructure owner"
+    }
+  }
+}

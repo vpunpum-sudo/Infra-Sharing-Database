@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 155 60" fill="none">
+  <!-- UIH Mathematical Vector Geometry with Zero Padding (Height = 60, Width = 155) -->
+  <g transform="translate(0, -22)">
+    <!-- U: Rounded outer bottom-left (radius 22), sharp square 90-degree outer bottom-right -->
+    <path 
+      d="M 0,22 L 0,60 A 22,22 0 0,0 22,82 L 56,82 L 56,22 L 39,22 L 39,65 L 22,65 A 5,5 0 0,1 17,60 L 17,22 Z" 
+      fill="#0038b8" 
+    />
+    <!-- I: Solid vertical bar -->
+    <path 
+      d="M 70,22 L 87,22 L 87,82 L 70,82 Z" 
+      fill="#0038b8" 
+    />
+    <!-- H: Two vertical bars with central crossbar -->
+    <path 
+      d="M 101,22 L 118,22 L 118,43.5 L 138,43.5 L 138,22 L 155,22 L 155,82 L 138,82 L 138,60.5 L 118,60.5 L 118,82 L 101,82 Z" 
+      fill="#0038b8" 
+    />
+  </g>
+</svg>

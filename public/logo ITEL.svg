@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 80" fill="none">
+  <defs>
+    <!-- ITEL 3D Blue Globe Radial Gradient -->
+    <radialGradient id="single-globe-grad" cx="38%" cy="24%" r="68%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="20%" stop-color="#8cd4fd" />
+      <stop offset="48%" stop-color="#1e78d6" />
+      <stop offset="80%" stop-color="#0f4ba3" />
+      <stop offset="100%" stop-color="#072b6b" />
+    </radialGradient>
+
+    <!-- Metallic Orbit Gradient -->
+    <linearGradient id="single-orbit-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64748b" />
+      <stop offset="35%" stop-color="#f8fafc" />
+      <stop offset="65%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+
+    <!-- Metallic Text Fill Gradient -->
+    <linearGradient id="single-metal-fill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#e2e8f0" />
+      <stop offset="51%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(6, -12)">
+    <!-- Globe: Center (28, 52), Radius = 24 -->
+    <!-- Rear Orbit -->
+    <ellipse cx="28" cy="52" rx="34" ry="11" stroke="url(#single-orbit-grad)" stroke-width="1.6" transform="rotate(-16 28 52)" fill="none" opacity="0.8" />
+    <path d="M 44,33 L 39,32 L 43,36 Z" fill="#64748b" />
+    <!-- 3D Blue Sphere -->
+    <circle cx="28" cy="52" r="23" fill="url(#single-globe-grad)" />
+    <!-- Specular Highlight -->
+    <path d="M 14,42 Q 26,34 41,42 Q 26,37 14,42 Z" fill="#ffffff" opacity="0.85" />
+    <!-- Front Orbit -->
+    <path d="M -6,58 Q 20,70 62,49" stroke="url(#single-orbit-grad)" stroke-width="2.2" fill="none" />
+    <!-- INTERLINK Metallic Banner -->
+    <g transform="translate(28, 57) rotate(-10)">
+      <text 
+        x="0" 
+        y="0" 
+        text-anchor="middle" 
+        fill="url(#single-metal-fill)" 
+        stroke="#0f172a" 
+        stroke-width="0.8" 
+        font-family="'Impact', 'Arial Black', sans-serif" 
+        font-weight="900" 
+        font-size="9" 
+        letter-spacing="0.6"
+      >
+        INTERLINK
+      </text>
+    </g>
+
+    <!-- Telecom Wordmark (Trebuchet MS with authentic downward serifs on T) -->
+    <g transform="translate(68, 0)">
+      <text 
+        x="0" 
+        y="54" 
+        fill="#ea580c" 
+        font-family="'Trebuchet MS', system-ui, -apple-system, sans-serif" 
+        font-weight="900" 
+        font-size="34" 
+        letter-spacing="-0.5"
+      >
+        Telecom
+      </text>
+
+      <!-- 3 Concentric Signal Waves -->
+      <g stroke="#ea580c" stroke-width="2.6" stroke-linecap="round" fill="none" transform="translate(126, 21)">
+        <path d="M 0,17 A 8,8 0 0,1 6,23" />
+        <path d="M 3,11 A 14,14 0 0,1 12,23" />
+        <path d="M 6,5 A 20,20 0 0,1 18,23" />
+      </g>
+
+      <!-- Subtitle: PUBLIC COMPANY LIMITED -->
+      <text 
+        x="1.5" 
+        y="67" 
+        fill="#ea580c" 
+        font-family="'Trebuchet MS', system-ui, -apple-system, sans-serif" 
+        font-weight="800" 
+        font-size="7.5" 
+        letter-spacing="1.2"
+      >
+        PUBLIC COMPANY LIMITED
+      </text>
+    </g>
+  </g>
+</svg>

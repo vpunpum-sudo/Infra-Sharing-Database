@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Fiber Sharing Database",
+  "short_name": "FiberShare",
+  "description": "Fiber Sharing Database - Web app for managing Fiber Optic infrastructure, drawing routes, defining splice nodes, and managing core statuses.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/logo-itel.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
