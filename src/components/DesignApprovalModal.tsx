@@ -748,6 +748,26 @@ export function DesignApprovalModal({
     };
   }, [fiberRouteSchedule]);
 
+  const fiberOpticSummary = useMemo(() => {
+    const distanceByType = new Map<string, number>();
+
+    fiberRouteSchedule.forEach((route, index) => {
+      const capacityLabel = `OFC ${route.capacity} Core`;
+      const typeName = effectiveRoutes[index]?.fiberType?.trim();
+      const label = !typeName || /^\d+$/.test(typeName)
+        ? capacityLabel
+        : typeName.includes(String(route.capacity))
+          ? typeName
+          : `${capacityLabel} (${typeName})`;
+      distanceByType.set(label, (distanceByType.get(label) || 0) + (parseFloat(route.distanceKm) || 0));
+    });
+
+    return Array.from(distanceByType, ([label, distanceKm]) => ({
+      label,
+      distanceKm: distanceKm.toFixed(2)
+    }));
+  }, [fiberRouteSchedule, effectiveRoutes]);
+
   const primaryRoute = fiberRouteSchedule[0] || {
     tier: projectTierCompactLabel,
     routeName: project.name,
@@ -2737,7 +2757,7 @@ export function DesignApprovalModal({
                       </div>
 
                       {/* Bottom Legend Bar */}
-                      <div className="grid grid-cols-3 gap-3 text-center text-xs font-black">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center text-xs font-black">
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-200 flex items-center justify-center gap-2 flex-wrap">
                           <span>{projectTierCompactLabel}</span>
                           {participatingOwners.map((owner, idx) => (
@@ -2747,8 +2767,12 @@ export function DesignApprovalModal({
                             </React.Fragment>
                           ))}
                         </div>
-                        <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-amber-400">
-                          OFC 144 Core : {totalLengthKm} km.
+                        <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-amber-400 min-w-0 space-y-1">
+                          <div className="text-[10px] text-slate-400 uppercase">Fiber Optic</div>
+                          {fiberOpticSummary.map(({ label, distanceKm }) => (
+                            <div key={label} className="break-words leading-snug">{label}: {distanceKm} km.</div>
+                          ))}
+                          <div className="border-t border-slate-800 pt-1 text-[10px] text-amber-300">รวม {totalLengthKm} km.</div>
                         </div>
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-pink-400">
                           Enclosure 312 Core : {sldEnclosures.length} EA.
