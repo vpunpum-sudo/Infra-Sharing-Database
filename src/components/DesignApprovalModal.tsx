@@ -173,6 +173,7 @@ export function DesignApprovalModal({
   const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>({});
   const [editingEnclosureRouteId, setEditingEnclosureRouteId] = useState<string | null>(null);
   const [previewingEnclosureImage, setPreviewingEnclosureImage] = useState<{ url: string; name: string } | null>(null);
+  const [previewingFiberImage, setPreviewingFiberImage] = useState<{ url: string; name: string; cores: number } | null>(null);
 
   useEffect(() => {
     if (project?.designApproval?.routeEnclosureSelections) {
@@ -1655,10 +1656,6 @@ export function DesignApprovalModal({
       const uihPct = totalC > 0 ? ((routeSched.uihCores / totalC) * 100).toFixed(0) : '0';
       const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
       const spareC = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
-      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
-      const fiberImgUrl = routeFt?.imageUrl || '';
-      const fiberName = routeFt?.name || `OFC ${totalC} Core`;
-
       return `
         <div style="margin-bottom: 22px; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
           <!-- Fiber Route Sharing Summary Header -->
@@ -1667,7 +1664,6 @@ export function DesignApprovalModal({
               <span style="background: #38bdf8; color: #0f172a; font-weight: 900; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
                 เส้นที่ ${rIdx + 1}
               </span>
-              ${fiberImgUrl ? `<img src="${fiberImgUrl}" alt="${fiberName}" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px; background: #334155; padding: 2px;" title="${fiberName}" />` : ''}
               <strong style="font-size: 13px; font-weight: 800;">${routeSched.routeName}</strong>
               <span style="font-size: 11px; color: #94a3b8;">(${routeSched.sectionName})</span>
             </div>
@@ -1710,7 +1706,7 @@ export function DesignApprovalModal({
             </div>
           </div>
 
-          <!-- Large Clear Fiber Optic Specification Diagram -->
+          <!-- Enclosure illustration -->
           ${(() => {
             const firstEnc = routeEncs[0];
             const firstEncType = enclosureTypes.find(t => t.id === firstEnc?.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === firstEnc?.locationType?.toLowerCase());
@@ -1738,7 +1734,7 @@ export function DesignApprovalModal({
             <thead>
               <tr>
                 <th style="width: 40px;">No.</th>
-                <th style="width: 60px;">Image</th>
+                <th style="width: 48px;">Image</th>
                 <th style="width: 80px;">BJ#No</th>
                 <th>BJ#Name</th>
                 <th style="width: 90px;">Lat.</th>
@@ -1763,10 +1759,10 @@ export function DesignApprovalModal({
                 return `
                   <tr>
                     <td>${idx + 1}</td>
-                    <td style="padding: 4px; text-align: center;">
+                    <td style="padding: 3px; text-align: center;">
                       ${encType?.icon
-                        ? `<img src="${encType.icon}" alt="${encType.name}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;" />`
-                        : `<div style="width: 40px; height: 40px; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center;"><span style="width: 12px; height: 12px; border-radius: 50%; background: ${encType?.color || '#ef4444'}; border: 1px solid #1e293b;"></span></div>`
+                        ? `<img src="${encType.icon}" alt="${encType.name}" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;" />`
+                        : `<div style="width: 24px; height: 24px; margin: auto; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center;"><span style="width: 8px; height: 8px; border-radius: 50%; background: ${encType?.color || '#ef4444'}; border: 1px solid #1e293b;"></span></div>`
                       }
                     </td>
                     <td><strong>${bjNo}</strong></td>
@@ -2736,14 +2732,6 @@ export function DesignApprovalModal({
                                     <span className="px-2.5 py-1 rounded-md bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
                                       เส้นที่ {displayIdx}
                                     </span>
-                                    {(() => {
-                                      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
-                                      return routeFt?.imageUrl ? (
-                                        <img src={routeFt.imageUrl} alt={routeFt.name} className="w-6 h-6 object-contain rounded bg-slate-800 p-0.5 border border-slate-700" title={routeFt.name} />
-                                      ) : (
-                                        <Cable size={16} className="text-sky-400" />
-                                      );
-                                    })()}
                                     <strong className="text-white text-sm font-extrabold">{routeSched.routeName}</strong>
                                     <span className="text-xs text-slate-400 font-medium">({routeSched.sectionName})</span>
                                   </div>
@@ -2863,7 +2851,7 @@ export function DesignApprovalModal({
                                     <thead className="bg-slate-800/90 text-slate-300 font-bold border-b border-slate-700">
                                       <tr>
                                         <th className="p-2 border-r border-slate-700 w-10">No.</th>
-                                        <th className="p-2 border-r border-slate-700 w-20">Image</th>
+                                        <th className="p-2 border-r border-slate-700 w-14">Image</th>
                                         <th className="p-2 border-r border-slate-700 w-20">BJ#No</th>
                                         <th className="p-2 border-r border-slate-700 text-left">BJ#Name</th>
                                         <th className="p-2 border-r border-slate-700 w-24">Lat.</th>
@@ -2895,10 +2883,10 @@ export function DesignApprovalModal({
                                             <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
                                             <td className="p-1 border-r border-slate-800">
                                               {encType?.icon ? (
-                                                <img src={encType.icon} alt={bjName} className="w-10 h-10 object-contain rounded border border-slate-700 mx-auto" />
+                                                <img src={encType.icon} alt={bjName} className="w-6 h-6 object-contain rounded border border-slate-700 mx-auto" />
                                               ) : (
-                                                <div className="w-10 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-slate-500 mx-auto">
-                                                  <span className="w-3 h-3 rounded-full border border-slate-900" style={{ backgroundColor: encType?.color || '#ef4444' }} />
+                                                <div className="w-6 h-6 bg-slate-800 rounded border border-slate-700 flex items-center justify-center mx-auto">
+                                                  <span className="w-2 h-2 rounded-full border border-slate-900" style={{ backgroundColor: encType?.color || '#ef4444' }} />
                                                 </div>
                                               )}
                                             </td>
@@ -3011,7 +2999,60 @@ export function DesignApprovalModal({
                               </span>
                             </div>
 
-                            {renderRouteEnclosureGallery(routeEncs, routeSched.distanceKm, totalC)}
+                            {(() => {
+                              const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                              const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
+                              const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
+                              const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
+                              return routeFt?.imageUrl ? (
+                                <div className="flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
+                                  <div className="relative group shrink-0">
+                                    <img
+                                      src={routeFt.imageUrl}
+                                      alt={routeFt.name}
+                                      className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 object-contain rounded-2xl bg-slate-950 p-4 border-2 border-sky-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewingFiberImage({ url: routeFt.imageUrl!, name: routeFt.name, cores: totalC })}
+                                      className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
+                                    >
+                                      <Maximize2 size={12} /> ขยายดูรูปใหญ่
+                                    </button>
+                                  </div>
+                                  <div className="space-y-2.5 flex-1 w-full">
+                                    <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
+                                      <span className="text-base md:text-lg font-black text-white tracking-wide">
+                                        ประเภทสาย Fiber Optic: {routeFt.name}
+                                      </span>
+                                      <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+                                        OFC {totalC} Cores Standard
+                                      </span>
+                                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+                                        จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                                      โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
+                                    </p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
+                                      <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                        <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
+                                        <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
+                                      </div>
+                                      <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                        <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
+                                        <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
+                                      </div>
+                                      <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                        <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
+                                        <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
 
                              {/* Usage Table */}
                             {(() => {
@@ -4114,6 +4155,55 @@ export function DesignApprovalModal({
               </span>
               <span className="text-[11px] font-mono text-slate-400">
                 {previewingEnclosureImage.name}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FIBER OPTIC IMAGE LIGHTBOX PREVIEW */}
+      {previewingFiberImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewingFiberImage(null)}
+        >
+          <div
+            className="bg-slate-900 border-2 border-sky-500/50 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
+                  <Cable size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    {previewingFiberImage.name} (OFC {previewingFiberImage.cores} Cores)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">รูปภาพโครงสร้างสายเคเบิลใยแก้วนำแสงความละเอียดสูง (Cross-Section Diagram)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingFiberImage(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex justify-center items-center bg-slate-950 rounded-2xl p-6 border border-slate-800 min-h-[360px]">
+              <img
+                src={previewingFiberImage.url}
+                alt={previewingFiberImage.name}
+                className="max-h-[460px] w-auto object-contain drop-shadow-2xl rounded-xl"
+              />
+            </div>
+            <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
+              <span className="font-bold text-amber-300">
+                มาตรฐานการจัดเรียง Loose Tube & โค้ดสี Core ตามมาตรฐาน TIA/EIA-598
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">
+                ขนาด {previewingFiberImage.cores}C &bull; Infra Sharing Certified
               </span>
             </div>
           </div>
