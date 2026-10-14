@@ -22,6 +22,7 @@ import { OwnerLogo } from './OwnerLogo';
 import { getEffectiveOwnerLogo, getEffectiveOwnerZoom } from '../services/ownerLogosService';
 import { getClosestPointOnRoute } from '../utils/geo';
 import { renderPrintableProjectMap } from '../utils/printProjectMap';
+import { exportApprovalPdf } from '../utils/exportApprovalPdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -137,6 +138,8 @@ export function DesignApprovalModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Loaded subcollections from Firestore
   const [loadedRoutes, setLoadedRoutes] = useState<Route[]>(propRoutes);
@@ -1033,6 +1036,34 @@ export function DesignApprovalModal({
     return Array.from(used.values());
   };
 
+  const getOwnerCoreCount = (route: (typeof fiberRouteSchedule)[number], owner: CoreOwner) =>
+    owner === 'SYMC' ? route.symcCores : owner === 'UIH' ? route.uihCores : route.itelCores;
+
+  const getCoreShareText = (cores: number, capacity: number) => {
+    const percent = capacity > 0 ? cores / capacity * 100 : 0;
+    return `${cores} Core (${Number.isInteger(percent) ? percent : percent.toFixed(1)}%)`;
+  };
+
+  // One source for the route summary shown on slide 6 and in the PDF.
+  const approvalSummaryRows = fiberRouteSchedule.map((route, index) => {
+    const routeEnclosures = getRouteEnclosures(route.id);
+    const typeCounts = new Map<string, number>();
+    const bjDetails = routeEnclosures.map((enclosure, enclosureIndex) => {
+      const type = getEnclosureType(enclosure);
+      const baseName = type?.name || enclosure.locationType || 'ไม่ระบุ Type';
+      const typeName = type?.capacity && !baseName.includes(String(type.capacity))
+        ? `${baseName} (${type.capacity} Core)` : baseName;
+      typeCounts.set(typeName, (typeCounts.get(typeName) || 0) + 1);
+      return { ...parseEnclosureName(enclosure, enclosureIndex), typeName };
+    });
+    return {
+      route,
+      index,
+      typeCounts: Array.from(typeCounts, ([name, count]) => ({ name, count })),
+      bjDetails
+    };
+  });
+
   const renderRouteEnclosureGallery = (
     routeEncs: FiberEnclosure[],
     distanceKm: string | number,
@@ -1525,23 +1556,22 @@ export function DesignApprovalModal({
     }
   };
 
-  // Safe Export to HTML / Presentation Report
-  const handleExportDocument = () => {
+  // Render the printable presentation and download an actual PDF file.
+  const handleExportDocument = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setExportError(null);
     try {
       const printDoc = generatePrintableHtml();
-      const blob = new Blob([printDoc], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Fiber_Infra_Sharing_Approval_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const projectName = project.name.replace(/[\\/:*?"<>|\s]+/g, '_');
+      await exportApprovalPdf(printDoc, `Fiber_Infra_Sharing_Approval_${projectName}_${new Date().toISOString().split('T')[0]}.pdf`);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 4000);
     } catch (e) {
       console.error("Export error:", e);
+      setExportError(e instanceof Error ? e.message : 'ไม่สามารถส่งออก PDF ได้');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1619,6 +1649,7 @@ export function DesignApprovalModal({
       page-break-after: always;
       box-shadow: 0 4px 20px rgba(0,0,0,0.06);
       border: 1px solid #e2e8f0;
+      box-sizing: border-box;
       min-height: 190mm;
       position: relative;
     }
@@ -2131,79 +2162,60 @@ export function DesignApprovalModal({
         </div>
       </div>
 
-      <!-- Item 1: Cable distance across whole project -->
+      <!-- Combined Fiber Optic, sharing and Enclosure summary -->
       <div style="margin-bottom: 12px;">
-        <strong style="color: #0369a1; font-size: 13px;">1. ระยะเคเบิลที่ต้องใช้ร่วมกัน (รายละเอียดทั้งโครงการ):</strong>
-        <div style="margin-top: 4px; padding-left: 10px;">
-          ${fiberRouteSchedule.map((r, idx) => `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 2px;">
-              <span><strong>เส้นทางที่ ${idx + 1}:</strong> ${r.routeName} (${r.sectionName}) - ขนาด OFC ${r.capacity} Core (${r.tier})</span>
-              <span style="font-weight: 700; color: #0f172a;">ระยะทาง ${r.distanceKm} กม.</span>
-            </div>
-          `).join('')}
-          <div style="margin-top: 4px; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; font-weight: 800; color: #0369a1; display: flex; justify-content: space-between;">
-            <span>รวมระยะทางสายเคเบิลทั้งโครงการ (${fiberRouteSchedule.length} เส้นทาง):</span>
-            <span>${totalLengthKm} กิโลเมตร</span>
-          </div>
-        </div>
+        <strong style="color: #0369a1; font-size: 13px;">สรุปเส้น Fiber Optic และการใช้งานร่วมกัน</strong>
+        <table style="table-layout: fixed; width: 100%; font-size: 10px; margin: 8px 0;">
+          <colgroup>
+            <col style="width: 13%;" /><col style="width: 24%;" /><col style="width: 11%;" />
+            <col style="width: 18%;" /><col style="width: 16%;" /><col style="width: 18%;" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>ชื่อเส้น Fiber Optic</th>
+              <th>สาย / ระยะทาง</th>
+              <th>สัดส่วนการใช้งาน</th>
+              <th>Type Enclosure</th>
+              <th>BJ รายจุด</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${approvalSummaryRows.map(({ route, typeCounts, bjDetails }) => `
+              <tr>
+                <td style="vertical-align: top; overflow-wrap: anywhere;"><strong>${escapePrintText(route.tier)}</strong></td>
+                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;"><strong>${escapePrintText(route.routeName)}</strong></td>
+                <td style="vertical-align: top;">OFC ${route.capacity} Core<br><strong>${route.distanceKm} กม.</strong></td>
+                <td style="vertical-align: top; text-align: left;">
+                  ${participatingOwners.map(owner => `
+                    <div><strong style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner}:</strong> ${getCoreShareText(getOwnerCoreCount(route, owner), route.capacity)}</div>
+                  `).join('')}
+                </td>
+                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;">
+                  ${typeCounts.length ? typeCounts.map(type => `<div>${escapePrintText(type.name)} <strong>(${type.count} หัว)</strong></div>`).join('') : '-'}
+                </td>
+                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;">
+                  ${bjDetails.length ? bjDetails.map(bj => `<div><strong>${escapePrintText(bj.bjNo)}</strong> · ${escapePrintText(bj.typeName)}</div>`).join('') : '-'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e0f2fe; font-weight: 700;">
+              <td>รวม</td>
+              <td>${approvalSummaryRows.length} เส้น Fiber Optic</td>
+              <td>${totalLengthKm} กม.</td>
+              <td style="text-align: left;">${participatingOwners.map(owner => `<div>${owner}: ${owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>`).join('')}</td>
+              <td>ตาม Type ที่ใช้จริง</td>
+              <td>${sldEnclosures.length} หัว</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
 
-      <!-- Item 2: Core sharing allocation across whole project -->
-      <div style="margin-bottom: 12px;">
-        <strong style="color: #0369a1; font-size: 13px;">2. การแบ่งจำนวน Core ใช้งาน (รายละเอียดทั้งโครงการ):</strong>
-        <div style="margin-top: 4px; padding-left: 10px;">
-          ${fiberRouteSchedule.map((r, idx) => `
-            <div style="margin-bottom: 5px; background: white; padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-              <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">
-                เส้นทางที่ ${idx + 1}: ${r.routeName} [OFC ${r.capacity} Core]
-              </div>
-              <div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px;">
-                ${participatingOwners.map(owner => {
-                  const c = owner === 'SYMC' ? r.symcCores : owner === 'UIH' ? r.uihCores : (r.itelCores || 0);
-                  const color = owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706';
-                  return `<span style="font-weight: 700; color: ${color};">${owner}: ${c} Core</span>`;
-                }).join('')}
-                ${(r.capacity - r.totalCores) > 0 ? `<span style="color: #64748b; font-weight: 600;">Spare: ${r.capacity - r.totalCores} Core</span>` : ''}
-              </div>
-            </div>
-          `).join('')}
-          <div style="padding: 4px 8px; background: #fef9c3; border-radius: 6px; font-weight: 800; color: #854d0e; display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
-            <span>สรุปจำนวน Core ใช้งานรวมทั้งโครงการ:</span>
-            ${participatingOwners.map(owner => {
-              const totalO = owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores;
-              return `<span style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner} รวม ${totalO} Core</span>`;
-            }).join(' | ')}
-            <span>(ความจุรวมทั้งหมด ${fiberRouteTotals.totalCores} Core)</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Item 3: Enclosure requirements across whole project -->
-      <div style="margin-bottom: 12px;">
-        <strong style="color: #0369a1; font-size: 13px;">3. ต้องใช้ Enclosure (รายละเอียดทั้งโครงการ):</strong>
-        <div style="margin-top: 4px; padding-left: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <span>ขนาด Enclosure มาตรฐาน: <strong>312 Core (หรือตามแบบที่กำหนด)</strong></span>
-            <span style="font-weight: 800; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 6px;">
-              จำนวน Enclosure รวมทั้งโครงการ: ${sldEnclosures.length} หัว (จุดตัดต่อ)
-            </span>
-          </div>
-          ${fiberRouteSchedule.map((r, idx) => {
-            const rEncs = getRouteEnclosures(r.id);
-            const firstEncName = rEncs.length > 0 ? parseEnclosureName(rEncs[0], 0).bjNo : '-';
-            const lastEncName = rEncs.length > 0 ? parseEnclosureName(rEncs[rEncs.length - 1], rEncs.length - 1).bjNo : '-';
-            return `
-              <div style="font-size: 11px; color: #475569; margin-bottom: 2px;">
-                &bull; เส้นทางที่ ${idx + 1} (${r.routeName}): <strong>${rEncs.length} หัว</strong> (${firstEncName} ถึง ${lastEncName})
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-      <!-- Item 4: Contractor Details -->
+      <!-- Item 2: Contractor Details -->
       <div style="margin-bottom: 12px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">
-        <strong style="color: #0f172a; font-size: 13px;">4. ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):</strong>
+        <strong style="color: #0f172a; font-size: 13px;">2. ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):</strong>
         <div style="margin-top: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 11px;">
           <div><strong>ชื่อบริษัทผู้รับจ้าง:</strong> ${contractor}</div>
           <div><strong>ผู้ควบคุมงาน / ผู้ประสานงาน:</strong> ${(designApproval as any)?.contractorContact || contractorContactInput || '-'}</div>
@@ -2309,11 +2321,12 @@ export function DesignApprovalModal({
             {/* Export HTML / Print */}
             <button
               onClick={handleExportDocument}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-              title="Download print-ready presentation memo HTML"
+              disabled={isExporting}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              title="ดาวน์โหลดเอกสาร PDF"
             >
-              <Download size={13} className={exportSuccess ? 'text-emerald-400' : 'text-slate-300'} />
-              <span>{exportSuccess ? 'ดาวน์โหลดแล้ว!' : 'Export / PDF'}</span>
+              {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} className={exportSuccess ? 'text-emerald-400' : 'text-slate-300'} />}
+              <span>{isExporting ? 'กำลังสร้าง PDF…' : exportSuccess ? 'ดาวน์โหลดแล้ว!' : 'Export / PDF'}</span>
             </button>
 
             {/* Close */}
@@ -2372,6 +2385,11 @@ export function DesignApprovalModal({
 
         {/* Modal Main Content Body */}
         <div className="flex-1 overflow-y-auto bg-slate-950 p-4 sm:p-6 custom-scrollbar">
+          {exportError && (
+            <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-300">
+              ส่งออก PDF ไม่สำเร็จ: {exportError}
+            </div>
+          )}
           
           {/* VIEW MODE 1: PRESENTATION SLIDES (Matching the attached PDF presentation) */}
           {viewMode === 'slides' && (
@@ -3454,161 +3472,85 @@ export function DesignApprovalModal({
                           </div>
                         )}
 
-                        {/* SECTION 1: CABLE DISTANCE ACROSS THE ENTIRE PROJECT */}
+                        {/* Combined Fiber Optic, sharing and Enclosure summary */}
                         <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
                           <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
-                              ระยะเคเบิลที่ต้องใช้ร่วมกัน (รายละเอียดทั้งโครงการ):
-                            </span>
+                            <span className="font-extrabold text-white text-xs">สรุปเส้น Fiber Optic และการใช้งานร่วมกัน</span>
                             <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-500/20">
-                              รวม {fiberRouteSchedule.length} เส้นทาง | {totalLengthKm} km.
+                              {approvalSummaryRows.length} เส้น | {totalLengthKm} กม.
                             </span>
                           </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                            {fiberRouteSchedule.map((routeSched, rIdx) => (
-                              <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <div>
-                                    <span className="inline-block px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-black text-[10px] mr-1.5">
-                                      เส้นที่ {rIdx + 1}
-                                    </span>
-                                    <strong className="text-white">{routeSched.routeName}</strong>
-                                    <p className="text-[10px] text-slate-400">{routeSched.sectionName}</p>
-                                  </div>
-                                  <span className="font-mono font-bold text-white shrink-0 bg-slate-800 px-2 py-0.5 rounded">
-                                    {routeSched.distanceKm} km.
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
-                                  <span>ขนาด: <strong className="text-amber-300">OFC {routeSched.capacity} Core</strong></span>
-                                  <span>&bull;</span>
-                                  <span>Tier: <strong className="text-sky-300">{routeSched.tier}</strong></span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-between text-[11px] font-bold text-sky-300">
-                            <span>รวมระยะทางสายเคเบิลทั้งโครงการ ({fiberRouteSchedule.length} เส้นทาง):</span>
-                            <span className="text-white font-extrabold text-xs">{totalLengthKm} กิโลเมตร</span>
+                          <div className="overflow-x-auto rounded-lg border border-slate-700">
+                            <table className="w-full min-w-[1080px] table-fixed border-collapse text-[11px] text-left">
+                              <colgroup>
+                                <col className="w-[13%]" /><col className="w-[24%]" /><col className="w-[11%]" />
+                                <col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[18%]" />
+                              </colgroup>
+                              <thead className="bg-slate-800 text-slate-200">
+                                <tr>
+                                  <th className="p-2 border-r border-slate-700">Tier</th>
+                                  <th className="p-2 border-r border-slate-700">ชื่อเส้น Fiber Optic</th>
+                                  <th className="p-2 border-r border-slate-700">สาย / ระยะทาง</th>
+                                  <th className="p-2 border-r border-slate-700">สัดส่วนการใช้งาน</th>
+                                  <th className="p-2 border-r border-slate-700">Type Enclosure</th>
+                                  <th className="p-2">BJ รายจุด</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800 bg-slate-950/70 align-top text-slate-200">
+                                {approvalSummaryRows.map(({ route, index, typeCounts, bjDetails }) => (
+                                  <tr key={route.id || index}>
+                                    <td className="p-2 border-r border-slate-800 font-bold text-sky-300 break-words">{route.tier}</td>
+                                    <td className="p-2 border-r border-slate-800 font-semibold break-words">{route.routeName}</td>
+                                    <td className="p-2 border-r border-slate-800">
+                                      <div>OFC {route.capacity} Core</div>
+                                      <strong className="text-emerald-400">{route.distanceKm} กม.</strong>
+                                    </td>
+                                    <td className="p-2 border-r border-slate-800 space-y-1">
+                                      {participatingOwners.map(owner => (
+                                        <div key={owner} className="break-words">
+                                          <strong className={owner === 'SYMC' ? 'text-pink-400' : owner === 'UIH' ? 'text-sky-400' : 'text-amber-400'}>{owner}:</strong>{' '}
+                                          {getCoreShareText(getOwnerCoreCount(route, owner), route.capacity)}
+                                        </div>
+                                      ))}
+                                    </td>
+                                    <td className="p-2 border-r border-slate-800 space-y-1">
+                                      {typeCounts.length ? typeCounts.map(type => (
+                                        <div key={type.name} className="break-words">{type.name} <strong className="text-amber-300">({type.count} หัว)</strong></div>
+                                      )) : '-'}
+                                    </td>
+                                    <td className="p-2 space-y-1">
+                                      {bjDetails.length ? bjDetails.map((bj, bjIndex) => (
+                                        <div key={`${bj.bjNo}-${bjIndex}`} title={bj.bjName} className="break-words">
+                                          <strong className="text-sky-300">{bj.bjNo}</strong> <span className="text-slate-400">· {bj.typeName}</span>
+                                        </div>
+                                      )) : '-'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-sky-500/10 font-bold text-sky-200">
+                                <tr>
+                                  <td className="p-2 border-r border-slate-700">รวม</td>
+                                  <td className="p-2 border-r border-slate-700">{approvalSummaryRows.length} เส้น Fiber Optic</td>
+                                  <td className="p-2 border-r border-slate-700">{totalLengthKm} กม.</td>
+                                  <td className="p-2 border-r border-slate-700">
+                                    {participatingOwners.map(owner => (
+                                      <div key={owner}>{owner}: {owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>
+                                    ))}
+                                  </td>
+                                  <td className="p-2 border-r border-slate-700">ตาม Type ที่ใช้จริง</td>
+                                  <td className="p-2">{sldEnclosures.length} หัว</td>
+                                </tr>
+                              </tfoot>
+                            </table>
                           </div>
                         </div>
 
-                        {/* SECTION 2: CORE SHARING BREAKDOWN ACROSS THE ENTIRE PROJECT */}
-                        <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-pink-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
-                              การแบ่งจำนวน Core ใช้งาน (รายละเอียดทั้งโครงการ):
-                            </span>
-                            <span className="text-[11px] font-bold text-pink-400 bg-pink-500/10 px-2.5 py-0.5 rounded-full border border-pink-500/20">
-                              ความจุรวม {fiberRouteTotals.totalCores} Core
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                            {fiberRouteSchedule.map((routeSched, rIdx) => {
-                              const spareCount = Math.max(0, routeSched.capacity - routeSched.totalCores);
-                              return (
-                                <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-bold text-white">
-                                      เส้นที่ {rIdx + 1}: {routeSched.routeName}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">
-                                      OFC {routeSched.capacity} Core
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {participatingOwners.map((owner) => {
-                                      const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
-                                      const pct = routeSched.capacity > 0 ? ((count / routeSched.capacity) * 100).toFixed(0) : '0';
-                                      return (
-                                        <span 
-                                          key={owner} 
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px]"
-                                          style={{
-                                            backgroundColor: owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb',
-                                            color: owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706',
-                                            border: `1px solid ${owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24'}40`
-                                          }}
-                                        >
-                                          <OwnerLogo owner={owner} size="xs" /> {owner}: {count}C ({pct}%)
-                                        </span>
-                                      );
-                                    })}
-                                    {spareCount > 0 && (
-                                      <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-slate-800 text-slate-400 border border-slate-700">
-                                        Spare: {spareCount}C
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between flex-wrap gap-2 text-[11px] font-bold text-amber-300">
-                            <span>สรุปยอดจำนวน Core ใช้งานรวมทั้งโครงการ:</span>
-                            <div className="flex items-center gap-3 flex-wrap">
-                              {participatingOwners.map(owner => {
-                                const totalO = owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores;
-                                return (
-                                  <span key={owner} style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                                    {owner}: <strong>{totalO} Core</strong>
-                                  </span>
-                                );
-                              })}
-                              <span className="text-slate-400">
-                                ความจุรวม: <strong className="text-white">{fiberRouteTotals.totalCores} Core</strong>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* SECTION 3: ENCLOSURE REQUIREMENTS ACROSS THE ENTIRE PROJECT */}
-                        <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">3</span>
-                              ต้องใช้ Enclosure (รายละเอียดทั้งโครงการ):
-                            </span>
-                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
-                              ขนาด 312 Core รวมทั้งสิ้น {sldEnclosures.length} หัว
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                            {fiberRouteSchedule.map((routeSched, rIdx) => {
-                              const rEncs = getRouteEnclosures(routeSched.id);
-                              const firstEnc = rEncs.length > 0 ? parseEnclosureName(rEncs[0], 0).bjNo : '-';
-                              const lastEnc = rEncs.length > 0 ? parseEnclosureName(rEncs[rEncs.length - 1], rEncs.length - 1).bjNo : '-';
-                              return (
-                                <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-                                  <div>
-                                    <span className="font-bold text-white">
-                                      เส้นที่ {rIdx + 1}: {routeSched.routeName}
-                                    </span>
-                                    <p className="text-[10px] text-slate-400">
-                                      ช่วงจุดต่อ: {firstEnc} ถึง {lastEnc}
-                                    </p>
-                                  </div>
-                                  <span className="text-xs font-black text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                                    {rEncs.length} หัว
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* SECTION 4: CONTRACTOR OVERVIEW CARD */}
+                        {/* SECTION 2: CONTRACTOR OVERVIEW CARD */}
                         <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">4</span>
+                              <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
                               ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):
                             </span>
                             {!isEditingContractor && (
