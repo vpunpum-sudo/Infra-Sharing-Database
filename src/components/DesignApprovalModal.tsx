@@ -2149,7 +2149,7 @@ export function DesignApprovalModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-6xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-none max-h-[96vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Top Header Bar */}
         <div className="px-5 py-3.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
@@ -2282,7 +2282,7 @@ export function DesignApprovalModal({
           
           {/* VIEW MODE 1: PRESENTATION SLIDES (Matching the attached PDF presentation) */}
           {viewMode === 'slides' && (
-            <div className="max-w-5xl mx-auto space-y-4">
+            <div className="w-full space-y-4">
               
               {/* Slide Container with clean presentation border */}
               <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 md:p-8 shadow-xl relative min-h-[520px] flex flex-col justify-between overflow-hidden">
