@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LogIn, Layers, ShieldCheck, Zap, Mail, Lock, Loader2, Sparkles, Activity } from 'lucide-react';
 import { loginWithEmail, sendPasswordResetEmail, auth } from '../firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Login() {
@@ -47,6 +48,27 @@ export default function Login() {
         setError("Too many failed attempts. Please try again later.");
       } else {
         setError(err.message || "An error occurred during login.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError(null);
+    setResetMessage(null);
+
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+      if (err.code === 'auth/popup-blocked') {
+        setError('Your browser blocked the Google sign-in window. Please allow pop-ups and try again.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('Google sign-in is not enabled for this website. Please contact your administrator.');
+      } else {
+        setError(err.message || 'Google sign-in failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -177,6 +199,21 @@ export default function Login() {
                 <span>Sign In to System</span>
               </button>
             </form>
+
+            <div className="flex items-center gap-3 text-slate-500 text-xs">
+              <div className="h-px flex-1 bg-slate-800" />
+              <span>or</span>
+              <div className="h-px flex-1 bg-slate-800" />
+            </div>
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full bg-white text-slate-900 p-3.5 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-slate-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed text-xs"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="text-base font-bold text-blue-600" aria-hidden="true">G</span>}
+              <span>Continue with Google</span>
+            </button>
             
             <div className="pt-2 text-center border-t border-slate-800">
               <p className="text-[11px] text-slate-400">
