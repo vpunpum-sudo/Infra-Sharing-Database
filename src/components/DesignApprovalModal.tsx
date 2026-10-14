@@ -1764,9 +1764,9 @@ export function DesignApprovalModal({
                   <tr>
                     <td>${idx + 1}</td>
                     <td style="padding: 4px; text-align: center;">
-                      ${encType?.imageUrl 
-                        ? `<img src="${encType.imageUrl}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;" />` 
-                        : `<div style="width: 40px; height: 40px; background: #f1f5f9; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10px;">IMG</div>`
+                      ${encType?.icon
+                        ? `<img src="${encType.icon}" alt="${encType.name}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;" />`
+                        : `<div style="width: 40px; height: 40px; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center;"><span style="width: 12px; height: 12px; border-radius: 50%; background: ${encType?.color || '#ef4444'}; border: 1px solid #1e293b;"></span></div>`
                       }
                     </td>
                     <td><strong>${bjNo}</strong></td>
@@ -2894,11 +2894,11 @@ export function DesignApprovalModal({
                                           <tr key={`${enc.id || 'enc'}-${idx}`} className="hover:bg-slate-800/40 transition-colors">
                                             <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
                                             <td className="p-1 border-r border-slate-800">
-                                              {encType?.imageUrl ? (
-                                                <img src={encType.imageUrl} alt={bjName} className="w-10 h-10 object-contain rounded border border-slate-700 mx-auto" />
+                                              {encType?.icon ? (
+                                                <img src={encType.icon} alt={bjName} className="w-10 h-10 object-contain rounded border border-slate-700 mx-auto" />
                                               ) : (
                                                 <div className="w-10 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-slate-500 mx-auto">
-                                                  <Box size={16} />
+                                                  <span className="w-3 h-3 rounded-full border border-slate-900" style={{ backgroundColor: encType?.color || '#ef4444' }} />
                                                 </div>
                                               )}
                                             </td>
