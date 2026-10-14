@@ -21,6 +21,7 @@ import {
 import { OwnerLogo } from './OwnerLogo';
 import { getEffectiveOwnerLogo, getEffectiveOwnerZoom } from '../services/ownerLogosService';
 import { getClosestPointOnRoute } from '../utils/geo';
+import { renderPrintableProjectMap } from '../utils/printProjectMap';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -1429,6 +1430,29 @@ export function DesignApprovalModal({
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
     const contractor = designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.';
 
+    const printMapRoutes = effectiveRoutes.map(route => {
+      const routePoints = (route.path || []).filter(point =>
+        Number.isFinite(point.lat) && Number.isFinite(point.lng)
+      );
+      const start = effectiveEnclosures.find(enc => enc.id === route.startEnclosureId)?.position;
+      const end = effectiveEnclosures.find(enc => enc.id === route.endEnclosureId)?.position;
+      return {
+        name: route.name || 'Fiber Route',
+        color: getRouteColor(route),
+        points: routePoints.length >= 2 ? routePoints : (start && end ? [start, end] : routePoints)
+      };
+    });
+    const printMapEnclosures = effectiveEnclosures.map((enc, index) => {
+      const type = getEnclosureType(enc);
+      return {
+        label: parseEnclosureName(enc, index).bjNo,
+        color: getEnclosureColor(enc),
+        iconUrl: type?.icon,
+        position: enc.position
+      };
+    });
+    const projectMapHtml = renderPrintableProjectMap(printMapRoutes, printMapEnclosures);
+
     // Generate dynamic cover logos HTML for ONLY participating owners
     const coverLogosHtml = participatingOwners.map(owner => {
       const logoUrl = getEffectiveOwnerLogo(owner) || (owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg');
@@ -1639,6 +1663,7 @@ export function DesignApprovalModal({
         `).join('')}
       </tbody>
     </table>
+    ${projectMapHtml}
   </div>
 
   <!-- Slide 4: Enclosure Details Table -->
