@@ -169,6 +169,7 @@ export function DesignApprovalModal({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const signatureFileRef = useRef<HTMLInputElement | null>(null);
   const [slide4SelectedRouteId, setSlide4SelectedRouteId] = useState<string>('all');
   const [slide5SelectedRouteId, setSlide5SelectedRouteId] = useState<string>('all');
   const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>({});
@@ -1131,10 +1132,48 @@ export function DesignApprovalModal({
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasSignature(false);
+    setActionError(null);
+  };
+
+  const handleSignatureFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      setActionError('กรุณาเลือกไฟล์ลายเซ็นชนิด PNG หรือ JPG');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setActionError('ไฟล์ลายเซ็นต้องมีขนาดไม่เกิน 2 MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => setActionError('ไม่สามารถอ่านไฟล์ลายเซ็นได้ กรุณาลองอีกครั้ง');
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      const image = new window.Image();
+      image.onerror = () => setActionError('ไม่สามารถเปิดภาพลายเซ็นได้ กรุณาเลือกไฟล์อื่น');
+      image.onload = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx || !image.width || !image.height) return;
+        const scale = Math.min((canvas.width - 24) / image.width, (canvas.height - 16) / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+        setHasSignature(true);
+        setActionError(null);
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   // Open Signing Modal for specific Owner & Level
   const handleOpenSignModal = (owner: CoreOwner, level: 'Planning' | 'OM') => {
+    setActionError(null);
     setSigningTarget({ owner, level });
     const defaultPosition = level === 'Planning' ? 'Planning Engineer / Network Planner' : 'VP of Operation & Maintenance';
     setSignerPosition(defaultPosition);
@@ -1359,14 +1398,19 @@ export function DesignApprovalModal({
         nextProjectStatus = 'Pending Approval';
       }
 
+      const { finalApprovedAt, finalApprovedBy, ...existingApproval } = project.designApproval;
       const updatedApproval: DesignApproval = {
-        ...project.designApproval,
+        ...existingApproval,
         status: nextProjectStatus,
         approvalStage: nextStage,
         planningSignOffs: nextPlanningSignOffs,
         omSignOffs: nextOMSignOffs,
-        finalApprovedAt: allOMApproved ? new Date().toISOString() : project.designApproval.finalApprovedAt,
-        finalApprovedBy: allOMApproved ? signerName.trim() : project.designApproval.finalApprovedBy
+        ...(finalApprovedAt ? { finalApprovedAt } : {}),
+        ...(finalApprovedBy ? { finalApprovedBy } : {}),
+        ...(allOMApproved ? {
+          finalApprovedAt: new Date().toISOString(),
+          finalApprovedBy: signerName.trim() || appUser.displayName || appUser.email
+        } : {})
       };
 
       const updatedProject: Project = {
@@ -4080,10 +4124,28 @@ export function DesignApprovalModal({
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-300">วาดลายเซ็น (Digital Signature)</label>
+                  <label className="font-bold text-slate-300">ลายเซ็น (Digital Signature)</label>
                   <button onClick={clearSignature} className="text-[10px] text-slate-400 hover:text-amber-400">
                     ล้างลายเซ็น
                   </button>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    ref={signatureFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleSignatureFile}
+                    className="hidden"
+                    aria-label="เลือกภาพลายเซ็น PNG หรือ JPG"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => signatureFileRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg border border-sky-500/50 bg-sky-500/10 text-sky-300 font-bold hover:bg-sky-500/20"
+                  >
+                    แทรกรูปลายเซ็น (PNG/JPG)
+                  </button>
+                  <span className="text-slate-400">หรือวาดในกรอบด้านล่าง</span>
                 </div>
                 <div className="border-2 border-dashed border-slate-700 rounded-xl bg-white overflow-hidden touch-none">
                   <canvas
@@ -4100,7 +4162,14 @@ export function DesignApprovalModal({
                     className="w-full h-28 cursor-crosshair"
                   />
                 </div>
+                {hasSignature && <p className="mt-1 text-[10px] text-emerald-400">ตัวอย่างลายเซ็นที่จะบันทึกแสดงในกรอบด้านบน</p>}
               </div>
+
+              {actionError && (
+                <div role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-rose-300">
+                  {actionError}
+                </div>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-300 mb-1">ความเห็น / มติการอนุมัติ</label>
