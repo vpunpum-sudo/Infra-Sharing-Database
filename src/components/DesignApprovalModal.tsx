@@ -1616,21 +1616,37 @@ export function DesignApprovalModal({
     }
     .sig-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-top: 15px;
+      grid-template-columns: repeat(${Math.max(1, participatingOwners.length)}, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
     }
     .sig-card {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
-      padding: 16px;
+      padding: 12px 8px;
       background: #f8fafc;
       text-align: center;
+      min-width: 0;
+      break-inside: avoid;
+    }
+    .sig-card strong {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .sig-mark {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .sig-img {
-      height: 60px;
+      max-width: 100%;
+      max-height: 60px;
       object-fit: contain;
-      margin: 8px auto;
     }
     .level-badge {
       background: #e0f2fe;
@@ -2113,7 +2129,7 @@ export function DesignApprovalModal({
           return `
             <div class="sig-card">
               <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (Planning)</strong>
-              ${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<div style="height: 60px; line-height: 60px; color: #94a3b8;">[ยังไม่ได้ลงนาม]</div>'}
+              <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
               <div style="font-size: 12px; font-weight: 700;">Name: ${s?.signedBy || '................................'}</div>
               <div style="font-size: 11px; color: #64748b;">Date: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
             </div>
@@ -2131,7 +2147,7 @@ export function DesignApprovalModal({
           return `
             <div class="sig-card">
               <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (O&M Management)</strong>
-              ${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<div style="height: 60px; line-height: 60px; color: #94a3b8;">[ยังไม่ได้ลงนาม]</div>'}
+              <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
               <div style="font-size: 12px; font-weight: 700;">Name: ${s?.signedBy || '................................'}</div>
               <div style="font-size: 11px; color: #64748b;">Date: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
             </div>
@@ -3955,7 +3971,7 @@ export function DesignApprovalModal({
                   <p className="text-xs font-black text-amber-400 uppercase tracking-wide">
                     ระดับที่ 1: ผู้อนุมัติทีม Planning
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className={`grid grid-cols-1 gap-4 ${participatingOwners.length > 1 ? 'sm:grid-cols-2' : ''} ${participatingOwners.length > 2 ? 'lg:grid-cols-3' : ''}`}>
                     {participatingOwners.map(o => {
                       const s = planningSignOffs[o];
                       return (
@@ -3982,7 +3998,7 @@ export function DesignApprovalModal({
                   <p className="text-xs font-black text-sky-400 uppercase tracking-wide">
                     ระดับที่ 2: ผู้อนุมัติทีม O&M (Management)
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className={`grid grid-cols-1 gap-4 ${participatingOwners.length > 1 ? 'sm:grid-cols-2' : ''} ${participatingOwners.length > 2 ? 'lg:grid-cols-3' : ''}`}>
                     {participatingOwners.map(o => {
                       const s = omSignOffs[o];
                       return (
