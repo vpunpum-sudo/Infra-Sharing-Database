@@ -8,7 +8,7 @@ import { doc, setDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logActivity } from '../services/logService';
 import { 
-  FileText, CheckCircle2, XCircle, Clock, ShieldCheck, 
+  CheckCircle2, XCircle, Clock,
   Send, PenTool, X, Download, AlertTriangle, 
   Layers, Box, Cable, MapPin, Check, ChevronRight, 
   RotateCcw, Sparkles, Network, Compass, ShieldAlert,
@@ -34,6 +34,43 @@ interface DesignApprovalModalProps {
   routes?: Route[];
   enclosures?: FiberEnclosure[];
   onProjectUpdated?: (updatedProject: Project) => void;
+}
+
+const escapePrintText = (value: string) => value.replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[char] || char);
+
+function getTrimmedSignatureDataUrl(canvas: HTMLCanvasElement): string {
+  const context = canvas.getContext('2d');
+  if (!context) return canvas.toDataURL('image/png');
+
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let left = canvas.width;
+  let top = canvas.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const offset = (y * canvas.width + x) * 4;
+      if (pixels[offset + 3] < 16 || (pixels[offset] > 245 && pixels[offset + 1] > 245 && pixels[offset + 2] > 245)) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return canvas.toDataURL('image/png');
+
+  const padding = 8;
+  const width = right - left + 1;
+  const height = bottom - top + 1;
+  const trimmed = document.createElement('canvas');
+  trimmed.width = width + padding * 2;
+  trimmed.height = height + padding * 2;
+  const trimmedContext = trimmed.getContext('2d');
+  if (!trimmedContext) return canvas.toDataURL('image/png');
+  trimmedContext.drawImage(canvas, left, top, width, height, padding, padding, width, height);
+  return trimmed.toDataURL('image/png');
 }
 
 // Leaflet Auto-Fit Bounds Component
@@ -86,15 +123,15 @@ export function DesignApprovalModal({
   enclosures: propEnclosures = [],
   onProjectUpdated
 }: DesignApprovalModalProps) {
-  // Modal View State: 'slides' | 'document' | 'request'
-  const [viewMode, setViewMode] = useState<'slides' | 'document' | 'request'>('slides');
+  // Modal View State: presentation and the approval request form
+  const [viewMode, setViewMode] = useState<'slides' | 'request'>('slides');
   const [currentSlide, setCurrentSlide] = useState(1);
   const totalSlides = 6;
 
   // Signing dialog states
   const [signingModalOpen, setSigningModalOpen] = useState(false);
   const [signingTarget, setSigningTarget] = useState<{ owner: CoreOwner; level: 'Planning' | 'OM' } | null>(null);
-  const [signerName, setSignerName] = useState(appUser?.displayName || appUser?.email?.split('@')[0] || '');
+  const [signerName, setSignerName] = useState('');
   const [signerPosition, setSignerPosition] = useState('');
   const [signerComment, setSignerComment] = useState('Approved design layout according to fiber infra sharing specifications.');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -748,6 +785,26 @@ export function DesignApprovalModal({
     };
   }, [fiberRouteSchedule]);
 
+  const fiberOpticSummary = useMemo(() => {
+    const distanceByType = new Map<string, number>();
+
+    fiberRouteSchedule.forEach((route, index) => {
+      const capacityLabel = `OFC ${route.capacity} Core`;
+      const typeName = effectiveRoutes[index]?.fiberType?.trim();
+      const label = !typeName || /^\d+$/.test(typeName)
+        ? capacityLabel
+        : typeName.includes(String(route.capacity))
+          ? typeName
+          : `${capacityLabel} (${typeName})`;
+      distanceByType.set(label, (distanceByType.get(label) || 0) + (parseFloat(route.distanceKm) || 0));
+    });
+
+    return Array.from(distanceByType, ([label, distanceKm]) => ({
+      label,
+      distanceKm: distanceKm.toFixed(2)
+    }));
+  }, [fiberRouteSchedule, effectiveRoutes]);
+
   const primaryRoute = fiberRouteSchedule[0] || {
     tier: projectTierCompactLabel,
     routeName: project.name,
@@ -1172,13 +1229,12 @@ export function DesignApprovalModal({
   };
 
   // Open Signing Modal for specific Owner & Level
-  const handleOpenSignModal = (owner: CoreOwner, level: 'Planning' | 'OM') => {
+  const handleOpenSignModal = (owner: CoreOwner, level: 'Planning' | 'OM', previousSignOff?: OwnerSignOff) => {
     setActionError(null);
     setSigningTarget({ owner, level });
-    const defaultPosition = level === 'Planning' ? 'Planning Engineer / Network Planner' : 'VP of Operation & Maintenance';
-    setSignerPosition(defaultPosition);
-    setSignerName(appUser?.displayName || appUser?.email?.split('@')[0] || '');
-    setSignerComment(level === 'Planning' ? 'เห็นชอบแบบการติดตั้งและสัดส่วน Core ตามเกณฑ์วิศวกรรมโครงข่าย' : 'อนุมัติการดำเนินโครงการและอนุญาตให้เข้าติดตั้งตามแผนงาน');
+    setSignerPosition(previousSignOff?.position || '');
+    setSignerName(previousSignOff?.signedBy || '');
+    setSignerComment(previousSignOff?.comment || (level === 'Planning' ? 'เห็นชอบแบบการติดตั้งและสัดส่วน Core ตามเกณฑ์วิศวกรรมโครงข่าย' : 'อนุมัติการดำเนินโครงการและอนุญาตให้เข้าติดตั้งตามแผนงาน'));
     setSigningModalOpen(true);
   };
 
@@ -1197,6 +1253,13 @@ export function DesignApprovalModal({
       return appUser.role === 'Management';
     }
   };
+
+  const canCorrectSignOff = (signOff: OwnerSignOff, owner: CoreOwner, level: 'Planning' | 'OM') =>
+    !!appUser && canUserSign(owner, level) && (
+      appUser.role === 'Admin' ||
+      signOff.signedByUid === appUser.id ||
+      (!signOff.signedByUid && signOff.signedByEmail?.toLowerCase() === appUser.email.toLowerCase())
+    );
 
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
@@ -1343,22 +1406,36 @@ export function DesignApprovalModal({
   // Sign & Approve for specific Owner & Level (Planning or OM)
   const handleConfirmSignature = async (isApproved: boolean) => {
     if (!signingTarget || !appUser || !project.designApproval) return;
+    const fullName = signerName.trim();
+    const position = signerPosition.trim();
+    if (fullName.split(/\s+/).length < 2) {
+      setActionError('กรุณากรอกชื่อและนามสกุลจริงก่อนลงนาม');
+      return;
+    }
+    if (!position) {
+      setActionError('กรุณากรอกตำแหน่งจริงก่อนลงนาม');
+      return;
+    }
+    if (!hasSignature) {
+      setActionError('กรุณาวาดหรือแทรกรูปลายเซ็นก่อนลงนาม');
+      return;
+    }
     setIsSubmitting(true);
     setActionError(null);
 
     try {
       const canvas = canvasRef.current;
-      const signatureUrl = canvas ? canvas.toDataURL('image/png') : '';
+      const signatureUrl = canvas ? getTrimmedSignatureDataUrl(canvas) : '';
       const { owner, level } = signingTarget;
 
       const signOffData: OwnerSignOff = {
         owner,
         level,
         status: isApproved ? 'Approved' : 'Rejected',
-        signedBy: signerName.trim() || appUser.displayName || appUser.email,
+        signedBy: fullName,
         signedByEmail: appUser.email,
         signedByUid: appUser.id,
-        position: signerPosition.trim() || (level === 'Planning' ? 'Planning Engineer' : 'O&M Director'),
+        position,
         role: appUser.role,
         signedAt: new Date().toISOString(),
         comment: signerComment.trim(),
@@ -1399,17 +1476,17 @@ export function DesignApprovalModal({
       }
 
       const { finalApprovedAt, finalApprovedBy, ...existingApproval } = project.designApproval;
+      const previousSignOff = level === 'OM' ? project.designApproval.omSignOffs?.[owner] : undefined;
+      const correctedFinalApprover = previousSignOff?.signedBy === finalApprovedBy ? fullName : finalApprovedBy;
       const updatedApproval: DesignApproval = {
         ...existingApproval,
         status: nextProjectStatus,
         approvalStage: nextStage,
         planningSignOffs: nextPlanningSignOffs,
         omSignOffs: nextOMSignOffs,
-        ...(finalApprovedAt ? { finalApprovedAt } : {}),
-        ...(finalApprovedBy ? { finalApprovedBy } : {}),
         ...(allOMApproved ? {
-          finalApprovedAt: new Date().toISOString(),
-          finalApprovedBy: signerName.trim() || appUser.displayName || appUser.email
+          finalApprovedAt: finalApprovedAt || new Date().toISOString(),
+          finalApprovedBy: correctedFinalApprover || fullName
         } : {})
       };
 
@@ -1616,21 +1693,58 @@ export function DesignApprovalModal({
     }
     .sig-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-top: 15px;
+      grid-template-columns: repeat(${Math.max(1, participatingOwners.length)}, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
     }
     .sig-card {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
-      padding: 16px;
+      padding: 12px 8px;
       background: #f8fafc;
       text-align: center;
+      min-width: 0;
+      break-inside: avoid;
+      display: flex;
+      flex-direction: column;
+    }
+    .sig-card strong {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .sig-mark {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
     }
     .sig-img {
-      height: 60px;
+      display: block;
+      max-width: 100%;
+      max-height: 60px;
       object-fit: contain;
-      margin: 8px auto;
+      margin: 0 auto;
+    }
+    .sig-name, .sig-position, .sig-date {
+      overflow-wrap: anywhere;
+      line-height: 1.3;
+    }
+    .sig-name {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .sig-position {
+      font-size: 11px;
+      color: #334155;
+    }
+    .sig-date {
+      font-size: 11px;
+      color: #64748b;
     }
     .level-badge {
       background: #e0f2fe;
@@ -2113,9 +2227,10 @@ export function DesignApprovalModal({
           return `
             <div class="sig-card">
               <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (Planning)</strong>
-              ${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<div style="height: 60px; line-height: 60px; color: #94a3b8;">[ยังไม่ได้ลงนาม]</div>'}
-              <div style="font-size: 12px; font-weight: 700;">Name: ${s?.signedBy || '................................'}</div>
-              <div style="font-size: 11px; color: #64748b;">Date: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
+              <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" alt="ลายเซ็น" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
+              <div class="sig-name">ชื่อ-นามสกุล: ${escapePrintText(s?.signedBy || '................................')}</div>
+              <div class="sig-position">ตำแหน่ง: ${escapePrintText(s?.position || '................................')}</div>
+              <div class="sig-date">วันที่: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
             </div>
           `;
         }).join('')}
@@ -2131,9 +2246,10 @@ export function DesignApprovalModal({
           return `
             <div class="sig-card">
               <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (O&M Management)</strong>
-              ${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" />` : '<div style="height: 60px; line-height: 60px; color: #94a3b8;">[ยังไม่ได้ลงนาม]</div>'}
-              <div style="font-size: 12px; font-weight: 700;">Name: ${s?.signedBy || '................................'}</div>
-              <div style="font-size: 11px; color: #64748b;">Date: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
+              <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" alt="ลายเซ็น" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
+              <div class="sig-name">ชื่อ-นามสกุล: ${escapePrintText(s?.signedBy || '................................')}</div>
+              <div class="sig-position">ตำแหน่ง: ${escapePrintText(s?.position || '................................')}</div>
+              <div class="sig-date">วันที่: ${s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : '................................'}</div>
             </div>
           `;
         }).join('')}
@@ -2180,38 +2296,15 @@ export function DesignApprovalModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* View Mode Switcher */}
-            <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/80 text-xs">
-              <button
-                onClick={() => setViewMode('slides')}
-                className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-                  viewMode === 'slides' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Presentation size={13} />
-                <span>สไลด์นำเสนอ</span>
-              </button>
-              <button
-                onClick={() => setViewMode('document')}
-                className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-                  viewMode === 'document' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <FileText size={13} />
-                <span>เอกสารเต็ม</span>
-              </button>
-              {(!designApproval || isRejected) && (
-                <button
-                  onClick={() => setViewMode('request')}
-                  className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-                    viewMode === 'request' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Send size={13} />
-                  <span>ยื่นขออนุมัติใหม่</span>
-                </button>
-              )}
-            </div>
+            <button
+              onClick={() => setViewMode('slides')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                viewMode === 'slides' ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-800 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Presentation size={13} />
+              <span>สไลด์นำเสนอ</span>
+            </button>
 
             {/* Export HTML / Print */}
             <button
@@ -2283,6 +2376,14 @@ export function DesignApprovalModal({
           {/* VIEW MODE 1: PRESENTATION SLIDES (Matching the attached PDF presentation) */}
           {viewMode === 'slides' && (
             <div className="w-full space-y-4">
+              {(!designApproval || isRejected) && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+                  <span>{isRejected ? 'คำขอเดิมถูกปฏิเสธ สามารถยื่นคำขอใหม่ได้' : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
+                  <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
+                    ยื่นขออนุมัติใหม่
+                  </button>
+                </div>
+              )}
               
               {/* Slide Container with clean presentation border */}
               <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 md:p-8 shadow-xl relative min-h-[520px] flex flex-col justify-between overflow-hidden">
@@ -2721,7 +2822,7 @@ export function DesignApprovalModal({
                       </div>
 
                       {/* Bottom Legend Bar */}
-                      <div className="grid grid-cols-3 gap-3 text-center text-xs font-black">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center text-xs font-black">
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-200 flex items-center justify-center gap-2 flex-wrap">
                           <span>{projectTierCompactLabel}</span>
                           {participatingOwners.map((owner, idx) => (
@@ -2731,8 +2832,12 @@ export function DesignApprovalModal({
                             </React.Fragment>
                           ))}
                         </div>
-                        <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-amber-400">
-                          OFC 144 Core : {totalLengthKm} km.
+                        <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-amber-400 min-w-0 space-y-1">
+                          <div className="text-[10px] text-slate-400 uppercase">Fiber Optic</div>
+                          {fiberOpticSummary.map(({ label, distanceKm }) => (
+                            <div key={label} className="break-words leading-snug">{label}: {distanceKm} km.</div>
+                          ))}
+                          <div className="border-t border-slate-800 pt-1 text-[10px] text-amber-300">รวม {totalLengthKm} km.</div>
                         </div>
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-pink-400">
                           Enclosure 312 Core : {sldEnclosures.length} EA.
@@ -3604,11 +3709,11 @@ export function DesignApprovalModal({
 
                                     {isSigned ? (
                                       <div className="space-y-1">
-                                        {signOff.signatureDataUrl && (
-                                          <img src={signOff.signatureDataUrl} alt="signature" className="h-9 object-contain bg-white/90 rounded p-0.5" />
-                                        )}
-                                        <p className="text-[11px] font-bold text-white truncate">{signOff.signedBy}</p>
-                                        <p className="text-[10px] text-slate-400 truncate">{signOff.position || 'Planning Engineer'}</p>
+                                        <div className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
+                                          {signOff.signatureDataUrl && <img src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
+                                        <p className="text-[10px] text-slate-400 break-words">ตำแหน่ง: {signOff.position || 'ไม่ได้ระบุ'}</p>
                                         <p className="text-[9px] text-slate-500">{new Date(signOff.signedAt || '').toLocaleDateString('th-TH')}</p>
                                       </div>
                                     ) : (
@@ -3625,6 +3730,14 @@ export function DesignApprovalModal({
                                     >
                                       <PenTool size={12} />
                                       <span>ลงนาม Planning ({owner})</span>
+                                    </button>
+                                  )}
+                                  {isSigned && canCorrectSignOff(signOff, owner, 'Planning') && (
+                                    <button
+                                      onClick={() => handleOpenSignModal(owner, 'Planning', signOff)}
+                                      className="mt-2 w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-lg"
+                                    >
+                                      แก้ไขข้อมูล / ลงนามใหม่
                                     </button>
                                   )}
                                 </div>
@@ -3686,11 +3799,11 @@ export function DesignApprovalModal({
 
                                     {isSigned ? (
                                       <div className="space-y-1">
-                                        {signOff.signatureDataUrl && (
-                                          <img src={signOff.signatureDataUrl} alt="signature" className="h-9 object-contain bg-white/90 rounded p-0.5" />
-                                        )}
-                                        <p className="text-[11px] font-bold text-white truncate">{signOff.signedBy}</p>
-                                        <p className="text-[10px] text-slate-400 truncate">{signOff.position || 'O&M Director'}</p>
+                                        <div className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
+                                          {signOff.signatureDataUrl && <img src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
+                                        <p className="text-[10px] text-slate-400 break-words">ตำแหน่ง: {signOff.position || 'ไม่ได้ระบุ'}</p>
                                         <p className="text-[9px] text-slate-500">{new Date(signOff.signedAt || '').toLocaleDateString('th-TH')}</p>
                                       </div>
                                     ) : (
@@ -3707,6 +3820,14 @@ export function DesignApprovalModal({
                                     >
                                       <PenTool size={12} />
                                       <span>ลงนาม O&M ({owner})</span>
+                                    </button>
+                                  )}
+                                  {isSigned && canCorrectSignOff(signOff, owner, 'OM') && (
+                                    <button
+                                      onClick={() => handleOpenSignModal(owner, 'OM', signOff)}
+                                      className="mt-2 w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-lg"
+                                    >
+                                      แก้ไขข้อมูล / ลงนามใหม่
                                     </button>
                                   )}
                                 </div>
@@ -3766,253 +3887,11 @@ export function DesignApprovalModal({
             </div>
           )}
 
-          {/* VIEW MODE 2: CONTINUOUS FULL DOCUMENT */}
-          {viewMode === 'document' && (
-            <div className="max-w-4xl mx-auto space-y-6">
-              
-              {/* Cover Summary Banner with Owner Logos */}
-              <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    {participatingOwners.map((owner, idx) => (
-                      <React.Fragment key={owner}>
-                        {idx > 0 && <span className="text-slate-600">&bull;</span>}
-                        <OwnerLogo owner={owner} size="sm" />
-                      </React.Fragment>
-                    ))}
-                  </div>
-                  <h3 className="text-xl font-extrabold text-white">{project.name}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Fiber Infra Sharing Official Approval Memorandum</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-mono text-slate-400">Doc: {designApproval?.documentNumber || `APP-2026-${projectTierName.replace('Tier ', 'T')}-01`}</span>
-                  <div className="text-xs font-bold text-emerald-400 mt-1">Total {sldEnclosures.length} Enclosures &bull; {totalLengthKm} km</div>
-                </div>
-              </div>
-
-              {/* Enclosure Schedule (Per Route Fiber & Enclosure Sharing) */}
-              <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-3">
-                  <h4 className="text-base font-extrabold text-white flex items-center gap-2">
-                    <Box size={18} className="text-sky-400" />
-                    <span>ตารางรายละเอียดการ Sharing รายเส้นทาง Fiber และตำแหน่ง Enclosure</span>
-                  </h4>
-                  <span className="text-xs font-mono text-slate-400">
-                    ข้อมูลจริงตามโครงข่าย Fiber Infrastructure Sharing
-                  </span>
-                </div>
-
-                <div className="space-y-6">
-                  {fiberRouteSchedule.map((routeSched, rIdx) => {
-                    const routeEncs = getRouteEnclosures(routeSched.id);
-                    const totalC = routeSched.capacity || 144;
-                    const symcPct = totalC > 0 ? ((routeSched.symcCores / totalC) * 100).toFixed(0) : '0';
-                    const uihPct = totalC > 0 ? ((routeSched.uihCores / totalC) * 100).toFixed(0) : '0';
-                    const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
-                    const spareCores = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
-
-                    return (
-                      <div key={routeSched.id || rIdx} className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950/80">
-                        {/* Fiber Route Sharing Header */}
-                        <div className="p-3 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="px-2.5 py-1 rounded-md bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
-                              เส้นที่ {rIdx + 1}
-                            </span>
-                            <strong className="text-white text-sm font-extrabold">{routeSched.routeName}</strong>
-                            <span className="text-xs text-slate-400">({routeSched.sectionName})</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs font-mono">
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-sky-300 font-bold border border-slate-700">
-                              OFC {routeSched.capacity} Core
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-bold border border-slate-700">
-                              ระยะทาง {routeSched.distanceKm} km
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-bold border border-sky-800">
-                              Tier: {routeSched.tier || projectTierCompactLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Fiber Sharing Ratio Breakdown */}
-                        <div className="px-3.5 py-2 bg-slate-900/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-bold text-slate-400 text-[11px]">สัดส่วน Sharing เส้น Fiber:</span>
-                            {participatingOwners.map(owner => {
-                              const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
-                              const pct = totalC > 0 ? ((count / totalC) * 100).toFixed(0) : '0';
-                              const colorClass = owner === 'SYMC' ? 'text-pink-400 bg-pink-500/10 border-pink-500/30' : owner === 'UIH' ? 'text-sky-400 bg-sky-500/10 border-sky-500/30' : 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-                              return (
-                                <div key={owner} className={`flex items-center gap-1 px-2.5 py-1 rounded-md border font-black text-[11px] ${colorClass}`}>
-                                  <OwnerLogo owner={owner} size="xs" />
-                                  <span>{owner}: {count}C ({pct}%)</span>
-                                </div>
-                              );
-                            })}
-                            {spareCores > 0 && (
-                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[11px] font-bold border border-slate-700">
-                                Spare: {spareCores}C
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] font-bold text-slate-400">
-                            จุดตัดต่อ Enclosure: <strong className="text-amber-400 font-black">{routeEncs.length} หัว</strong>
-                          </div>
-                        </div>
-
-                        {/* Enclosure Sharing Table */}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs text-center border-collapse min-w-[700px]">
-                            <thead className="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
-                              <tr>
-                                <th className="p-2 border-r border-slate-700">No.</th>
-                                <th className="p-2 border-r border-slate-700">BJ# No</th>
-                                <th className="p-2 border-r border-slate-700 text-left">BJ# Name</th>
-                                <th className="p-2 border-r border-slate-700">Lat. / Long.</th>
-                                <th className="p-2 border-r border-slate-700">ขนาด Enclosure</th>
-                                {participatingOwners.map(owner => (
-                                  <th key={owner} className="p-2 border-r border-slate-700 min-w-[120px]" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
-                                    <div className="flex items-center justify-center gap-1">
-                                      <OwnerLogo owner={owner} size="xs" />
-                                      <span>Tray No.</span>
-                                    </div>
-                                  </th>
-                                ))}
-                                <th className="p-2 border-r border-slate-700">Spare_Tray</th>
-                                <th className="p-2">ตำแหน่ง</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
-                              {routeEncs.map((enc, idx) => {
-                                const { bjNo, bjName } = parseEnclosureName(enc, idx);
-                                const trayAssignments = enc.trayAssignments || {};
-                                const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
-                                const encCapText = getEnclosureCapacityText(enc);
-                                const totalTrays = (() => {
-                                  const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
-                                  return encType?.spliceTrays || 7;
-                                })();
-
-                                return (
-                                  <tr key={enc.id || idx} className="hover:bg-slate-800/30">
-                                    <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
-                                    <td className="p-2 border-r border-slate-800 font-bold text-sky-400">{bjNo}</td>
-                                    <td className="p-2 border-r border-slate-800 text-left font-bold text-white">{bjName}</td>
-                                    <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '-'}, {enc.position?.lng?.toFixed(6) || '-'}</td>
-                                    <td className="p-2 border-r border-slate-800 font-bold text-slate-300">{encCapText}</td>
-                                    {participatingOwners.map(owner => {
-                                      const assignedTrays = Object.entries(trayAssignments)
-                                        .filter(([_, o]) => o === owner)
-                                        .map(([tId]) => Number(tId))
-                                        .sort((a, b) => a - b);
-                                      let trayStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
-                                      if (!trayStr) {
-                                        trayStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
-                                      }
-
-                                      return (
-                                        <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-bold" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                                          {trayStr}
-                                        </td>
-                                      );
-                                    })}
-                                    <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
-                                      {(() => {
-                                        if (hasExplicitAssignments) {
-                                          let spare = 0;
-                                          for (let tId = 1; tId <= totalTrays; tId++) {
-                                            const owner = trayAssignments[tId] || 'None';
-                                            if (owner === 'None') spare++;
-                                          }
-                                          return spare;
-                                        }
-                                        return Math.max(1, totalTrays - (participatingOwners.length * 2));
-                                      })()}
-                                    </td>
-                                    <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB'}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2-Level Signature Matrix in Full Document */}
-              <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-6">
-                <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-emerald-400" />
-                  <span>บันทึกการลงนามอนุมัติ (2 ระดับ: Planning & O&M)</span>
-                </h4>
-
-                {/* Level 1: Planning */}
-                <div className="space-y-3">
-                  <p className="text-xs font-black text-amber-400 uppercase tracking-wide">
-                    ระดับที่ 1: ผู้อนุมัติทีม Planning
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {participatingOwners.map(o => {
-                      const s = planningSignOffs[o];
-                      return (
-                        <div key={o} className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-2">
-                          <div className="flex items-center justify-center gap-2 mb-1">
-                            <OwnerLogo owner={o} size="xs" />
-                            <span className="text-xs font-extrabold text-slate-200">(Planning)</span>
-                          </div>
-                          {s?.signatureDataUrl ? (
-                            <img src={s.signatureDataUrl} alt="sig" className="h-12 object-contain mx-auto bg-white/95 rounded p-1" />
-                          ) : (
-                            <div className="h-12 flex items-center justify-center text-xs text-slate-500 border border-dashed border-slate-800 rounded">ยังไม่ได้ลงนาม</div>
-                          )}
-                          <p className="text-xs font-bold text-white">{s?.signedBy || '........................................'}</p>
-                          <p className="text-[10px] text-slate-400">{s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : 'วันที่: ....................................'}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Level 2: O&M */}
-                <div className="space-y-3 pt-2 border-t border-slate-800">
-                  <p className="text-xs font-black text-sky-400 uppercase tracking-wide">
-                    ระดับที่ 2: ผู้อนุมัติทีม O&M (Management)
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {participatingOwners.map(o => {
-                      const s = omSignOffs[o];
-                      return (
-                        <div key={o} className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-2">
-                          <div className="flex items-center justify-center gap-2 mb-1">
-                            <OwnerLogo owner={o} size="xs" />
-                            <span className="text-xs font-extrabold text-slate-200">(O&M Management)</span>
-                          </div>
-                          {s?.signatureDataUrl ? (
-                            <img src={s.signatureDataUrl} alt="sig" className="h-12 object-contain mx-auto bg-white/95 rounded p-1" />
-                          ) : (
-                            <div className="h-12 flex items-center justify-center text-xs text-slate-500 border border-dashed border-slate-800 rounded">ยังไม่ได้ลงนาม</div>
-                          )}
-                          <p className="text-xs font-bold text-white">{s?.signedBy || '........................................'}</p>
-                          <p className="text-[10px] text-slate-400">{s?.signedAt ? new Date(s.signedAt).toLocaleDateString('th-TH') : 'วันที่: ....................................'}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* VIEW MODE 3: REQUEST FORM */}
+          {/* APPROVAL REQUEST FORM */}
           {viewMode === 'request' && (
             <div className="max-w-2xl mx-auto p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-5">
               <div className="border-b border-slate-800 pb-4">
+                <button onClick={() => setViewMode('slides')} className="mb-3 text-xs font-bold text-sky-400 hover:text-sky-300">← กลับไปสไลด์นำเสนอ</button>
                 <h3 className="text-base font-extrabold text-white font-display">ยื่นคำขออนุมัติแบบโครงการใหม่ (2-Level Approval)</h3>
                 <p className="text-xs text-slate-400 mt-1">ระบบจะส่งเอกสารให้ทีม Planning ของแต่ละ Owner อนุมัติในระดับที่ 1 ก่อน แล้วจึงส่งต่อไปยังระดับ O&M</p>
               </div>
