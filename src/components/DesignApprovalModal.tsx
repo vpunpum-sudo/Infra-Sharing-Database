@@ -958,12 +958,16 @@ export function DesignApprovalModal({
       const type = enclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
         (locationTypeName ? enclosureTypes.find(t => t.name?.trim().toLowerCase() === locationTypeName) : undefined);
       const key = type?.id || enc.enclosureTypeId || locationTypeName || 'unassigned';
-      if (!used.has(key)) {
+      const imageUrl = type?.imageUrl || enc.imageUrl || null;
+      const existing = used.get(key);
+      if (!existing) {
         used.set(key, {
           key,
           name: type?.name || enc.locationType || 'ไม่ระบุ Type',
-          imageUrl: type?.imageUrl || enc.imageUrl || null
+          imageUrl
         });
+      } else if (!existing.imageUrl && imageUrl) {
+        used.set(key, { ...existing, imageUrl });
       }
     }
     return Array.from(used.values());
