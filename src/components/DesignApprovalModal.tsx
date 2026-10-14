@@ -1871,7 +1871,9 @@ export function DesignApprovalModal({
       const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
       const spareC = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
       return `
-        <div style="margin-bottom: 22px; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
+        <div class="pdf-route" style="margin-bottom: 22px; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <div class="pdf-route-intro">
+          <div class="pdf-route-heading">
           <!-- Fiber Route Sharing Summary Header -->
           <div style="background: linear-gradient(135deg, #0f172a, #1e293b); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -1919,6 +1921,7 @@ export function DesignApprovalModal({
               จุดตัดต่อ Enclosure: <strong>${routeEncs.length} หัว</strong>
             </div>
           </div>
+          </div>
 
           <!-- Enclosure illustration -->
           ${(() => {
@@ -1942,9 +1945,10 @@ export function DesignApprovalModal({
               </div>
             ` : '';
           })()}
+          </div>
 
           <!-- Enclosure Table for This Route -->
-          <table style="margin: 0; width: 100%;">
+          <table class="pdf-enclosure-table" style="margin: 0; width: 100%;">
             <thead>
               <tr>
                 <th style="width: 40px;">No.</th>
@@ -2072,7 +2076,7 @@ export function DesignApprovalModal({
       });
 
       return `
-        <div style="margin-top: 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white;">
+        <div class="pdf-keep-together" style="margin-top: 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white;">
           <div style="background: linear-gradient(135deg, #0f172a, #1e293b); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="background: #38bdf8; color: #0f172a; font-weight: 900; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
