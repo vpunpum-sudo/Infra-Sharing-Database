@@ -172,7 +172,7 @@ export function DesignApprovalModal({
   const [slide5SelectedRouteId, setSlide5SelectedRouteId] = useState<string>('all');
   const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>({});
   const [editingEnclosureRouteId, setEditingEnclosureRouteId] = useState<string | null>(null);
-  const [previewingFiberImage, setPreviewingFiberImage] = useState<{ url: string; name: string; cores: number } | null>(null);
+  const [previewingEnclosureImage, setPreviewingEnclosureImage] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     if (project?.designApproval?.routeEnclosureSelections) {
@@ -948,6 +948,105 @@ export function DesignApprovalModal({
     const end = routeIdx === totalRoutes - 1 ? sldEnclosures.length : Math.min(sldEnclosures.length, start + chunkSize);
     const partitioned = sldEnclosures.slice(start, end);
     return partitioned.length > 0 ? partitioned : [sldEnclosures[routeIdx % sldEnclosures.length]];
+  };
+
+  // Show each Enclosure Type used on this route once, using its configured report image.
+  const getUsedEnclosureTypes = (routeEncs: FiberEnclosure[]) => {
+    const used = new Map<string, { key: string; name: string; imageUrl: string | null }>();
+    for (const enc of routeEncs) {
+      const locationTypeName = enc.locationType?.trim().toLowerCase();
+      const type = enclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
+        (locationTypeName ? enclosureTypes.find(t => t.name?.trim().toLowerCase() === locationTypeName) : undefined);
+      const key = type?.id || enc.enclosureTypeId || locationTypeName || 'unassigned';
+      if (!used.has(key)) {
+        used.set(key, {
+          key,
+          name: type?.name || enc.locationType || 'ไม่ระบุ Type',
+          imageUrl: type?.imageUrl || enc.imageUrl || null
+        });
+      }
+    }
+    return Array.from(used.values());
+  };
+
+  const renderRouteEnclosureGallery = (
+    routeEncs: FiberEnclosure[],
+    distanceKm: string | number,
+    totalC: number,
+    extraClass = ''
+  ) => {
+    const usedTypes = getUsedEnclosureTypes(routeEncs);
+    if (usedTypes.length === 0) return null;
+
+    const firstEnc = parseEnclosureName(routeEncs[0], 0).bjNo;
+    const lastEnc = parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo;
+    const routeBjDisplay = routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
+    const manyTypes = usedTypes.length > 2;
+
+    return (
+      <div className={`${extraClass} flex ${manyTypes ? 'flex-col' : 'flex-col md:flex-row'} items-start gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl`}>
+        <div className={`grid ${usedTypes.length === 1 ? 'grid-cols-1' : manyTypes ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : 'grid-cols-2'} gap-3 ${manyTypes ? 'w-full' : 'w-full md:w-[48%]'}`}>
+          {usedTypes.map(encType => (
+            <div key={encType.key} className="min-w-0 rounded-xl bg-white border border-sky-500/30 p-2 shadow-lg">
+              <div className="h-36 sm:h-44 flex items-center justify-center overflow-hidden">
+                {encType.imageUrl ? (
+                  <img src={encType.imageUrl} alt={`Enclosure Type ${encType.name}`} className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-slate-500 text-xs text-center">
+                    <Box size={28} />
+                    <span>ไม่มีรูป Enclosure</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
+                <span className="truncate text-xs font-bold text-slate-900" title={encType.name}>{encType.name}</span>
+                {encType.imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewingEnclosureImage({ url: encType.imageUrl!, name: encType.name })}
+                    aria-label={`ขยายรูป Enclosure Type ${encType.name}`}
+                    className="shrink-0 p-1.5 rounded-md bg-sky-600 hover:bg-sky-500 text-white cursor-pointer"
+                  >
+                    <Maximize2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2.5 flex-1 w-full">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-base md:text-lg font-black text-white tracking-wide">Enclosure Types ที่ใช้งานในเส้นทางนี้</h4>
+            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+              {usedTypes.length} Type
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+              OFC {totalC} Cores Standard
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+              จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed font-medium">
+            แสดงรูป Enclosure แยกตาม Type ที่ใช้งานในเส้นทางนี้ โดยแสดงแต่ละ Type เพียงครั้งเดียว
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
+            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+              <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
+              <strong className="text-emerald-400 text-xs">{distanceKm} km</strong>
+            </div>
+            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+              <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
+              <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
+            </div>
+            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+              <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
+              <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const getEnclosureCapacityText = (enc: FiberEnclosure) => {
@@ -2752,61 +2851,7 @@ export function DesignApprovalModal({
                                   </div>
                                 )}
 
-                                {/* Clear Large Fiber Optic Image Display under Tier Sharing */}
-                                {(() => {
-                                  const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
-                                  const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
-                                  const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
-                                  const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
-                                  return routeFt?.imageUrl ? (
-                                    <div className="m-3 flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
-                                      <div className="relative group shrink-0">
-                                        <img 
-                                          src={routeFt.imageUrl} 
-                                          alt={routeFt.name} 
-                                          className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 object-contain rounded-2xl bg-slate-950 p-4 border-2 border-sky-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]" 
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => setPreviewingFiberImage({ url: routeFt.imageUrl!, name: routeFt.name, cores: totalC })}
-                                          className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
-                                        >
-                                          <Maximize2 size={12} /> ขยายดูรูปใหญ่
-                                        </button>
-                                      </div>
-                                      <div className="space-y-2.5 flex-1 w-full">
-                                        <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
-                                          <span className="text-base md:text-lg font-black text-white tracking-wide">
-                                            ประเภทสาย Fiber Optic: {routeFt.name}
-                                          </span>
-                                          <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
-                                            OFC {totalC} Cores Standard
-                                          </span>
-                                          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
-                                            จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                                          โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
-                                        </p>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
-                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                            <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
-                                            <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
-                                          </div>
-                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                            <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
-                                            <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
-                                          </div>
-                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                            <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
-                                            <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : null;
-                                })()}
+                                {renderRouteEnclosureGallery(routeEncs, routeSched.distanceKm, totalC, 'm-3')}
 
                                 {/* Enclosure Sharing Table */}
                                 <div className="overflow-x-auto">
@@ -2962,61 +3007,7 @@ export function DesignApprovalModal({
                               </span>
                             </div>
 
-                            {/* Clear Large Fiber Optic Image Display under Tier Sharing */}
-                             {(() => {
-                               const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
-                               const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
-                               const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
-                               const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
-                               return routeFt?.imageUrl ? (
-                                 <div className="flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
-                                   <div className="relative group shrink-0">
-                                     <img 
-                                       src={routeFt.imageUrl} 
-                                       alt={routeFt.name} 
-                                       className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 object-contain rounded-2xl bg-slate-950 p-4 border-2 border-sky-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]" 
-                                     />
-                                     <button
-                                       type="button"
-                                       onClick={() => setPreviewingFiberImage({ url: routeFt.imageUrl!, name: routeFt.name, cores: totalC })}
-                                       className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
-                                     >
-                                       <Maximize2 size={12} /> ขยายดูรูปใหญ่
-                                     </button>
-                                   </div>
-                                   <div className="space-y-2.5 flex-1 w-full">
-                                     <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
-                                       <span className="text-base md:text-lg font-black text-white tracking-wide">
-                                         ประเภทสาย Fiber Optic: {routeFt.name}
-                                       </span>
-                                       <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
-                                         OFC {totalC} Cores Standard
-                                       </span>
-                                       <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
-                                         จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
-                                       </span>
-                                     </div>
-                                     <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                                       โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
-                                     </p>
-                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
-                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                         <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
-                                         <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
-                                       </div>
-                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                         <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
-                                         <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
-                                       </div>
-                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                                         <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
-                                         <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
-                                       </div>
-                                     </div>
-                                   </div>
-                                 </div>
-                               ) : null;
-                             })()}
+                            {renderRouteEnclosureGallery(routeEncs, routeSched.distanceKm, totalC)}
 
                              {/* Usage Table */}
                             {(() => {
@@ -4074,11 +4065,11 @@ export function DesignApprovalModal({
         </div>
       )}
 
-      {/* FIBER OPTIC IMAGE LIGHTBOX PREVIEW */}
-      {previewingFiberImage && (
+      {/* ENCLOSURE IMAGE LIGHTBOX PREVIEW */}
+      {previewingEnclosureImage && (
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={() => setPreviewingFiberImage(null)}
+          onClick={() => setPreviewingEnclosureImage(null)}
         >
           <div 
             className="bg-slate-900 border-2 border-sky-500/50 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 relative"
@@ -4087,18 +4078,18 @@ export function DesignApprovalModal({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
-                  <Cable size={18} />
+                  <Box size={18} />
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-white">
-                    {previewingFiberImage.name} (OFC {previewingFiberImage.cores} Cores)
+                    Enclosure Type: {previewingEnclosureImage.name}
                   </h3>
-                  <p className="text-[11px] text-slate-400">รูปภาพโครงสร้างสายเคเบิลใยแก้วนำแสงความละเอียดสูง (Cross-Section Diagram)</p>
+                  <p className="text-[11px] text-slate-400">รูป Enclosure ที่ใช้งานในเส้นทางนี้</p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setPreviewingFiberImage(null)}
+                onClick={() => setPreviewingEnclosureImage(null)}
                 className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X size={16} />
@@ -4107,18 +4098,18 @@ export function DesignApprovalModal({
             
             <div className="flex justify-center items-center bg-slate-950 rounded-2xl p-6 border border-slate-800 min-h-[360px]">
               <img 
-                src={previewingFiberImage.url} 
-                alt={previewingFiberImage.name} 
+                src={previewingEnclosureImage.url} 
+                alt={previewingEnclosureImage.name} 
                 className="max-h-[460px] w-auto object-contain drop-shadow-2xl rounded-xl"
               />
             </div>
 
             <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
               <span className="font-bold text-amber-300">
-                มาตรฐานการจัดเรียง Loose Tube & โค้ดสี Core ตามมาตรฐาน TIA/EIA-598
+                รูปประกอบ Enclosure Type ที่บันทึกไว้ในระบบ
               </span>
               <span className="text-[11px] font-mono text-slate-400">
-                ขนาด {previewingFiberImage.cores}C &bull; Infra Sharing Certified
+                {previewingEnclosureImage.name}
               </span>
             </div>
           </div>
