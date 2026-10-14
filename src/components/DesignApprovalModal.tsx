@@ -13,12 +13,14 @@ import {
   Layers, Box, Cable, MapPin, Check, ChevronRight, 
   RotateCcw, Sparkles, Network, Compass, ShieldAlert,
   HelpCircle, ChevronDown, ChevronUp, Loader2, Share2,
-  Cpu, Radio, Eye, Map as MapIcon, GitCommit, Maximize2,
+  Cpu, Radio, Eye, Map as MapIcon, GitCommit, Maximize2, Image,
   ChevronLeft, Users, Building, ArrowRight, Lock, CheckCheck,
-  Presentation, FileCheck, Info, FileSpreadsheet, Navigation
+  Presentation, FileCheck, Info, FileSpreadsheet, Navigation,
+  Edit3, Save, Phone, Briefcase, Calendar
 } from 'lucide-react';
 import { OwnerLogo } from './OwnerLogo';
 import { getEffectiveOwnerLogo, getEffectiveOwnerZoom } from '../services/ownerLogosService';
+import { getClosestPointOnRoute } from '../utils/geo';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -110,20 +112,138 @@ export function DesignApprovalModal({
   // Request form state
   const [requestNotes, setRequestNotes] = useState('');
   const [mapLabelMode, setMapLabelMode] = useState<'all' | 'hover' | 'code'>('hover');
-  const [contractorInput, setContractorInput] = useState('United Telecommunication Services Co., Ltd.');
+  const [contractorInput, setContractorInput] = useState(
+    project.designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.'
+  );
+  const [contractorContactInput, setContractorContactInput] = useState(
+    project.designApproval?.contractorContact || ''
+  );
+  const [contractorPhoneInput, setContractorPhoneInput] = useState(
+    project.designApproval?.contractorPhone || ''
+  );
+  const [contractorPoInput, setContractorPoInput] = useState(
+    project.designApproval?.contractorPoNumber || ''
+  );
+  const [contractorScopeInput, setContractorScopeInput] = useState(
+    project.designApproval?.contractorScope || ''
+  );
+  const [isEditingContractor, setIsEditingContractor] = useState(false);
+  const [isSavingContractor, setIsSavingContractor] = useState(false);
+  const [contractorSaveSuccess, setContractorSaveSuccess] = useState(false);
+  const [contractorSaveError, setContractorSaveError] = useState<string | null>(null);
   const [operationKmInput, setOperationKmInput] = useState('1.50');
   const [targetInstallDate, setTargetInstallDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
+    return project.designApproval?.estimatedInstallationDate || (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 14);
+      return d.toISOString().split('T')[0];
+    })();
   });
+
+  // Sync contractor inputs if project designApproval updates
+  useEffect(() => {
+    if (project?.designApproval) {
+      if (project.designApproval.contractorName) {
+        setContractorInput(project.designApproval.contractorName);
+      }
+      if (project.designApproval.contractorContact !== undefined) {
+        setContractorContactInput(project.designApproval.contractorContact || '');
+      }
+      if (project.designApproval.contractorPhone !== undefined) {
+        setContractorPhoneInput(project.designApproval.contractorPhone || '');
+      }
+      if (project.designApproval.contractorPoNumber !== undefined) {
+        setContractorPoInput(project.designApproval.contractorPoNumber || '');
+      }
+      if (project.designApproval.contractorScope !== undefined) {
+        setContractorScopeInput(project.designApproval.contractorScope || '');
+      }
+      if (project.designApproval.estimatedInstallationDate) {
+        setTargetInstallDate(project.designApproval.estimatedInstallationDate);
+      }
+    }
+  }, [project?.designApproval]);
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [slide4SelectedRouteId, setSlide4SelectedRouteId] = useState<string>('all');
+  const [slide5SelectedRouteId, setSlide5SelectedRouteId] = useState<string>('all');
+  const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>({});
+  const [editingEnclosureRouteId, setEditingEnclosureRouteId] = useState<string | null>(null);
+  const [previewingFiberImage, setPreviewingFiberImage] = useState<{ url: string; name: string; cores: number } | null>(null);
 
-  // Auto-subscribe to real project subcollections
+  useEffect(() => {
+    if (project?.designApproval?.routeEnclosureSelections) {
+      setRouteEnclosureSelections(project.designApproval.routeEnclosureSelections);
+    }
+  }, [project?.designApproval?.routeEnclosureSelections]);
+
+  const handleToggleEnclosureForRoute = async (routeId: string, encId: string) => {
+    const currentList = getRouteEnclosures(routeId).map(e => e.id);
+    let nextList: string[];
+    if (currentList.includes(encId)) {
+      nextList = currentList.filter(id => id !== encId);
+    } else {
+      nextList = [...currentList, encId];
+    }
+    const updatedMap = {
+      ...routeEnclosureSelections,
+      [routeId]: nextList
+    };
+    setRouteEnclosureSelections(updatedMap);
+
+    if (project?.id) {
+      try {
+        await setDoc(doc(db, `projects/${project.id}`), {
+          designApproval: {
+            ...(project.designApproval || {}),
+            routeEnclosureSelections: updatedMap
+          }
+        }, { merge: true });
+        if (onProjectUpdated) {
+          onProjectUpdated({
+            ...project,
+            designApproval: {
+              ...(project.designApproval as DesignApproval),
+              routeEnclosureSelections: updatedMap
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Could not save routeEnclosureSelections:", err);
+      }
+    }
+  };
+
+  const handleResetEnclosuresForRoute = async (routeId: string) => {
+    const updatedMap = { ...routeEnclosureSelections };
+    delete updatedMap[routeId];
+    setRouteEnclosureSelections(updatedMap);
+
+    if (project?.id) {
+      try {
+        await setDoc(doc(db, `projects/${project.id}`), {
+          designApproval: {
+            ...(project.designApproval || {}),
+            routeEnclosureSelections: updatedMap
+          }
+        }, { merge: true });
+        if (onProjectUpdated) {
+          onProjectUpdated({
+            ...project,
+            designApproval: {
+              ...(project.designApproval as DesignApproval),
+              routeEnclosureSelections: updatedMap
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Could not reset routeEnclosureSelections:", err);
+      }
+    }
+  };
   useEffect(() => {
     if (!isOpen || !project?.id) return;
     setIsLoadingData(true);
@@ -355,7 +475,59 @@ export function DesignApprovalModal({
     return '#10b981';
   };
 
-  // Sort enclosures geographically along the corridor based on actual map coordinates
+  // Helper to extract natural sort key from BJ# codes (e.g. BJ#01 -> 1, BJ#03/1 -> 3.01, BJ#12 -> 12)
+  const getBjSortKey = (name: string): number => {
+    const match = name.match(/BJ#?(\d+)(?:\/(\d+))?/i);
+    if (match) {
+      const mainNum = parseInt(match[1], 10);
+      const subNum = match[2] ? parseInt(match[2], 10) / 100 : 0;
+      return mainNum + subNum;
+    }
+    return 999999;
+  };
+
+  // Parse enclosure BJ number and clean landmark/location name cleanly
+  const parseEnclosureName = (enc: { name?: string; locationName?: string }, fallbackIdx: number) => {
+    const rawName = (enc.name || '').trim();
+    // Pattern starting with BJ#... like "BJ#01 สภากาชาดไทย", "BJ#03/1 อาคารเกษม"
+    const match = rawName.match(/^(BJ#[\w/.-]+)\s*(.*)$/i) || rawName.match(/^(BJ[\s#]*[\w/.-]+)\s*(.*)$/i);
+    if (match) {
+      const bjNo = match[1].trim().replace(/^BJ\s*#?/i, 'BJ#');
+      const cleanName = match[2].trim() || enc.locationName || rawName;
+      return { bjNo, bjName: cleanName };
+    }
+    
+    // Check if BJ# exists anywhere in the string
+    const anyBjMatch = rawName.match(/(BJ#[\w/.-]+)/i);
+    if (anyBjMatch) {
+      const bjNo = anyBjMatch[1].trim();
+      const cleanName = rawName.replace(anyBjMatch[1], '').trim() || enc.locationName || rawName;
+      return { bjNo, bjName: cleanName };
+    }
+
+    return {
+      bjNo: `BJ#${String(fallbackIdx + 1).padStart(2, '0')}`,
+      bjName: rawName || enc.locationName || `จุดต่อที่ ${fallbackIdx + 1}`
+    };
+  };
+
+  // Default planned tray allocation for operators according to project sharing standard
+  const getDefaultPlannedTray = (owner: CoreOwner) => {
+    if (participatingOwners.length === 3) {
+      if (owner === 'ITEL') return '1-2';
+      if (owner === 'SYMC') return '3-4';
+      if (owner === 'UIH') return '5-6';
+    } else if (participatingOwners.length === 2) {
+      const idx = participatingOwners.indexOf(owner);
+      if (idx === 0) return '1-3';
+      if (idx === 1) return '4-6';
+    } else if (participatingOwners.length === 1) {
+      if (participatingOwners[0] === owner) return '1-6';
+    }
+    return '-';
+  };
+
+  // Sort enclosures along corridor according to natural BJ sequence
   const sldEnclosures = useMemo(() => {
     if (effectiveEnclosures.length === 0) {
       return [
@@ -370,8 +542,13 @@ export function DesignApprovalModal({
       ];
     }
     
-    // Sort along linear path vector
+    // Sort enclosures primarily by natural BJ sequence
     const sorted = [...effectiveEnclosures].sort((a, b) => {
+      const keyA = getBjSortKey(a.name || '');
+      const keyB = getBjSortKey(b.name || '');
+      if (keyA !== 999999 || keyB !== 999999) {
+        if (keyA !== keyB) return keyA - keyB;
+      }
       const latDiff = a.position.lat - b.position.lat;
       const lngDiff = a.position.lng - b.position.lng;
       if (Math.abs(latDiff) > Math.abs(lngDiff)) {
@@ -580,6 +757,215 @@ export function DesignApprovalModal({
     totalCores: 144
   };
 
+  // Helper to dynamically calculate per-route fiber and enclosure sharing configuration
+  const calculateRouteSharingDetails = (routeSched: typeof fiberRouteSchedule[0]) => {
+    const rawRoute = effectiveRoutes.find(r => r.id === routeSched.id);
+    const totalC = routeSched.capacity || 144;
+    const totalTubes = Math.max(1, Math.round(totalC / 12)) || 12;
+    const coresPerTube = Math.max(1, Math.floor(totalC / totalTubes)) || 12;
+
+    let itelCores = routeSched.itelCores || 0;
+    let symcCores = routeSched.symcCores || 0;
+    let uihCores = routeSched.uihCores || 0;
+
+    // Fallback if route.cores individual records aren't set
+    if (itelCores === 0 && symcCores === 0 && uihCores === 0) {
+      if (participatingOwners.length === 3) {
+        itelCores = Math.floor(totalC / 3);
+        symcCores = Math.floor(totalC / 3);
+        uihCores = Math.floor(totalC / 3);
+      } else if (participatingOwners.length === 2) {
+        if (participatingOwners.includes('SYMC')) symcCores = Math.floor(totalC / 2);
+        if (participatingOwners.includes('UIH')) uihCores = Math.floor(totalC / 2);
+        if (participatingOwners.includes('ITEL')) itelCores = Math.floor(totalC / 2);
+      } else if (participatingOwners.length === 1) {
+        if (participatingOwners[0] === 'ITEL') itelCores = totalC;
+        if (participatingOwners[0] === 'SYMC') symcCores = totalC;
+        if (participatingOwners[0] === 'UIH') uihCores = totalC;
+      }
+    }
+
+    const itelTubesCount = itelCores > 0 ? Math.ceil(itelCores / coresPerTube) : 0;
+    const symcTubesCount = symcCores > 0 ? Math.ceil(symcCores / coresPerTube) : 0;
+    const uihTubesCount = uihCores > 0 ? Math.ceil(uihCores / coresPerTube) : 0;
+
+    let tubeCursor = 1;
+    let itelTubeStart = 0, itelTubeEnd = 0;
+    let symcTubeStart = 0, symcTubeEnd = 0;
+    let uihTubeStart = 0, uihTubeEnd = 0;
+
+    if (itelTubesCount > 0) {
+      itelTubeStart = tubeCursor;
+      itelTubeEnd = tubeCursor + itelTubesCount - 1;
+      tubeCursor = itelTubeEnd + 1;
+    }
+    if (symcTubesCount > 0) {
+      symcTubeStart = tubeCursor;
+      symcTubeEnd = tubeCursor + symcTubesCount - 1;
+      tubeCursor = symcTubeEnd + 1;
+    }
+    if (uihTubesCount > 0) {
+      uihTubeStart = tubeCursor;
+      uihTubeEnd = tubeCursor + uihTubesCount - 1;
+      tubeCursor = uihTubeEnd + 1;
+    }
+
+    const itelTraysCount = itelCores > 0 ? Math.max(1, Math.ceil(itelCores / 24)) : 0;
+    const symcTraysCount = symcCores > 0 ? Math.max(1, Math.ceil(symcCores / 24)) : 0;
+    const uihTraysCount = uihCores > 0 ? Math.max(1, Math.ceil(uihCores / 24)) : 0;
+
+    let trayCursor = 1;
+    let itelTrayStart = 0, itelTrayEnd = 0;
+    let symcTrayStart = 0, symcTrayEnd = 0;
+    let uihTrayStart = 0, uihTrayEnd = 0;
+
+    if (itelTraysCount > 0) {
+      itelTrayStart = trayCursor;
+      itelTrayEnd = trayCursor + itelTraysCount - 1;
+      trayCursor = itelTrayEnd + 1;
+    }
+    if (symcTraysCount > 0) {
+      symcTrayStart = trayCursor;
+      symcTrayEnd = trayCursor + symcTraysCount - 1;
+      trayCursor = symcTrayEnd + 1;
+    }
+    if (uihTraysCount > 0) {
+      uihTrayStart = trayCursor;
+      uihTrayEnd = trayCursor + uihTraysCount - 1;
+      trayCursor = uihTrayEnd + 1;
+    }
+
+    const spareTrayStart = trayCursor;
+
+    const getTubeOwner = (tubeNum: number): CoreOwner | 'Spare' => {
+      if (itelTubesCount > 0 && tubeNum >= itelTubeStart && tubeNum <= itelTubeEnd) return 'ITEL';
+      if (symcTubesCount > 0 && tubeNum >= symcTubeStart && tubeNum <= symcTubeEnd) return 'SYMC';
+      if (uihTubesCount > 0 && tubeNum >= uihTubeStart && tubeNum <= uihTubeEnd) return 'UIH';
+      return 'Spare';
+    };
+
+    const routeEncCount = sldEnclosures.length;
+
+    return {
+      rawRoute,
+      totalC,
+      totalTubes,
+      itelCores,
+      symcCores,
+      uihCores,
+      itelTubeStart,
+      itelTubeEnd,
+      symcTubeStart,
+      symcTubeEnd,
+      uihTubeStart,
+      uihTubeEnd,
+      itelTrayStart,
+      itelTrayEnd,
+      symcTrayStart,
+      symcTrayEnd,
+      uihTrayStart,
+      uihTrayEnd,
+      spareTrayStart,
+      getTubeOwner,
+      routeEncCount
+    };
+  };
+
+  // Helper to resolve enclosures associated with a specific route line (strictly separated per route)
+  const getRouteEnclosures = (routeSchedId: string): FiberEnclosure[] => {
+    // 0. User custom selection takes highest precedence
+    if (routeEnclosureSelections[routeSchedId] && Array.isArray(routeEnclosureSelections[routeSchedId])) {
+      const selectedIds = new Set(routeEnclosureSelections[routeSchedId]);
+      return sldEnclosures.filter(e => selectedIds.has(e.id));
+    }
+
+    const rawRoute = effectiveRoutes.find(r => r.id === routeSchedId);
+    const routeIdx = fiberRouteSchedule.findIndex(s => s.id === routeSchedId);
+    const totalRoutes = fiberRouteSchedule.length;
+
+    if (!rawRoute || totalRoutes <= 1 || sldEnclosures.length === 0) {
+      return sldEnclosures;
+    }
+
+    // Check if an enclosure is explicitly connected to a given route
+    const isExplicitlyConnectedToRoute = (enc: FiberEnclosure, r: Route): boolean => {
+      if (r.startEnclosureId === enc.id || r.endEnclosureId === enc.id) return true;
+      if (r.cores?.some(c => c.splices && Boolean(c.splices[enc.id]))) return true;
+      if (effectiveRoutes.some(other => other.cores?.some(c => c.splices?.[enc.id]?.routeId === r.id))) return true;
+      if (enc.portAssignments && Object.values(enc.portAssignments).some(p => p && p.routeId === r.id)) return true;
+      if (enc.routeSideOverrides && Boolean(enc.routeSideOverrides[r.id])) return true;
+      if (enc.routeOffsets && Boolean(enc.routeOffsets[r.id])) return true;
+      return false;
+    };
+
+    // 1. Direct explicit connections to this specific route
+    const directlyConnected = sldEnclosures.filter(enc => isExplicitlyConnectedToRoute(enc, rawRoute));
+
+    // 2. Geometric proximity along this route's polyline
+    const geometricallyConnected: FiberEnclosure[] = [];
+    if (rawRoute.path && rawRoute.path.length >= 2) {
+      sldEnclosures.forEach(enc => {
+        if (!enc.position) return;
+        if (directlyConnected.some(d => d.id === enc.id)) return;
+
+        // Never attach an enclosure that explicitly belongs to ANOTHER route!
+        const explicitlyBelongsToOther = effectiveRoutes.some(
+          other => other.id !== rawRoute.id && isExplicitlyConnectedToRoute(enc, other)
+        );
+        if (explicitlyBelongsToOther) return;
+
+        const { distance: distToThis } = getClosestPointOnRoute(enc.position, rawRoute.path);
+        // Strict threshold: enclosure must be within 25 meters of this route polyline
+        if (distToThis <= 25) {
+          let isCloserToOther = false;
+          for (const other of effectiveRoutes) {
+            if (other.id !== rawRoute.id && other.path && other.path.length >= 2) {
+              const { distance: otherDist } = getClosestPointOnRoute(enc.position, other.path);
+              if (otherDist < distToThis - 5) {
+                isCloserToOther = true;
+                break;
+              }
+            }
+          }
+          if (!isCloserToOther) {
+            geometricallyConnected.push(enc);
+          }
+        }
+      });
+    }
+
+    const combined = [...directlyConnected, ...geometricallyConnected];
+    const uniqueIds = new Set(combined.map(e => e.id));
+    const matched = sldEnclosures.filter(e => uniqueIds.has(e.id));
+
+    if (matched.length > 0) {
+      return matched;
+    }
+
+    // 3. Strict non-overlapping partition per route if no direct or geometric links distinguish the routes
+    const chunkSize = Math.max(1, Math.ceil(sldEnclosures.length / totalRoutes));
+    const start = routeIdx * chunkSize;
+    const end = routeIdx === totalRoutes - 1 ? sldEnclosures.length : Math.min(sldEnclosures.length, start + chunkSize);
+    const partitioned = sldEnclosures.slice(start, end);
+    return partitioned.length > 0 ? partitioned : [sldEnclosures[routeIdx % sldEnclosures.length]];
+  };
+
+  const getEnclosureCapacityText = (enc: FiberEnclosure) => {
+    const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || 
+                    enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+    if (encType?.capacity) {
+      return `${encType.capacity} Core`;
+    }
+    if (encType?.name) {
+      return encType.name;
+    }
+    const numMatch = enc.name?.match(/(\d+)\s*C(ore)?/i) || enc.locationType?.match(/(\d+)\s*C(ore)?/i);
+    if (numMatch) {
+      return `${numMatch[1]} Core`;
+    }
+    return '312 Core';
+  };
+
   const totalLengthKm = fiberRouteTotals.distanceKm;
 
   // Canvas drawing listeners
@@ -704,6 +1090,10 @@ export function DesignApprovalModal({
         requestedAt: new Date().toISOString(),
         designNotes: requestNotes.trim() || 'ขออนุมัติแบบโครงการ Fiber Infra Sharing ตามสัดส่วน Core และ Enclosure',
         contractorName: contractorInput.trim() || 'United Telecommunication Services Co., Ltd.',
+        contractorContact: contractorContactInput.trim(),
+        contractorPhone: contractorPhoneInput.trim(),
+        contractorPoNumber: contractorPoInput.trim(),
+        contractorScope: contractorScopeInput.trim(),
         totalOperationDistanceKm: parseFloat(totalLengthKm) || 1.5,
         estimatedInstallationDate: targetInstallDate,
         planningSignOffs: initialPlanningSignOffs,
@@ -741,6 +1131,68 @@ export function DesignApprovalModal({
       setActionError(err.message || 'Failed to submit approval request');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Directly save contractor details from Slide 6 or request form
+  const handleSaveContractorDetails = async () => {
+    setIsSavingContractor(true);
+    setContractorSaveError(null);
+    try {
+      const existingApproval = project.designApproval;
+      const docNumber = existingApproval?.documentNumber || `APP-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${project.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase() || 'PROJ'}`;
+      
+      const updatedApproval: DesignApproval = {
+        ...(existingApproval || {
+          id: `appr_${Date.now()}`,
+          documentNumber: docNumber,
+          status: project.status || 'Pending Approval',
+          approvalStage: 'Planning',
+          requestedBy: appUser?.displayName || appUser?.email || 'Planning Engineer',
+          requestedByEmail: appUser?.email,
+          requestedByUid: appUser?.id || '',
+          requestedAt: new Date().toISOString(),
+          planningSignOffs: {},
+          omSignOffs: {},
+          ownerSignOffs: {}
+        }),
+        contractorName: contractorInput.trim() || 'United Telecommunication Services Co., Ltd.',
+        contractorContact: contractorContactInput.trim(),
+        contractorPhone: contractorPhoneInput.trim(),
+        contractorPoNumber: contractorPoInput.trim(),
+        contractorScope: contractorScopeInput.trim(),
+        estimatedInstallationDate: targetInstallDate,
+      };
+
+      const updatedProject: Project = {
+        ...project,
+        designApproval: updatedApproval
+      };
+
+      await setDoc(doc(db, `projects/${project.id}`), {
+        designApproval: updatedApproval
+      }, { merge: true });
+
+      await logActivity('update_contractor_details', `Updated contractor details for project ${project.name}: ${contractorInput.trim()}`, {
+        projectId: project.id,
+        contractorName: contractorInput.trim(),
+        contractorContact: contractorContactInput.trim(),
+        contractorPhone: contractorPhoneInput.trim(),
+        contractorPoNumber: contractorPoInput.trim()
+      });
+
+      if (onProjectUpdated) {
+        onProjectUpdated(updatedProject);
+      }
+
+      setIsEditingContractor(false);
+      setContractorSaveSuccess(true);
+      setTimeout(() => setContractorSaveSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('Error saving contractor:', err);
+      setContractorSaveError(err.message || 'ไม่สามารถบันทึกข้อมูลผู้รับจ้างได้');
+    } finally {
+      setIsSavingContractor(false);
     }
   };
 
@@ -1088,64 +1540,170 @@ export function DesignApprovalModal({
   <!-- Slide 4: Enclosure Details Table -->
   <div class="slide-page">
     <div class="slide-header">
-      <h2 class="slide-title">รายละเอียดตำแหน่ง ENCLOSURE</h2>
+      <h2 class="slide-title">รายละเอียดการ SHARING รายเส้นทาง FIBER & ตำแหน่ง ENCLOSURE</h2>
       <div class="logos-bar" style="display: flex; align-items: center; gap: 14px; background: white; padding: 6px 14px; border-radius: 10px; border: 1px solid #cbd5e1; flex-wrap: wrap;">
         ${headerLogosHtml}
       </div>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>No.</th>
-          <th>BJ#No</th>
-          <th>BJ#Name</th>
-          <th>Lat.</th>
-          <th>Long.</th>
-          <th>Enclosure</th>
-          ${participatingOwners.map(owner => `
-            <th style="background: ${owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb'}; color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner}_Tray No.</th>
-          `).join('')}
-          <th>Spare_Tray</th>
-          <th>ตำแหน่ง</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${sldEnclosures.map((enc, idx) => {
-          const trayAssignments = enc.trayAssignments || {};
-          return `
-            <tr>
-              <td>${idx + 1}</td>
-              <td><strong>BJ#${String(idx + 1).padStart(2, '0')}</strong></td>
-              <td style="text-align: left; font-weight: 600;">${enc.name}</td>
-              <td>${enc.position?.lat?.toFixed(6) || '-'}</td>
-              <td>${enc.position?.lng?.toFixed(6) || '-'}</td>
-              <td>312 Core</td>
+    ${fiberRouteSchedule.map((routeSched, rIdx) => {
+      const routeEncs = getRouteEnclosures(routeSched.id);
+      const totalC = routeSched.capacity || 144;
+      const symcPct = totalC > 0 ? ((routeSched.symcCores / totalC) * 100).toFixed(0) : '0';
+      const uihPct = totalC > 0 ? ((routeSched.uihCores / totalC) * 100).toFixed(0) : '0';
+      const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
+      const spareC = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
+      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+      const fiberImgUrl = routeFt?.imageUrl || '';
+      const fiberName = routeFt?.name || `OFC ${totalC} Core`;
+
+      return `
+        <div style="margin-bottom: 22px; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <!-- Fiber Route Sharing Summary Header -->
+          <div style="background: linear-gradient(135deg, #0f172a, #1e293b); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="background: #38bdf8; color: #0f172a; font-weight: 900; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
+                เส้นที่ ${rIdx + 1}
+              </span>
+              ${fiberImgUrl ? `<img src="${fiberImgUrl}" alt="${fiberName}" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px; background: #334155; padding: 2px;" title="${fiberName}" />` : ''}
+              <strong style="font-size: 13px; font-weight: 800;">${routeSched.routeName}</strong>
+              <span style="font-size: 11px; color: #94a3b8;">(${routeSched.sectionName})</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 11px;">
+              <span style="background: #334155; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+                OFC ${routeSched.capacity} Core
+              </span>
+              <span style="background: #334155; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+                ระยะทาง ${routeSched.distanceKm} km
+              </span>
+              <span style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+                Tier: ${routeSched.tier || projectTierCompactLabel}
+              </span>
+            </div>
+          </div>
+
+          <!-- Sharing Ratio Breakdown Bar -->
+          <div style="background: #f8fafc; padding: 8px 14px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+              <span style="font-weight: 800; color: #475569;">สัดส่วนการ Sharing เส้น Fiber:</span>
               ${participatingOwners.map(owner => {
-                const assignedTrays = Object.entries(trayAssignments)
-                  .filter(([_, o]) => o === owner)
-                  .map(([tId]) => Number(tId))
-                  .sort((a, b) => a - b);
-                const trayStr = assignedTrays.length > 0 ? assignedTrays.join(',') : '-';
-                return `<td style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; font-weight: 700;">${trayStr}</td>`;
+                const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
+                const pct = totalC > 0 ? ((count / totalC) * 100).toFixed(0) : '0';
+                const color = owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0284c7' : '#d97706';
+                const bg = owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb';
+                return `
+                  <span style="background: ${bg}; color: ${color}; padding: 2px 8px; border-radius: 6px; font-weight: 800; border: 1px solid ${color}40;">
+                    ${owner}: ${count}C (${pct}%)
+                  </span>
+                `;
               }).join('')}
-              <td style="color: #64748b; font-weight: 700;">
-                ${(() => {
-                  const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
-                  const totalTrays = encType?.spliceTrays || 13;
-                  let spare = 0;
-                  for (let tId = 1; tId <= totalTrays; tId++) {
-                    const owner = trayAssignments[tId] || 'None';
-                    if (owner === 'None') spare++;
-                  }
-                  return spare;
-                })()}
-              </td>
-              <td>${enc.locationType || 'PB#'}</td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
+              ${spareC > 0 ? `
+                <span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+                  Spare: ${spareC}C
+                </span>
+              ` : ''}
+            </div>
+            <div style="color: #64748b; font-weight: 700;">
+              จุดตัดต่อ Enclosure: <strong>${routeEncs.length} หัว</strong>
+            </div>
+          </div>
+
+          <!-- Large Clear Fiber Optic Specification Diagram -->
+          ${(() => {
+            const firstEnc = routeEncs[0];
+            const firstEncType = enclosureTypes.find(t => t.id === firstEnc?.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === firstEnc?.locationType?.toLowerCase());
+            const encImgUrl = firstEncType?.imageUrl || firstEnc?.imageUrl;
+            return encImgUrl ? `
+              <div style="padding: 12px 14px; background: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 16px;">
+                <img src="${encImgUrl}" alt="Enclosure" style="width: 140px; height: 140px; object-fit: contain; border-radius: 8px; background: white; padding: 6px; border: 1px solid #cbd5e1; flex-shrink: 0;" />
+                <div>
+                  <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+                    ตำแหน่ง Enclosure: ${firstEnc?.name || '-'}
+                  </div>
+                  <div style="font-size: 11px; color: #475569; line-height: 1.5; margin-bottom: 6px;">
+                    โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานสำหรับโครงการ ${projectTierName} (${participatingOwners.join('+')}) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล
+                  </div>
+                  <div style="font-size: 11px; color: #0369a1; font-weight: 700;">
+                    จุดเชื่อมต่อ Enclosure ประจำเส้นทาง: <strong>${routeEncs.length > 0 ? `${parseEnclosureName(routeEncs[0], 0).bjNo} - ${parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo}` : '-'}</strong> (${routeEncs.length} หัว)
+                  </div>
+                </div>
+              </div>
+            ` : '';
+          })()}
+
+          <!-- Enclosure Table for This Route -->
+          <table style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="width: 40px;">No.</th>
+                <th style="width: 60px;">Image</th>
+                <th style="width: 80px;">BJ#No</th>
+                <th>BJ#Name</th>
+                <th style="width: 90px;">Lat.</th>
+                <th style="width: 90px;">Long.</th>
+                <th style="width: 100px;">ขนาด Enclosure</th>
+                ${participatingOwners.map(owner => `
+                  <th style="background: ${owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb'}; color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; min-width: 90px;">${owner}_Tray No.</th>
+                `).join('')}
+                <th style="width: 80px;">Spare_Tray</th>
+                <th style="width: 80px;">ตำแหน่ง</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${routeEncs.map((enc, idx) => {
+                const { bjNo, bjName } = parseEnclosureName(enc, idx);
+                const trayAssignments = enc.trayAssignments || {};
+                const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
+                const encCapText = getEnclosureCapacityText(enc);
+                const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+                const totalTrays = encType?.spliceTrays || 7;
+
+                return `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td style="padding: 4px; text-align: center;">
+                      ${encType?.imageUrl 
+                        ? `<img src="${encType.imageUrl}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;" />` 
+                        : `<div style="width: 40px; height: 40px; background: #f1f5f9; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10px;">IMG</div>`
+                      }
+                    </td>
+                    <td><strong>${bjNo}</strong></td>
+                    <td style="text-align: left; font-weight: 600;">${bjName}</td>
+                    <td>${enc.position?.lat?.toFixed(6) || '-'}</td>
+                    <td>${enc.position?.lng?.toFixed(6) || '-'}</td>
+                    <td style="font-weight: 700; color: #334155;">${encCapText}</td>
+                    ${participatingOwners.map(owner => {
+                      const assignedTrays = Object.entries(trayAssignments)
+                        .filter(([_, o]) => o === owner)
+                        .map(([tId]) => Number(tId))
+                        .sort((a, b) => a - b);
+                      let trayStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
+                      if (!trayStr) {
+                        trayStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
+                      }
+                      return `<td style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; font-weight: 700;">${trayStr}</td>`;
+                    }).join('')}
+                    <td style="color: #64748b; font-weight: 700;">
+                      ${(() => {
+                        if (hasExplicitAssignments) {
+                          let spare = 0;
+                          for (let tId = 1; tId <= totalTrays; tId++) {
+                            const owner = trayAssignments[tId] || 'None';
+                            if (owner === 'None') spare++;
+                          }
+                          return spare;
+                        }
+                        return Math.max(1, totalTrays - (participatingOwners.length * 2));
+                      })()}
+                    </td>
+                    <td>${enc.locationType || 'PB'}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }).join('')}
   </div>
 
   <!-- Slide 5: Fiber Core & Tube Sharing -->
@@ -1157,8 +1715,15 @@ export function DesignApprovalModal({
       </div>
     </div>
     ${fiberRouteSchedule.map((routeSched, rIdx) => {
+      const routeEncs = getRouteEnclosures(routeSched.id);
       const totalC = routeSched.capacity || 144;
       let coreCursor = 1;
+      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+      const fiberImgUrl = routeFt?.imageUrl || '';
+      const fiberName = routeFt?.name || `OFC ${totalC} Core`;
+      const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
+      const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
+      const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
 
       const ownerRows = participatingOwners.map((owner) => {
         const ownerCoresCount = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
@@ -1194,44 +1759,72 @@ export function DesignApprovalModal({
       });
 
       return `
-        <h3 style="font-size: 14px; color: #0369a1; margin-top: 10px; margin-bottom: 8px;">
-          <strong>${routeSched.tier}</strong> - ${routeSched.routeName} (${routeSched.sectionName}) : ${routeSched.distanceKm} km.
-        </h3>
-        <table style="margin-bottom: 20px;">
-          <thead>
-            <tr>
-              <th rowspan="2">Sharing</th>
-              <th rowspan="2">Oper.</th>
-              <th colspan="2" style="background: #f3e8ff; color: #6b21a8;">Enclosure 312 Core</th>
-              <th colspan="2" style="background: #e0f2fe; color: #0369a1;">OFC ${totalC} Core</th>
-            </tr>
-            <tr>
-              <th>BJ# No.</th>
-              <th>Tray</th>
-              <th>Tube</th>
-              <th>Core</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ownerRows.map((row, idx) => `
+        <div style="margin-top: 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white;">
+          <div style="background: linear-gradient(135deg, #0f172a, #1e293b); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="background: #38bdf8; color: #0f172a; font-weight: 900; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
+                เส้นที่ ${rIdx + 1}
+              </span>
+              <strong style="font-size: 13px; font-weight: 800;">${routeSched.tier} - ${routeSched.routeName}</strong>
+              <span style="font-size: 11px; color: #94a3b8;">(${routeSched.sectionName})</span>
+            </div>
+            <div style="font-size: 11px; color: #94a3b8;">
+              ระยะทาง: <strong style="color: white;">${routeSched.distanceKm} km</strong> | ขนาด: <strong style="color: #facc15;">OFC ${totalC} Core</strong>
+            </div>
+          </div>
+          ${fiberImgUrl ? `
+            <div style="padding: 12px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 16px;">
+              <img src="${fiberImgUrl}" alt="${fiberName}" style="width: 140px; height: 140px; object-fit: contain; border-radius: 8px; background: white; padding: 6px; border: 1px solid #cbd5e1; flex-shrink: 0;" />
+              <div>
+                <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+                  ประเภทสาย Fiber Optic: ${fiberName} (OFC ${totalC} Cores)
+                </div>
+                <div style="font-size: 11px; color: #475569; line-height: 1.5; margin-bottom: 6px;">
+                  โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานสำหรับโครงการ ${projectTierName} (${participatingOwners.join('+')}) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล
+                </div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 700;">
+                  จุดเชื่อมต่อ Enclosure ประจำเส้นทาง: <strong>${routeBjDisplay}</strong> (${routeEncs.length} หัว)
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <table style="margin: 0; width: 100%;">
+            <thead>
               <tr>
-                ${idx === 0 ? `<td rowspan="${ownerRows.length + 1}" style="font-weight: 800;">${routeSched.tier.split(' ')[0]} #${rIdx + 1}</td>` : ''}
-                <td style="font-weight: 800; color: ${row.colorHex};">${row.owner}</td>
-                <td>BJ#1-${sldEnclosures.length}</td>
-                <td style="color: ${row.colorHex}; font-weight: 700;">${row.trayStr}</td>
-                <td style="color: ${row.colorHex}; font-weight: 700;">${row.tubeStr}</td>
-                <td style="color: ${row.colorHex}; font-weight: 700;">${row.coreStr}</td>
+                <th rowspan="2">Sharing</th>
+                <th rowspan="2">Oper.</th>
+                <th colspan="2" style="background: #f3e8ff; color: #6b21a8;">Enclosure 312 Core</th>
+                <th colspan="2" style="background: #e0f2fe; color: #0369a1;">OFC ${totalC} Core</th>
               </tr>
-            `).join('')}
-            <tr>
-              <td style="font-weight: 700; color: #64748b;">Spare</td>
-              <td>BJ#1-${sldEnclosures.length}</td>
-              <td>Tray ${ownerRows.length + 1}</td>
-              <td>-</td>
-              <td>-</td>
-            </tr>
-          </tbody>
-        </table>
+              <tr>
+                <th>BJ# No.</th>
+                <th>Tray</th>
+                <th>Tube</th>
+                <th>Core</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ownerRows.map((row, idx) => `
+                <tr>
+                  ${idx === 0 ? `<td rowspan="${ownerRows.length + 1}" style="font-weight: 800;">${routeSched.tier}</td>` : ''}
+                  <td style="font-weight: 800; color: ${row.colorHex};">${row.owner}</td>
+                  <td><strong>${routeBjDisplay}</strong> <span style="font-size: 10px; color: #64748b;">(${routeEncs.length} หัว)</span></td>
+                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.trayStr}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.tubeStr}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.coreStr}</td>
+                </tr>
+              `).join('')}
+              <tr>
+                <td style="font-weight: 700; color: #64748b;">Spare</td>
+                <td>${routeBjDisplay}</td>
+                <td>Tray ${ownerRows.length + 1}</td>
+                <td>-</td>
+                <td>-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       `;
     }).join('')}
   </div>
@@ -1245,13 +1838,100 @@ export function DesignApprovalModal({
       </div>
     </div>
     
-    <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
-      <strong>สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')}):</strong><br>
-      1. ระยะเคเบิลที่ต้องใช้ร่วมกัน: ขนาด 144 Core ระยะทาง ${totalLengthKm} กิโลเมตร<br>
-      2. การแบ่งจำนวน Core ใช้งาน: ขนาด 144 Core ${projectTierName.replace('Tier ', 'T')}#1 (${participatingOwners.map(o => `${o} ${Math.floor(144 / participatingOwners.length)} Core`).join(' ; ')})<br>
-      3. ต้องใช้ Enclosure: ขนาด 312 Core จำนวน ${sldEnclosures.length} หัว<br>
-      <strong>ผู้รับจ้างที่ดำเนินการติดตั้ง:</strong> ${contractor}<br>
-      <div style="margin-top: 8px; font-weight: 700; color: #0369a1; text-align: center;">
+    <div style="background: #f8fafc; padding: 16px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 12px; line-height: 1.6; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
+        <div>
+          <strong style="font-size: 14px; color: #0f172a;">สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')}): ${project.name}</strong>
+          <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: ${designApproval?.documentNumber || 'APP-2026-FIBER'} | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #475569;">
+          <strong>กำหนดการติดตั้ง:</strong> ${designApproval?.estimatedInstallationDate || targetInstallDate || '-'}
+        </div>
+      </div>
+
+      <!-- Item 1: Cable distance across whole project -->
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #0369a1; font-size: 13px;">1. ระยะเคเบิลที่ต้องใช้ร่วมกัน (รายละเอียดทั้งโครงการ):</strong>
+        <div style="margin-top: 4px; padding-left: 10px;">
+          ${fiberRouteSchedule.map((r, idx) => `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 2px;">
+              <span><strong>เส้นทางที่ ${idx + 1}:</strong> ${r.routeName} (${r.sectionName}) - ขนาด OFC ${r.capacity} Core (${r.tier})</span>
+              <span style="font-weight: 700; color: #0f172a;">ระยะทาง ${r.distanceKm} กม.</span>
+            </div>
+          `).join('')}
+          <div style="margin-top: 4px; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; font-weight: 800; color: #0369a1; display: flex; justify-content: space-between;">
+            <span>รวมระยะทางสายเคเบิลทั้งโครงการ (${fiberRouteSchedule.length} เส้นทาง):</span>
+            <span>${totalLengthKm} กิโลเมตร</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item 2: Core sharing allocation across whole project -->
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #0369a1; font-size: 13px;">2. การแบ่งจำนวน Core ใช้งาน (รายละเอียดทั้งโครงการ):</strong>
+        <div style="margin-top: 4px; padding-left: 10px;">
+          ${fiberRouteSchedule.map((r, idx) => `
+            <div style="margin-bottom: 5px; background: white; padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">
+                เส้นทางที่ ${idx + 1}: ${r.routeName} [OFC ${r.capacity} Core]
+              </div>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px;">
+                ${participatingOwners.map(owner => {
+                  const c = owner === 'SYMC' ? r.symcCores : owner === 'UIH' ? r.uihCores : (r.itelCores || 0);
+                  const color = owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706';
+                  return `<span style="font-weight: 700; color: ${color};">${owner}: ${c} Core</span>`;
+                }).join('')}
+                ${(r.capacity - r.totalCores) > 0 ? `<span style="color: #64748b; font-weight: 600;">Spare: ${r.capacity - r.totalCores} Core</span>` : ''}
+              </div>
+            </div>
+          `).join('')}
+          <div style="padding: 4px 8px; background: #fef9c3; border-radius: 6px; font-weight: 800; color: #854d0e; display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
+            <span>สรุปจำนวน Core ใช้งานรวมทั้งโครงการ:</span>
+            ${participatingOwners.map(owner => {
+              const totalO = owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores;
+              return `<span style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner} รวม ${totalO} Core</span>`;
+            }).join(' | ')}
+            <span>(ความจุรวมทั้งหมด ${fiberRouteTotals.totalCores} Core)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item 3: Enclosure requirements across whole project -->
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #0369a1; font-size: 13px;">3. ต้องใช้ Enclosure (รายละเอียดทั้งโครงการ):</strong>
+        <div style="margin-top: 4px; padding-left: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span>ขนาด Enclosure มาตรฐาน: <strong>312 Core (หรือตามแบบที่กำหนด)</strong></span>
+            <span style="font-weight: 800; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 6px;">
+              จำนวน Enclosure รวมทั้งโครงการ: ${sldEnclosures.length} หัว (จุดตัดต่อ)
+            </span>
+          </div>
+          ${fiberRouteSchedule.map((r, idx) => {
+            const rEncs = getRouteEnclosures(r.id);
+            const firstEncName = rEncs.length > 0 ? parseEnclosureName(rEncs[0], 0).bjNo : '-';
+            const lastEncName = rEncs.length > 0 ? parseEnclosureName(rEncs[rEncs.length - 1], rEncs.length - 1).bjNo : '-';
+            return `
+              <div style="font-size: 11px; color: #475569; margin-bottom: 2px;">
+                &bull; เส้นทางที่ ${idx + 1} (${r.routeName}): <strong>${rEncs.length} หัว</strong> (${firstEncName} ถึง ${lastEncName})
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Item 4: Contractor Details -->
+      <div style="margin-bottom: 12px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">
+        <strong style="color: #0f172a; font-size: 13px;">4. ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):</strong>
+        <div style="margin-top: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 11px;">
+          <div><strong>ชื่อบริษัทผู้รับจ้าง:</strong> ${contractor}</div>
+          <div><strong>ผู้ควบคุมงาน / ผู้ประสานงาน:</strong> ${(designApproval as any)?.contractorContact || contractorContactInput || '-'}</div>
+          <div><strong>เบอร์โทรศัพท์ติดต่อ:</strong> ${(designApproval as any)?.contractorPhone || contractorPhoneInput || '-'}</div>
+          <div><strong>เลขที่สัญญา / PO:</strong> ${(designApproval as any)?.contractorPoNumber || contractorPoInput || '-'}</div>
+          ${((designApproval as any)?.contractorScope || contractorScopeInput) ? `<div style="grid-column: span 2;"><strong>ขอบเขตงาน:</strong> ${(designApproval as any)?.contractorScope || contractorScopeInput}</div>` : ''}
+        </div>
+      </div>
+
+      <div style="margin-top: 10px; font-weight: 800; color: #0369a1; text-align: center; font-size: 13px; background: #f0f9ff; padding: 8px; border-radius: 8px; border: 1px solid #bae6fd;">
         "โดยมีมติสรุปเห็นชอบร่วมกับดำเนินการ ตามรายละเอียดดังกล่าวข้างต้น"
       </div>
     </div>
@@ -1453,7 +2133,7 @@ export function DesignApprovalModal({
                       {currentSlide === 1 && "FIBER INFRA SHARING"}
                       {currentSlide === 2 && "ภาพรวมโครงการ (Project Overview)"}
                       {currentSlide === 3 && "แผนที่และแนวเส้นทางโครงการ (Project Route Map)"}
-                      {currentSlide === 4 && "รายละเอียดตำแหน่ง ENCLOSURE"}
+                      {currentSlide === 4 && "รายละเอียดการ Sharing รายเส้นทาง Fiber & ตำแหน่ง Enclosure"}
                       {currentSlide === 5 && `รายละเอียดการใช้งานตามสัดส่วน ${projectTierName.toUpperCase()} (Core & Tube Allocation)`}
                       {currentSlide === 6 && "สรุปงานติดตั้ง & การลงนามอนุมัติ (2 ระดับ: Planning & O&M)"}
                     </h3>
@@ -1557,7 +2237,7 @@ export function DesignApprovalModal({
                                 </td>
                                 <td className="p-3 border-r border-slate-800 font-black text-slate-100">{r.distanceKm}</td>
                                 {participatingOwners.map(owner => (
-                                  <td key={owner} className="p-3 border-r border-slate-800 font-black text-center" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
+                                  <td key={`${r.id}-${owner}`} className="p-3 border-r border-slate-800 font-black text-center" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
                                     {owner === 'SYMC' ? r.symcCores : owner === 'UIH' ? r.uihCores : (r.itelCores || 0)}
                                   </td>
                                 ))}
@@ -1893,73 +2573,330 @@ export function DesignApprovalModal({
                     </div>
                   )}
 
-                  {/* SLIDE 4: ENCLOSURE DETAIL TABLE */}
+                  {/* SLIDE 4: ENCLOSURE DETAIL TABLE & FIBER ROUTE SHARING */}
                   {currentSlide === 4 && (
                     <div className="space-y-4">
-                      <div className="border border-slate-700/80 rounded-xl overflow-x-auto bg-slate-950/80 max-h-[340px] custom-scrollbar">
-                        <table className="w-full text-xs text-center border-collapse min-w-[760px]">
-                          <thead className="sticky top-0 bg-slate-800 z-10">
-                            <tr className="border-b border-slate-700 text-slate-200 font-bold">
-                              <th className="p-2.5 border-r border-slate-700">No.</th>
-                              <th className="p-2.5 border-r border-slate-700">BJ#No</th>
-                              <th className="p-2.5 border-r border-slate-700 text-left">BJ#Name</th>
-                              <th className="p-2.5 border-r border-slate-700">Lat.</th>
-                              <th className="p-2.5 border-r border-slate-700">Long.</th>
-                              <th className="p-2.5 border-r border-slate-700">Enclosure</th>
-                              {participatingOwners.map(owner => (
-                                <th key={owner} className="p-2.5 border-r border-slate-700 min-w-[120px]" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
-                                  <div className="flex items-center justify-center gap-1">
-                                    <OwnerLogo owner={owner} size="xs" />
-                                    <span className="text-[10px]" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>Tray No.</span>
-                                  </div>
-                                </th>
-                              ))}
-                              <th className="p-2.5 border-r border-slate-700">Spare_Tray</th>
-                              <th className="p-2.5">ตำแหน่ง</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800 font-medium">
-                            {sldEnclosures.map((enc, idx) => {
-                              const trayAssignments = enc.trayAssignments || {};
-                              return (
-                                <tr key={enc.id || idx} className="hover:bg-slate-800/40">
-                                  <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
-                                  <td className="p-2 border-r border-slate-800 font-black text-sky-400">BJ#{String(idx + 1).padStart(2, '0')}</td>
-                                  <td className="p-2 border-r border-slate-800 text-left font-bold text-slate-200">{enc.name}</td>
-                                  <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '13.748000'}</td>
-                                  <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lng?.toFixed(6) || '100.548000'}</td>
-                                  <td className="p-2 border-r border-slate-800 font-bold text-slate-300">312 Core</td>
-                                  {participatingOwners.map(owner => {
-                                    const assignedTrays = Object.entries(trayAssignments)
-                                      .filter(([_, o]) => o === owner)
-                                      .map(([tId]) => Number(tId))
-                                      .sort((a, b) => a - b);
-                                    const trayRangeStr = formatTrayRanges(assignedTrays);
+                      {/* Route Selection Filter Tabs */}
+                      <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-slate-800">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSlide4SelectedRouteId('all')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              slide4SelectedRouteId === 'all'
+                                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            ทุกเส้นทาง ({fiberRouteSchedule.length} เส้น)
+                          </button>
+                          {fiberRouteSchedule.map((routeSched, rIdx) => (
+                            <button
+                              key={routeSched.id || rIdx}
+                              type="button"
+                              onClick={() => setSlide4SelectedRouteId(routeSched.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                slide4SelectedRouteId === routeSched.id
+                                  ? 'bg-sky-500 text-white shadow-md font-black'
+                                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                              }`}
+                            >
+                              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                              <span>เส้นที่ {rIdx + 1}: {routeSched.routeName.replace(/^OFC\s*\d+C\s*/i, '').slice(0, 18)}...</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          ดึงข้อมูลจริงจาก Enclosure Closures & Fiber Specifications
+                        </div>
+                      </div>
 
-                                    return (
-                                      <td key={owner} className="p-2 border-r border-slate-800 font-black" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                                        {trayRangeStr}
-                                      </td>
-                                    );
-                                  })}
-                                  <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
+                      {/* Render Route Sections */}
+                      <div className="space-y-5 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+                        {fiberRouteSchedule
+                          .filter(routeSched => slide4SelectedRouteId === 'all' || slide4SelectedRouteId === routeSched.id)
+                          .map((routeSched, rIdx) => {
+                            const originalIdx = fiberRouteSchedule.findIndex(s => s.id === routeSched.id);
+                            const displayIdx = originalIdx >= 0 ? originalIdx + 1 : rIdx + 1;
+                            const routeEncs = getRouteEnclosures(routeSched.id);
+                            const totalC = routeSched.capacity || 144;
+                            const symcPct = totalC > 0 ? ((routeSched.symcCores / totalC) * 100).toFixed(0) : '0';
+                            const uihPct = totalC > 0 ? ((routeSched.uihCores / totalC) * 100).toFixed(0) : '0';
+                            const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
+                            const spareCores = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
+
+                            return (
+                              <div key={routeSched.id || rIdx} className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-900/90 shadow-lg">
+                                {/* Fiber Route Sharing Card Header */}
+                                <div className="p-3 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 flex-wrap">
+                                    <span className="px-2.5 py-1 rounded-md bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
+                                      เส้นที่ {displayIdx}
+                                    </span>
                                     {(() => {
-                                      const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
-                                      const totalTrays = encType?.spliceTrays || 13;
-                                      let spare = 0;
-                                      for (let tId = 1; tId <= totalTrays; tId++) {
-                                        const owner = trayAssignments[tId] || 'None';
-                                        if (owner === 'None') spare++;
-                                      }
-                                      return spare;
+                                      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                                      return routeFt?.imageUrl ? (
+                                        <img src={routeFt.imageUrl} alt={routeFt.name} className="w-6 h-6 object-contain rounded bg-slate-800 p-0.5 border border-slate-700" title={routeFt.name} />
+                                      ) : (
+                                        <Cable size={16} className="text-sky-400" />
+                                      );
                                     })()}
-                                  </td>
-                                  <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB#'}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                    <strong className="text-white text-sm font-extrabold">{routeSched.routeName}</strong>
+                                    <span className="text-xs text-slate-400 font-medium">({routeSched.sectionName})</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="px-2 py-0.5 rounded bg-slate-800 text-sky-300 font-mono text-[11px] font-bold border border-slate-700">
+                                      OFC {routeSched.capacity} Core
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[11px] font-bold border border-slate-700">
+                                      ระยะทาง {routeSched.distanceKm} km
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-mono text-[11px] font-bold border border-sky-800">
+                                      Tier: {routeSched.tier || projectTierCompactLabel}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Fiber Sharing Core Breakdown Bar */}
+                                <div className="px-3.5 py-2 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    <span className="font-bold text-slate-400 text-[11px]">สัดส่วน Sharing เส้น Fiber:</span>
+                                    {participatingOwners.map(owner => {
+                                      const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
+                                      const pct = totalC > 0 ? ((count / totalC) * 100).toFixed(0) : '0';
+                                      const colorClass = owner === 'SYMC' ? 'text-pink-400 bg-pink-500/10 border-pink-500/30' : owner === 'UIH' ? 'text-sky-400 bg-sky-500/10 border-sky-500/30' : 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+                                      return (
+                                        <div key={owner} className={`flex items-center gap-1 px-2.5 py-1 rounded-md border font-black text-[11px] ${colorClass}`}>
+                                          <OwnerLogo owner={owner} size="xs" />
+                                          <span>{owner}: {count}C ({pct}%)</span>
+                                        </div>
+                                      );
+                                    })}
+                                    {spareCores > 0 && (
+                                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[11px] font-bold border border-slate-700">
+                                        Spare: {spareCores}C
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-[11px] font-bold text-slate-400">
+                                      จุดตัดต่อ Enclosure: <strong className="text-amber-400 font-black">{routeEncs.length} หัว</strong>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingEnclosureRouteId(editingEnclosureRouteId === routeSched.id ? null : routeSched.id)}
+                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer border ${
+                                        editingEnclosureRouteId === routeSched.id
+                                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                                          : 'bg-slate-800 text-sky-300 border-slate-700 hover:bg-slate-750 hover:border-sky-500/50'
+                                      }`}
+                                      title="เลือก/แก้ไข Enclosure ที่เกาะอยู่กับเส้นนี้โดยเฉพาะ"
+                                    >
+                                      <Box size={12} />
+                                      <span>{editingEnclosureRouteId === routeSched.id ? 'ปิดการเลือก' : 'เลือก Enclosure ของเส้นนี้'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Enclosure Selection Manager for this specific Route */}
+                                {editingEnclosureRouteId === routeSched.id && (
+                                  <div className="m-3 p-3.5 bg-slate-950/95 rounded-xl border border-amber-500/50 space-y-3 shadow-2xl">
+                                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                                        <span className="text-xs font-black text-amber-300">
+                                          กำหนดจุดต่อ Enclosure ที่เกาะอยู่กับ เส้นที่ {displayIdx} ({routeSched.routeName})
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleResetEnclosuresForRoute(routeSched.id)}
+                                          className="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-slate-700 transition-colors cursor-pointer"
+                                        >
+                                          รีเซ็ตตามค่าตรวจจับอัตโนมัติ
+                                        </button>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                          เลือกแล้ว {routeEncs.length} จาก {sldEnclosures.length} หัว
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px]">
+                                      {sldEnclosures.map((enc, eIdx) => {
+                                        const { bjNo, bjName } = parseEnclosureName(enc, eIdx);
+                                        const isSelected = routeEncs.some(e => e.id === enc.id);
+                                        return (
+                                          <button
+                                            key={enc.id || eIdx}
+                                            type="button"
+                                            onClick={() => handleToggleEnclosureForRoute(routeSched.id, enc.id)}
+                                            className={`p-2 rounded-lg border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                                              isSelected
+                                                ? 'bg-sky-500/15 border-sky-400/80 text-white font-bold shadow-sm'
+                                                : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700 opacity-60'
+                                            }`}
+                                          >
+                                            <div className={`w-4 h-4 rounded mt-0.5 shrink-0 flex items-center justify-center text-[10px] font-black ${
+                                              isSelected ? 'bg-sky-500 text-slate-950' : 'border border-slate-700'
+                                            }`}>
+                                              {isSelected ? '✓' : ''}
+                                            </div>
+                                            <div className="truncate">
+                                              <div className="font-black text-sky-300">{bjNo}</div>
+                                              <div className="truncate text-[10px] text-slate-400">{bjName}</div>
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Clear Large Fiber Optic Image Display under Tier Sharing */}
+                                {(() => {
+                                  const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                                  const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
+                                  const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
+                                  const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
+                                  return routeFt?.imageUrl ? (
+                                    <div className="m-3 flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
+                                      <div className="relative group shrink-0">
+                                        <img 
+                                          src={routeFt.imageUrl} 
+                                          alt={routeFt.name} 
+                                          className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 object-contain rounded-2xl bg-slate-950 p-4 border-2 border-sky-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]" 
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewingFiberImage({ url: routeFt.imageUrl!, name: routeFt.name, cores: totalC })}
+                                          className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
+                                        >
+                                          <Maximize2 size={12} /> ขยายดูรูปใหญ่
+                                        </button>
+                                      </div>
+                                      <div className="space-y-2.5 flex-1 w-full">
+                                        <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
+                                          <span className="text-base md:text-lg font-black text-white tracking-wide">
+                                            ประเภทสาย Fiber Optic: {routeFt.name}
+                                          </span>
+                                          <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+                                            OFC {totalC} Cores Standard
+                                          </span>
+                                          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+                                            จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                                          โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
+                                        </p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
+                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                            <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
+                                            <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                            <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
+                                            <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
+                                          </div>
+                                          <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                            <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
+                                            <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
+
+                                {/* Enclosure Sharing Table */}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs text-center border-collapse min-w-[780px]">
+                                    <thead className="bg-slate-800/90 text-slate-300 font-bold border-b border-slate-700">
+                                      <tr>
+                                        <th className="p-2 border-r border-slate-700 w-10">No.</th>
+                                        <th className="p-2 border-r border-slate-700 w-20">Image</th>
+                                        <th className="p-2 border-r border-slate-700 w-20">BJ#No</th>
+                                        <th className="p-2 border-r border-slate-700 text-left">BJ#Name</th>
+                                        <th className="p-2 border-r border-slate-700 w-24">Lat.</th>
+                                        <th className="p-2 border-r border-slate-700 w-24">Long.</th>
+                                        <th className="p-2 border-r border-slate-700 w-28">ขนาด Enclosure</th>
+                                        {participatingOwners.map(owner => (
+                                          <th key={owner} className="p-2 border-r border-slate-700 min-w-[110px]" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
+                                            <div className="flex items-center justify-center gap-1">
+                                              <OwnerLogo owner={owner} size="xs" />
+                                              <span className="text-[10px]" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>Tray No.</span>
+                                            </div>
+                                          </th>
+                                        ))}
+                                        <th className="p-2 border-r border-slate-700 w-20">Spare_Tray</th>
+                                        <th className="p-2 w-20">ตำแหน่ง</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/80 font-medium">
+                                      {routeEncs.map((enc, idx) => {
+                                        const { bjNo, bjName } = parseEnclosureName(enc, idx);
+                                        const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+                                        const trayAssignments = enc.trayAssignments || {};
+                                        const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
+                                        const encCapText = getEnclosureCapacityText(enc);
+                                        const totalTrays = encType?.spliceTrays || 7;
+
+                                        return (
+                                          <tr key={`${enc.id || 'enc'}-${idx}`} className="hover:bg-slate-800/40 transition-colors">
+                                            <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
+                                            <td className="p-1 border-r border-slate-800">
+                                              {encType?.imageUrl ? (
+                                                <img src={encType.imageUrl} alt={bjName} className="w-10 h-10 object-contain rounded border border-slate-700 mx-auto" />
+                                              ) : (
+                                                <div className="w-10 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-slate-500 mx-auto">
+                                                  <Box size={16} />
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td className="p-2 border-r border-slate-800 font-black text-sky-400">{bjNo}</td>
+                                            <td className="p-2 border-r border-slate-800 text-left font-bold text-slate-200">{bjName}</td>
+                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '13.748000'}</td>
+                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lng?.toFixed(6) || '100.548000'}</td>
+                                            <td className="p-2 border-r border-slate-800 font-bold text-slate-300">{encCapText}</td>
+                                            {participatingOwners.map(owner => {
+                                              const assignedTrays = Object.entries(trayAssignments)
+                                                .filter(([_, o]) => o === owner)
+                                                .map(([tId]) => Number(tId))
+                                                .sort((a, b) => a - b);
+                                              let trayRangeStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
+                                              if (!trayRangeStr) {
+                                                trayRangeStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
+                                              }
+
+                                              return (
+                                                <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-black" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
+                                                  {trayRangeStr}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
+                                              {(() => {
+                                                if (hasExplicitAssignments) {
+                                                  let spare = 0;
+                                                  for (let tId = 1; tId <= totalTrays; tId++) {
+                                                    const owner = trayAssignments[tId] || 'None';
+                                                    if (owner === 'None') spare++;
+                                                  }
+                                                  return spare;
+                                                }
+                                                return Math.max(1, totalTrays - (participatingOwners.length * 2));
+                                              })()}
+                                            </td>
+                                            <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   )}
@@ -1968,6 +2905,7 @@ export function DesignApprovalModal({
                   {currentSlide === 5 && (
                     <div className="space-y-4">
                       {fiberRouteSchedule.map((routeSched, rIdx) => {
+                        const routeEncs = getRouteEnclosures(routeSched.id);
                         const totalC = routeSched.capacity || 144;
                         let coreCursor = 1;
 
@@ -2009,8 +2947,14 @@ export function DesignApprovalModal({
                         return (
                           <div key={routeSched.id || rIdx} className="space-y-2">
                             <div className="text-xs font-black text-sky-400 flex items-center justify-between gap-2 flex-wrap bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                              <span className="font-bold text-slate-100 flex items-center gap-1.5">
+                              <span className="font-bold text-slate-100 flex items-center gap-2">
                                 <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-black text-[10px]">{routeSched.tier}</span>
+                                {(() => {
+                                  const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                                  return routeFt?.imageUrl ? (
+                                    <img src={routeFt.imageUrl} alt={routeFt.name} className="w-5 h-5 object-contain rounded bg-slate-800 p-0.5 border border-slate-700" title={routeFt.name} />
+                                  ) : null;
+                                })()}
                                 <span className="text-amber-400 font-extrabold">{routeSched.routeName}</span> ({routeSched.sectionName})
                               </span>
                               <span className="text-slate-400 font-mono text-[11px]">
@@ -2018,174 +2962,495 @@ export function DesignApprovalModal({
                               </span>
                             </div>
 
-                            {/* Usage Table */}
-                            <div className="border border-slate-700/80 rounded-xl overflow-x-auto bg-slate-950/80">
-                              <table className="w-full text-xs text-center border-collapse min-w-[700px]">
-                                <thead>
-                                  <tr className="bg-slate-800 border-b border-slate-700 text-slate-200 font-bold">
-                                    <th rowSpan={2} className="p-2 border-r border-slate-700 w-28">Sharing</th>
-                                    <th rowSpan={2} className="p-2 border-r border-slate-700 min-w-[100px]">Oper.</th>
-                                    <th colSpan={2} className="p-2 border-r border-slate-700 bg-purple-500/20 text-purple-300">Enclosure 312 Core</th>
-                                    <th colSpan={2} className="p-2 bg-blue-500/20 text-blue-300">OFC {totalC} Core</th>
-                                  </tr>
-                                  <tr className="bg-slate-800/60 border-b border-slate-700 text-[11px] text-slate-300 font-bold">
-                                    <th className="p-1.5 border-r border-slate-700">BJ# No.</th>
-                                    <th className="p-1.5 border-r border-slate-700">Tray</th>
-                                    <th className="p-1.5 border-r border-slate-700">Tube</th>
-                                    <th className="p-1.5">Core</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800 font-bold">
-                                  {ownerRows.map((row, idx) => {
-                                    const isFirst = idx === 0;
-                                    return (
-                                      <tr key={row.owner}>
-                                        {isFirst && (
-                                          <td rowSpan={ownerRows.length + 1} className="p-2 border-r border-slate-800 text-amber-400 font-black">
-                                            {routeSched.tier.split(' ')[0]} #{rIdx + 1}
-                                          </td>
-                                        )}
-                                        <td className={`p-2 border-r border-slate-800 ${row.colorStyle}`}>
-                                          <div className="flex items-center justify-center">
-                                            <OwnerLogo owner={row.owner} size="xs" />
-                                          </div>
-                                        </td>
-                                        <td className="p-2 border-r border-slate-800 font-normal">BJ#1-{sldEnclosures.length}</td>
-                                        <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.trayStr}</td>
-                                        <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.tubeStr}</td>
-                                        <td className={`p-2 ${row.colorStyle.split(' ')[0]}`}>{row.coreStr}</td>
+                            {/* Clear Large Fiber Optic Image Display under Tier Sharing */}
+                             {(() => {
+                               const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                               const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
+                               const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
+                               const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
+                               return routeFt?.imageUrl ? (
+                                 <div className="flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
+                                   <div className="relative group shrink-0">
+                                     <img 
+                                       src={routeFt.imageUrl} 
+                                       alt={routeFt.name} 
+                                       className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 object-contain rounded-2xl bg-slate-950 p-4 border-2 border-sky-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]" 
+                                     />
+                                     <button
+                                       type="button"
+                                       onClick={() => setPreviewingFiberImage({ url: routeFt.imageUrl!, name: routeFt.name, cores: totalC })}
+                                       className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white font-bold text-[10px] flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
+                                     >
+                                       <Maximize2 size={12} /> ขยายดูรูปใหญ่
+                                     </button>
+                                   </div>
+                                   <div className="space-y-2.5 flex-1 w-full">
+                                     <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
+                                       <span className="text-base md:text-lg font-black text-white tracking-wide">
+                                         ประเภทสาย Fiber Optic: {routeFt.name}
+                                       </span>
+                                       <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+                                         OFC {totalC} Cores Standard
+                                       </span>
+                                       <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+                                         จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
+                                       </span>
+                                     </div>
+                                     <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                                       โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
+                                     </p>
+                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
+                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                         <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
+                                         <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
+                                       </div>
+                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                         <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
+                                         <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
+                                       </div>
+                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                         <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
+                                         <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
+                                       </div>
+                                     </div>
+                                   </div>
+                                 </div>
+                               ) : null;
+                             })()}
+
+                             {/* Usage Table */}
+                            {(() => {
+                              const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
+                              const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
+                              const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
+
+                              return (
+                                <div className="border border-slate-700/80 rounded-xl overflow-x-auto bg-slate-950/80">
+                                  <table className="w-full text-xs text-center border-collapse min-w-[700px]">
+                                    <thead>
+                                      <tr className="bg-slate-800 border-b border-slate-700 text-slate-200 font-bold">
+                                        <th rowSpan={2} className="p-2 border-r border-slate-700 w-28">Sharing</th>
+                                        <th rowSpan={2} className="p-2 border-r border-slate-700 min-w-[100px]">Oper.</th>
+                                        <th colSpan={2} className="p-2 border-r border-slate-700 bg-purple-500/20 text-purple-300">Enclosure 312 Core</th>
+                                        <th colSpan={2} className="p-2 bg-blue-500/20 text-blue-300">OFC {totalC} Core</th>
                                       </tr>
-                                    );
-                                  })}
-                                  <tr>
-                                    <td className="p-2 border-r border-slate-800 text-slate-400">Spare</td>
-                                    <td className="p-2 border-r border-slate-800 font-normal">BJ#1-{sldEnclosures.length}</td>
-                                    <td className="p-2 border-r border-slate-800 text-slate-400">Tray {ownerRows.length + 1}</td>
-                                    <td className="p-2 border-r border-slate-800 text-slate-500">-</td>
-                                    <td className="p-2 text-slate-500">-</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
+                                      <tr className="bg-slate-800/60 border-b border-slate-700 text-[11px] text-slate-300 font-bold">
+                                        <th className="p-1.5 border-r border-slate-700">BJ# No.</th>
+                                        <th className="p-1.5 border-r border-slate-700">Tray</th>
+                                        <th className="p-1.5 border-r border-slate-700">Tube</th>
+                                        <th className="p-1.5">Core</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800 font-bold">
+                                      {ownerRows.map((row, idx) => {
+                                        const isFirst = idx === 0;
+                                        return (
+                                          <tr key={`${routeSched.id || rIdx}-${row.owner}`}>
+                                            {isFirst && (
+                                              <td rowSpan={ownerRows.length + 1} className="p-2 border-r border-slate-800 text-amber-400 font-black">
+                                                {routeSched.tier}
+                                              </td>
+                                            )}
+                                            <td className={`p-2 border-r border-slate-800 ${row.colorStyle}`}>
+                                              <div className="flex items-center justify-center">
+                                                <OwnerLogo owner={row.owner} size="xs" />
+                                              </div>
+                                            </td>
+                                            <td className="p-2 border-r border-slate-800 font-bold text-sky-300">
+                                              {routeBjDisplay} <span className="text-[10px] text-slate-400 font-normal">({routeEncs.length} หัว)</span>
+                                            </td>
+                                            <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.trayStr}</td>
+                                            <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.tubeStr}</td>
+                                            <td className={`p-2 ${row.colorStyle.split(' ')[0]}`}>{row.coreStr}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr>
+                                        <td className="p-2 border-r border-slate-800 text-slate-400">Spare</td>
+                                        <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
+                                          {routeBjDisplay}
+                                        </td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-400">Tray {ownerRows.length + 1}</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-500">-</td>
+                                        <td className="p-2 text-slate-500">-</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
 
-                      {/* Cable Cross-Section Graphic (12 Loose Tubes) */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        <div className="p-4 bg-slate-950/90 rounded-xl border border-slate-800 flex flex-col items-center">
-                          <p className="text-xs font-black text-slate-200 mb-3">OFC 144 Core (12 Tube Cross Section)</p>
-                          
-                          {/* Circular SVG representation */}
-                          <div className="w-44 h-44 relative flex items-center justify-center">
-                            <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-md">
-                              <circle cx="100" cy="100" r="92" fill="#0f172a" stroke="#475569" strokeWidth="4" />
-                              <circle cx="100" cy="100" r="78" fill="#1e293b" stroke="#334155" strokeWidth="2" />
-                              <circle cx="100" cy="100" r="28" fill="#64748b" stroke="#94a3b8" strokeWidth="2" />
-                              <text x="100" y="104" textAnchor="middle" fill="#f8fafc" fontSize="10" fontWeight="bold">FRP</text>
-
-                              {FIBER_COLOR_STANDARDS.map((color, idx) => {
-                                const angle = (idx * (360 / 12) - 90) * (Math.PI / 180);
-                                const radius = 54;
-                                const cx = 100 + radius * Math.cos(angle);
-                                const cy = 100 + radius * Math.sin(angle);
-                                const isSYMC = idx < 6;
-                                return (
-                                  <g key={idx}>
-                                    <circle 
-                                      cx={cx} 
-                                      cy={cy} 
-                                      r="15" 
-                                      fill={color.hex} 
-                                      stroke={isSYMC ? '#ec4899' : '#0038b8'} 
-                                      strokeWidth="2.5" 
-                                    />
-                                    <text 
-                                      x={cx} 
-                                      y={cy + 3.5} 
-                                      textAnchor="middle" 
-                                      fill={color.hex === '#f8fafc' || color.hex === '#eab308' ? '#0f172a' : '#ffffff'} 
-                                      fontSize="10" 
-                                      fontWeight="bold"
-                                    >
-                                      {color.no}
-                                    </text>
-                                  </g>
-                                );
-                              })}
-                            </svg>
-                          </div>
-
-                          <div className="flex items-center gap-4 text-[11px] font-bold mt-2 flex-wrap">
-                            {participatingOwners.map(owner => (
-                              <span key={owner} className="flex items-center gap-1.5" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                                <OwnerLogo owner={owner} size="xs" /> ({owner === 'SYMC' ? 'Tubes 1-6 : 72 Core' : owner === 'UIH' ? 'Tubes 7-12 : 72 Core' : 'Assigned Tubes'})
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Enclosure Tray Internal Diagram */}
-                        <div className="p-4 bg-slate-950/90 rounded-xl border border-slate-800 flex flex-col justify-between">
-                          <div>
-                            <p className="text-xs font-black text-slate-200 mb-2">Enclosure 312 Core : Tray Configuration</p>
-                            <p className="text-[11px] text-slate-400 mb-3">การจัดสรรถาดสไปรซ์ (Splice Trays) สำหรับ Enclosure ทั้ง {sldEnclosures.length} หัว</p>
-                          </div>
-                          <div className="space-y-2 text-xs font-bold">
-                            {participatingOwners.map((owner, idx) => (
-                              <div key={owner} className="p-2.5 rounded-lg border flex items-center justify-between" style={{
-                                backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.15)' : owner === 'UIH' ? 'rgba(14,165,233,0.15)' : 'rgba(245,158,11,0.15)',
-                                borderColor: owner === 'SYMC' ? 'rgba(236,72,153,0.3)' : owner === 'UIH' ? 'rgba(14,165,233,0.3)' : 'rgba(245,158,11,0.3)',
-                                color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24'
-                              }}>
-                                <span className="flex items-center gap-1.5">
-                                  <OwnerLogo owner={owner} size="xs" />
-                                  <span>{owner === 'SYMC' ? 'Tray 1 - 3 (Dedicated)' : owner === 'UIH' ? 'Tray 4 - 6 (Dedicated)' : `Tray ${idx * 3 + 1} - ${idx * 3 + 3}`}</span>
-                                </span>
-                                <span className="font-mono">72 Splice Cores</span>
-                              </div>
-                            ))}
-                            <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700 flex items-center justify-between text-slate-400">
-                              <span>Tray 7 (Spare / Future Expansion)</span>
-                              <span className="font-mono">Spare Capacity</span>
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-slate-500 mt-2 text-center">
-                            * ผ่านเกณฑ์มาตรฐานการติดตั้งเคเบิลร่วมกันตามข้อกำหนดวิศวกรรม
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SLIDE 6: INSTALLATION SUMMARY & 2-LEVEL APPROVAL */}
+                                          </div>
+                  )}{/* SLIDE 6: INSTALLATION SUMMARY & 2-LEVEL APPROVAL */}
                   {currentSlide === 6 && (
                     <div className="space-y-4">
                       
-                      {/* Installation Scope Overview */}
-                      <div className="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2 font-bold">
-                          <span className="text-sky-400 font-extrabold">{project.name}</span>
-                          <span>ผู้รับจ้างที่ดำเนินการติดตั้ง: <strong className="text-white">{designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.'}</strong></span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                          <div>1. ระยะเคเบิลที่ต้องใช้ร่วมกัน: <strong className="text-white">144 Core ({totalLengthKm} km.)</strong></div>
+                      {/* Installation Scope Overview - Full Project Scope */}
+                      <div className="p-4 bg-slate-950/95 rounded-2xl border border-slate-800 text-xs text-slate-300 leading-relaxed shadow-xl space-y-4">
+                        
+                        {/* Header: Project Info & Contractor Action */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span>2. การแบ่ง Core:</span>
-                            {participatingOwners.map((owner, idx) => (
-                              <React.Fragment key={owner}>
-                                {idx > 0 && <span>;</span>}
-                                <span className="inline-flex items-center gap-1" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                                  <OwnerLogo owner={owner} size="xs" /> {owner === 'SYMC' ? primaryRoute.symcCores : owner === 'UIH' ? primaryRoute.uihCores : (primaryRoute.itelCores || 0)}
-                                </span>
-                              </React.Fragment>
+                            <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 font-black text-xs">
+                              {projectTierName} ({participatingOwners.join('+')})
+                            </span>
+                            <span className="text-white font-extrabold text-sm md:text-base">
+                              {project.name}
+                            </span>
+                            {designApproval?.documentNumber && (
+                              <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                {designApproval.documentNumber}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {contractorSaveSuccess && (
+                              <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1 animate-pulse">
+                                <Check size={13} /> บันทึกข้อมูลแล้ว
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingContractor(!isEditingContractor)}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
+                                isEditingContractor
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
+                                  : 'bg-sky-600 hover:bg-sky-500 text-white'
+                              }`}
+                            >
+                              <Edit3 size={13} />
+                              <span>{isEditingContractor ? 'ยกเลิกการแก้ไข' : 'กรอก/แก้ไขข้อมูลผู้รับจ้าง'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Editable Contractor Form (when isEditingContractor is true) */}
+                        {isEditingContractor && (
+                          <div className="p-3.5 bg-slate-900/90 rounded-xl border border-sky-500/40 space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                              <span className="text-xs font-black text-sky-400 flex items-center gap-1.5">
+                                <Briefcase size={14} /> กรอกรายละเอียดผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor)
+                              </span>
+                              <span className="text-[10px] text-slate-400">กรอกข้อมูลและกดบันทึกเพื่ออัปเดตแบบฟอร์ม</span>
+                            </div>
+
+                            {contractorSaveError && (
+                              <div className="p-2 bg-rose-500/20 border border-rose-500/40 rounded-lg text-[11px] text-rose-300 flex items-center gap-1.5">
+                                <AlertTriangle size={13} /> {contractorSaveError}
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-[11px]">
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  ชื่อผู้รับจ้าง / บริษัทที่ติดตั้ง <span className="text-rose-400">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contractorInput}
+                                  onChange={e => setContractorInput(e.target.value)}
+                                  placeholder="เช่น United Telecommunication Services Co., Ltd."
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  ผู้ควบคุมงาน / ผู้ประสานงาน
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contractorContactInput}
+                                  onChange={e => setContractorContactInput(e.target.value)}
+                                  placeholder="เช่น คุณประสิทธิ์ สุขใจ (วิศวกรโครงการ)"
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  เบอร์โทรศัพท์ / ข้อมูลติดต่อ
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contractorPhoneInput}
+                                  onChange={e => setContractorPhoneInput(e.target.value)}
+                                  placeholder="เช่น 02-123-4567, 089-123-4567"
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  เลขที่สัญญา / ใบสั่งจ้าง PO
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contractorPoInput}
+                                  onChange={e => setContractorPoInput(e.target.value)}
+                                  placeholder="เช่น PO-2026-FIBER-089"
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  กำหนดการติดตั้ง (Target Installation Date)
+                                </label>
+                                <input
+                                  type="date"
+                                  value={targetInstallDate}
+                                  onChange={e => setTargetInstallDate(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-300 font-bold mb-1">
+                                  ขอบเขตงาน / บันทึกเพิ่มเติม
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contractorScopeInput}
+                                  onChange={e => setContractorScopeInput(e.target.value)}
+                                  placeholder="เช่น ติดตั้งพาดสาย Fiber Optic และเชื่อมสไปรซ์ Enclosure"
+                                  className="w-full bg-slate-950 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-sky-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-1 border-t border-slate-800">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingContractor(false)}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                              >
+                                ยกเลิก
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveContractorDetails}
+                                disabled={isSavingContractor}
+                                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                              >
+                                {isSavingContractor ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                                <span>{isSavingContractor ? 'กำลังบันทึก...' : 'บันทึกข้อมูลผู้รับจ้าง'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* SECTION 1: CABLE DISTANCE ACROSS THE ENTIRE PROJECT */}
+                        <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
+                              ระยะเคเบิลที่ต้องใช้ร่วมกัน (รายละเอียดทั้งโครงการ):
+                            </span>
+                            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-500/20">
+                              รวม {fiberRouteSchedule.length} เส้นทาง | {totalLengthKm} km.
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                            {fiberRouteSchedule.map((routeSched, rIdx) => (
+                              <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <div>
+                                    <span className="inline-block px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-black text-[10px] mr-1.5">
+                                      เส้นที่ {rIdx + 1}
+                                    </span>
+                                    <strong className="text-white">{routeSched.routeName}</strong>
+                                    <p className="text-[10px] text-slate-400">{routeSched.sectionName}</p>
+                                  </div>
+                                  <span className="font-mono font-bold text-white shrink-0 bg-slate-800 px-2 py-0.5 rounded">
+                                    {routeSched.distanceKm} km.
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
+                                  <span>ขนาด: <strong className="text-amber-300">OFC {routeSched.capacity} Core</strong></span>
+                                  <span>&bull;</span>
+                                  <span>Tier: <strong className="text-sky-300">{routeSched.tier}</strong></span>
+                                </div>
+                              </div>
                             ))}
                           </div>
-                          <div>3. ต้องใช้ Enclosure: <strong className="text-amber-400">312 Core ({sldEnclosures.length} หัว)</strong></div>
+
+                          <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-between text-[11px] font-bold text-sky-300">
+                            <span>รวมระยะทางสายเคเบิลทั้งโครงการ ({fiberRouteSchedule.length} เส้นทาง):</span>
+                            <span className="text-white font-extrabold text-xs">{totalLengthKm} กิโลเมตร</span>
+                          </div>
                         </div>
-                        <p className="mt-2 text-center text-xs font-black text-sky-300 bg-sky-500/10 py-1 rounded-lg border border-sky-500/20">
+
+                        {/* SECTION 2: CORE SHARING BREAKDOWN ACROSS THE ENTIRE PROJECT */}
+                        <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-pink-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
+                              การแบ่งจำนวน Core ใช้งาน (รายละเอียดทั้งโครงการ):
+                            </span>
+                            <span className="text-[11px] font-bold text-pink-400 bg-pink-500/10 px-2.5 py-0.5 rounded-full border border-pink-500/20">
+                              ความจุรวม {fiberRouteTotals.totalCores} Core
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                            {fiberRouteSchedule.map((routeSched, rIdx) => {
+                              const spareCount = Math.max(0, routeSched.capacity - routeSched.totalCores);
+                              return (
+                                <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white">
+                                      เส้นที่ {rIdx + 1}: {routeSched.routeName}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      OFC {routeSched.capacity} Core
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {participatingOwners.map((owner) => {
+                                      const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
+                                      const pct = routeSched.capacity > 0 ? ((count / routeSched.capacity) * 100).toFixed(0) : '0';
+                                      return (
+                                        <span 
+                                          key={owner} 
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px]"
+                                          style={{
+                                            backgroundColor: owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb',
+                                            color: owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706',
+                                            border: `1px solid ${owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24'}40`
+                                          }}
+                                        >
+                                          <OwnerLogo owner={owner} size="xs" /> {owner}: {count}C ({pct}%)
+                                        </span>
+                                      );
+                                    })}
+                                    {spareCount > 0 && (
+                                      <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-slate-800 text-slate-400 border border-slate-700">
+                                        Spare: {spareCount}C
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between flex-wrap gap-2 text-[11px] font-bold text-amber-300">
+                            <span>สรุปยอดจำนวน Core ใช้งานรวมทั้งโครงการ:</span>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {participatingOwners.map(owner => {
+                                const totalO = owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores;
+                                return (
+                                  <span key={owner} style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
+                                    {owner}: <strong>{totalO} Core</strong>
+                                  </span>
+                                );
+                              })}
+                              <span className="text-slate-400">
+                                ความจุรวม: <strong className="text-white">{fiberRouteTotals.totalCores} Core</strong>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* SECTION 3: ENCLOSURE REQUIREMENTS ACROSS THE ENTIRE PROJECT */}
+                        <div className="space-y-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">3</span>
+                              ต้องใช้ Enclosure (รายละเอียดทั้งโครงการ):
+                            </span>
+                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                              ขนาด 312 Core รวมทั้งสิ้น {sldEnclosures.length} หัว
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                            {fiberRouteSchedule.map((routeSched, rIdx) => {
+                              const rEncs = getRouteEnclosures(routeSched.id);
+                              const firstEnc = rEncs.length > 0 ? parseEnclosureName(rEncs[0], 0).bjNo : '-';
+                              const lastEnc = rEncs.length > 0 ? parseEnclosureName(rEncs[rEncs.length - 1], rEncs.length - 1).bjNo : '-';
+                              return (
+                                <div key={routeSched.id || rIdx} className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+                                  <div>
+                                    <span className="font-bold text-white">
+                                      เส้นที่ {rIdx + 1}: {routeSched.routeName}
+                                    </span>
+                                    <p className="text-[10px] text-slate-400">
+                                      ช่วงจุดต่อ: {firstEnc} ถึง {lastEnc}
+                                    </p>
+                                  </div>
+                                  <span className="text-xs font-black text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                    {rEncs.length} หัว
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* SECTION 4: CONTRACTOR OVERVIEW CARD */}
+                        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">4</span>
+                              ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):
+                            </span>
+                            {!isEditingContractor && (
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingContractor(true)}
+                                className="text-[11px] text-sky-400 hover:text-sky-300 flex items-center gap-1 font-bold underline cursor-pointer"
+                              >
+                                <Edit3 size={11} /> แก้ไขข้อมูลผู้รับจ้าง
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+                            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
+                              <span className="text-slate-400 block text-[10px]">ชื่อบริษัทผู้รับจ้าง:</span>
+                              <strong className="text-white truncate block" title={contractorInput}>
+                                {contractorInput || 'United Telecommunication Services Co., Ltd.'}
+                              </strong>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
+                              <span className="text-slate-400 block text-[10px]">ผู้ควบคุมงาน / ประสานงาน:</span>
+                              <span className="text-slate-200 truncate block">
+                                {contractorContactInput || '-'}
+                              </span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
+                              <span className="text-slate-400 block text-[10px]">เบอร์ติดต่อ:</span>
+                              <span className="text-slate-200 truncate block">
+                                {contractorPhoneInput || '-'}
+                              </span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
+                              <span className="text-slate-400 block text-[10px]">เลขที่สัญญา / PO:</span>
+                              <span className="text-amber-300 truncate block font-mono">
+                                {contractorPoInput || '-'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {contractorScopeInput && (
+                            <div className="text-[10px] text-slate-400 px-2 py-1 bg-slate-950/60 rounded border border-slate-800/60">
+                              <span className="text-slate-300 font-bold mr-1">ขอบเขตงาน:</span> {contractorScopeInput}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Joint Resolution Note */}
+                        <div className="text-center font-black text-sky-300 bg-sky-950/80 border border-sky-500/40 py-2.5 px-4 rounded-xl shadow-lg text-xs sm:text-sm">
                           "โดยมีมติสรุปเห็นชอบร่วมกับดำเนินการ ตามรายละเอียดดังกล่าวข้างต้น"
-                        </p>
+                        </div>
+
                       </div>
 
                       {/* 2-Level Approval Signing Cards */}
@@ -2420,50 +3685,156 @@ export function DesignApprovalModal({
                 </div>
               </div>
 
-              {/* Enclosure Schedule */}
-              <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-                <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <Box size={16} className="text-sky-400" />
-                  <span>ตารางตำแหน่งและรายละเอียด Enclosure</span>
-                </h4>
-                <div className="border border-slate-800 rounded-xl overflow-x-auto">
-                  <table className="w-full text-xs text-center border-collapse min-w-[700px]">
-                    <thead className="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
-                      <tr>
-                        <th className="p-2 border-r border-slate-700">No.</th>
-                        <th className="p-2 border-r border-slate-700">BJ# No</th>
-                        <th className="p-2 border-r border-slate-700 text-left">BJ# Name</th>
-                        <th className="p-2 border-r border-slate-700">Lat. / Long.</th>
-                        <th className="p-2 border-r border-slate-700">Enclosure</th>
-                        {participatingOwners.map(owner => (
-                          <th key={owner} className="p-2 border-r border-slate-700 min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1">
-                              <OwnerLogo owner={owner} size="xs" />
-                              <span>Tray</span>
-                            </div>
-                          </th>
-                        ))}
-                        <th className="p-2">ตำแหน่ง</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 text-slate-300">
-                      {sldEnclosures.map((enc, idx) => (
-                        <tr key={enc.id || idx} className="hover:bg-slate-800/30">
-                          <td className="p-2 border-r border-slate-800">{idx + 1}</td>
-                          <td className="p-2 border-r border-slate-800 font-bold text-sky-400">BJ#{String(idx + 1).padStart(2, '0')}</td>
-                          <td className="p-2 border-r border-slate-800 text-left font-bold text-white">{enc.name}</td>
-                          <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(5)}, {enc.position?.lng?.toFixed(5)}</td>
-                          <td className="p-2 border-r border-slate-800">312 Core</td>
-                          {participatingOwners.map(owner => (
-                            <td key={owner} className="p-2 border-r border-slate-800 font-bold" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
-                              {owner === 'SYMC' ? '1-3' : owner === 'UIH' ? '4-6' : '-'}
-                            </td>
-                          ))}
-                          <td className="p-2 font-bold">{enc.locationType || 'PB#'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* Enclosure Schedule (Per Route Fiber & Enclosure Sharing) */}
+              <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-3">
+                  <h4 className="text-base font-extrabold text-white flex items-center gap-2">
+                    <Box size={18} className="text-sky-400" />
+                    <span>ตารางรายละเอียดการ Sharing รายเส้นทาง Fiber และตำแหน่ง Enclosure</span>
+                  </h4>
+                  <span className="text-xs font-mono text-slate-400">
+                    ข้อมูลจริงตามโครงข่าย Fiber Infrastructure Sharing
+                  </span>
+                </div>
+
+                <div className="space-y-6">
+                  {fiberRouteSchedule.map((routeSched, rIdx) => {
+                    const routeEncs = getRouteEnclosures(routeSched.id);
+                    const totalC = routeSched.capacity || 144;
+                    const symcPct = totalC > 0 ? ((routeSched.symcCores / totalC) * 100).toFixed(0) : '0';
+                    const uihPct = totalC > 0 ? ((routeSched.uihCores / totalC) * 100).toFixed(0) : '0';
+                    const itelPct = totalC > 0 ? (((routeSched.itelCores || 0) / totalC) * 100).toFixed(0) : '0';
+                    const spareCores = Math.max(0, totalC - (routeSched.symcCores + routeSched.uihCores + (routeSched.itelCores || 0)));
+
+                    return (
+                      <div key={routeSched.id || rIdx} className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950/80">
+                        {/* Fiber Route Sharing Header */}
+                        <div className="p-3 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="px-2.5 py-1 rounded-md bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
+                              เส้นที่ {rIdx + 1}
+                            </span>
+                            <strong className="text-white text-sm font-extrabold">{routeSched.routeName}</strong>
+                            <span className="text-xs text-slate-400">({routeSched.sectionName})</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-sky-300 font-bold border border-slate-700">
+                              OFC {routeSched.capacity} Core
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-bold border border-slate-700">
+                              ระยะทาง {routeSched.distanceKm} km
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-bold border border-sky-800">
+                              Tier: {routeSched.tier || projectTierCompactLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Fiber Sharing Ratio Breakdown */}
+                        <div className="px-3.5 py-2 bg-slate-900/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-bold text-slate-400 text-[11px]">สัดส่วน Sharing เส้น Fiber:</span>
+                            {participatingOwners.map(owner => {
+                              const count = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
+                              const pct = totalC > 0 ? ((count / totalC) * 100).toFixed(0) : '0';
+                              const colorClass = owner === 'SYMC' ? 'text-pink-400 bg-pink-500/10 border-pink-500/30' : owner === 'UIH' ? 'text-sky-400 bg-sky-500/10 border-sky-500/30' : 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+                              return (
+                                <div key={owner} className={`flex items-center gap-1 px-2.5 py-1 rounded-md border font-black text-[11px] ${colorClass}`}>
+                                  <OwnerLogo owner={owner} size="xs" />
+                                  <span>{owner}: {count}C ({pct}%)</span>
+                                </div>
+                              );
+                            })}
+                            {spareCores > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[11px] font-bold border border-slate-700">
+                                Spare: {spareCores}C
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-bold text-slate-400">
+                            จุดตัดต่อ Enclosure: <strong className="text-amber-400 font-black">{routeEncs.length} หัว</strong>
+                          </div>
+                        </div>
+
+                        {/* Enclosure Sharing Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-center border-collapse min-w-[700px]">
+                            <thead className="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
+                              <tr>
+                                <th className="p-2 border-r border-slate-700">No.</th>
+                                <th className="p-2 border-r border-slate-700">BJ# No</th>
+                                <th className="p-2 border-r border-slate-700 text-left">BJ# Name</th>
+                                <th className="p-2 border-r border-slate-700">Lat. / Long.</th>
+                                <th className="p-2 border-r border-slate-700">ขนาด Enclosure</th>
+                                {participatingOwners.map(owner => (
+                                  <th key={owner} className="p-2 border-r border-slate-700 min-w-[120px]" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <OwnerLogo owner={owner} size="xs" />
+                                      <span>Tray No.</span>
+                                    </div>
+                                  </th>
+                                ))}
+                                <th className="p-2 border-r border-slate-700">Spare_Tray</th>
+                                <th className="p-2">ตำแหน่ง</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
+                              {routeEncs.map((enc, idx) => {
+                                const { bjNo, bjName } = parseEnclosureName(enc, idx);
+                                const trayAssignments = enc.trayAssignments || {};
+                                const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
+                                const encCapText = getEnclosureCapacityText(enc);
+                                const totalTrays = (() => {
+                                  const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+                                  return encType?.spliceTrays || 7;
+                                })();
+
+                                return (
+                                  <tr key={enc.id || idx} className="hover:bg-slate-800/30">
+                                    <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
+                                    <td className="p-2 border-r border-slate-800 font-bold text-sky-400">{bjNo}</td>
+                                    <td className="p-2 border-r border-slate-800 text-left font-bold text-white">{bjName}</td>
+                                    <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '-'}, {enc.position?.lng?.toFixed(6) || '-'}</td>
+                                    <td className="p-2 border-r border-slate-800 font-bold text-slate-300">{encCapText}</td>
+                                    {participatingOwners.map(owner => {
+                                      const assignedTrays = Object.entries(trayAssignments)
+                                        .filter(([_, o]) => o === owner)
+                                        .map(([tId]) => Number(tId))
+                                        .sort((a, b) => a - b);
+                                      let trayStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
+                                      if (!trayStr) {
+                                        trayStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
+                                      }
+
+                                      return (
+                                        <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-bold" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
+                                          {trayStr}
+                                        </td>
+                                      );
+                                    })}
+                                    <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
+                                      {(() => {
+                                        if (hasExplicitAssignments) {
+                                          let spare = 0;
+                                          for (let tId = 1; tId <= totalTrays; tId++) {
+                                            const owner = trayAssignments[tId] || 'None';
+                                            if (owner === 'None') spare++;
+                                          }
+                                          return spare;
+                                        }
+                                        return Math.max(1, totalTrays - (participatingOwners.length * 2));
+                                      })()}
+                                    </td>
+                                    <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -2698,6 +4069,57 @@ export function DesignApprovalModal({
                   <span>ไม่อนุมัติ / ขอแก้ไข</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FIBER OPTIC IMAGE LIGHTBOX PREVIEW */}
+      {previewingFiberImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewingFiberImage(null)}
+        >
+          <div 
+            className="bg-slate-900 border-2 border-sky-500/50 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
+                  <Cable size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    {previewingFiberImage.name} (OFC {previewingFiberImage.cores} Cores)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">รูปภาพโครงสร้างสายเคเบิลใยแก้วนำแสงความละเอียดสูง (Cross-Section Diagram)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingFiberImage(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex justify-center items-center bg-slate-950 rounded-2xl p-6 border border-slate-800 min-h-[360px]">
+              <img 
+                src={previewingFiberImage.url} 
+                alt={previewingFiberImage.name} 
+                className="max-h-[460px] w-auto object-contain drop-shadow-2xl rounded-xl"
+              />
+            </div>
+
+            <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
+              <span className="font-bold text-amber-300">
+                มาตรฐานการจัดเรียง Loose Tube & โค้ดสี Core ตามมาตรฐาน TIA/EIA-598
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">
+                ขนาด {previewingFiberImage.cores}C &bull; Infra Sharing Certified
+              </span>
             </div>
           </div>
         </div>

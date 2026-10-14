@@ -55,7 +55,7 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
   const routeColor = getRouteColor(assignedRoute);
 
   return (
-    <div className="relative group" onMouseLeave={() => setIsOpen(false)}>
+    <div className="relative group">
       {/* Port UI */}
       <div 
         className="w-10 h-10 bg-slate-800 rounded-full border-[2px] border-slate-600 shadow-2xl flex items-center justify-center z-10 relative cursor-pointer hover:border-brand-500 transition-colors"
@@ -84,7 +84,10 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
                 <select 
                   className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
                   value={assignment.owner || 'None'}
-                  onChange={e => onUpdate(enclosure.id, id, { owner: e.target.value as CoreOwner })}
+                  onChange={e => {
+                    onUpdate(enclosure.id, id, { owner: e.target.value as CoreOwner });
+                    setIsOpen(false);
+                  }}
                   disabled={!permissions.editEnclosures}
                 >
                   <option value="None">None</option>
@@ -101,7 +104,10 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
                 <select 
                   className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
                   value={assignment.routeId || ''}
-                  onChange={e => onUpdate(enclosure.id, id, { routeId: e.target.value })}
+                  onChange={e => {
+                    onUpdate(enclosure.id, id, { routeId: e.target.value });
+                    setIsOpen(false);
+                  }}
                   disabled={!permissions.editEnclosures}
                 >
                   <option value="">Select Route...</option>
@@ -602,6 +608,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
   const [selectedTubesB, setSelectedTubesB] = useState<number[]>([]);
 
   const [activeTab, setActiveTab] = useState<'manage' | 'summary' | 'diagram' | 'trays' | 'physical' | 'detail'>('detail');
+  const [previewingEnclosureImg, setPreviewingEnclosureImg] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [width, setWidth] = useState(800);
   const [isResizing, setIsResizing] = useState(false);
@@ -2243,7 +2250,8 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
   };
 
   return (
-    <div 
+    <>
+      <div 
       className={`${isFullscreen ? 'fixed inset-0 w-full' : ''} bg-slate-900 border-l border-slate-800 flex flex-col h-full shadow-2xl z-[1000] relative ${isResizing ? '' : 'transition-all duration-300'}`}
       style={!isFullscreen ? { width: `${width}px`, maxWidth: '95vw' } : {}}
     >
@@ -2878,6 +2886,45 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                   </div>
                 </div>
 
+                {/* Enclosure Hardware Illustration Photo / Diagram for Reports & Approvals */}
+                {(() => {
+                  const encType = enclosureTypes.find(t => t.id === enclosure.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enclosure.locationType?.toLowerCase());
+                  const encIllustrationUrl = enclosure.imageUrl || encType?.imageUrl || encType?.icon || '';
+                  if (!encIllustrationUrl) return null;
+                  return (
+                    <div className="p-6 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-3xl border-2 border-slate-700/80 shadow-2xl flex flex-col sm:flex-row items-center gap-6">
+                      <div className="relative group shrink-0">
+                        <img 
+                          src={encIllustrationUrl} 
+                          alt={enclosure.name} 
+                          className="w-36 h-36 sm:w-44 sm:h-44 object-contain rounded-2xl bg-slate-950 p-3 border-2 border-brand-500/30 shadow-2xl transition-transform duration-300 group-hover:scale-105 cursor-pointer"
+                          onClick={() => setPreviewingEnclosureImg(encIllustrationUrl)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewingEnclosureImg(encIllustrationUrl)}
+                          className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-brand-600/90 hover:bg-brand-500 text-white font-bold text-[10px] flex items-center gap-1 shadow-lg backdrop-blur-sm cursor-pointer"
+                        >
+                          <Maximize2 size={12} /> ขยายดูรูปใหญ่
+                        </button>
+                      </div>
+                      <div className="space-y-2 flex-1 w-full">
+                        <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
+                          <span className="text-sm sm:text-base font-black text-white">
+                            รูปภาพประกอบอุปกรณ์ Enclosure: {enclosure.name}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-[10.5px] font-mono font-bold border border-brand-500/40">
+                            Approval Report Illustration
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                          รูปภาพไดอะแกรมหรือภาพถ่ายฮาร์ดแวร์ Enclosure นี้ใช้สำหรับประกอบรายงานการออกแบบและแบบขออนุมัติโครงการ (Design Approval) ตามมาตรฐานงานก่อสร้างโครงข่าย
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Physical Preview Section */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -2922,6 +2969,49 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
             </div>
           )}
         </div>
-    </div>
+      </div>
+
+      {/* ENCLOSURE ILLUSTRATION LIGHTBOX PREVIEW */}
+      {previewingEnclosureImg && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewingEnclosureImg(null)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold">
+                  <Box size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    รูปภาพประกอบ Enclosure: {enclosure.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">รูปภาพฮาร์ดแวร์/ไดอะแกรมประกอบรายงานและแบบขออนุมัติ</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingEnclosureImg(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="flex justify-center items-center bg-slate-950 rounded-2xl p-6 border border-slate-800 min-h-[360px]">
+              <img 
+                src={previewingEnclosureImg} 
+                alt={enclosure.name} 
+                className="max-h-[460px] w-auto object-contain drop-shadow-2xl rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, Edit2, Save, X, Settings, Box, Zap, Layers, ChevronLeft, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, Settings, Box, Zap, Layers, ChevronLeft, Image as ImageIcon, ClipboardPaste } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { EnclosureType, FiberType, FiberColorConfig, CoreOwner, User as AppUser } from '../types';
 import { db, auth as firebaseAuth, handleFirestoreError, OperationType } from '../firebase';
@@ -55,6 +55,35 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
     return () => { unsubEnclosure(); unsubFiber(); unsubColorConfigs(); };
   }, [user]);
 
+  // Global listener to support pasting images directly from clipboard (Ctrl+V / Cmd+V)
+  useEffect(() => {
+    if (!editingId || !editingType) return;
+
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            if (editingType === 'fiber') {
+              processImageFile(file, 'fiber');
+            } else if (editingType === 'enclosure') {
+              processImageFile(file, 'enclosure');
+            }
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleWindowPaste);
+    return () => {
+      window.removeEventListener('paste', handleWindowPaste);
+    };
+  }, [editingId, editingType]);
+
   const handleSave = async (type: 'enclosure' | 'fiber' | 'colorConfig', id?: string) => {
     const docId = id || Date.now().toString();
     try {
@@ -64,7 +93,8 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
           name: editName, 
           capacity: editCapacity, 
           spliceTrays: editSpliceTrays,
-          icon: editIcon || null
+          icon: editIcon || null,
+          imageUrl: editImageUrl || null
         });
         await logActivity('edit_enclosure_type', `Saved enclosure type ${editName}`, { docId, name: editName, capacity: editCapacity });
       } else if (type === 'fiber') {
@@ -128,80 +158,142 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
     setDeleteConfirm({ isOpen: false, type: null, id: null });
   };
 
+  const processImageFile = (file: File, target: 'fiber' | 'enclosure-icon' | 'enclosure-image' = 'fiber') => {
+    setUploadError(null);
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadError('File is too large (Max 20MB)');
+      return;
+    }
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = target === 'enclosure-icon' ? 128 : 400;
+        const MAX_HEIGHT = target === 'enclosure-icon' ? 128 : 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Changed to PNG as requested, but dimensions must be strictly limited to manage Firestore size
+          const resizedDataUrl = canvas.toDataURL('image/png');
+          
+          // Ensure total size is safe (icon + image < ~900KB)
+          if (target === 'fiber' && resizedDataUrl.length > 800000) {
+            setUploadError('รูปภาพมีขนาดใหญ่เกินไป (PNG)');
+            return;
+          }
+          if (target === 'enclosure' && resizedDataUrl.length > 800000) {
+            setUploadError('รูปภาพมีขนาดใหญ่เกินไป (PNG)');
+            return;
+          }
+          if (target === 'enclosure-icon' && resizedDataUrl.length > 200000) {
+            setUploadError('รูปไอคอนมีขนาดใหญ่เกินไป (PNG)');
+            return;
+          }
+
+          if (target === 'fiber') {
+            setEditImageUrl(resizedDataUrl);
+          } else if (target === 'enclosure-icon') {
+            setEditIcon(resizedDataUrl);
+          } else {
+            setEditImageUrl(resizedDataUrl);
+          }
+        }
+      } catch (err) {
+        console.error('Image processing error:', err);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const res = event.target?.result as string;
+          if (res && res.length > 850000) {
+            setUploadError('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปภาพที่มีขนาดเล็กกว่า 700KB');
+            return;
+          }
+          if (target === 'fiber') {
+            setEditImageUrl(res);
+          } else if (target === 'enclosure-icon') {
+            setEditIcon(res);
+          } else {
+            setEditImageUrl(res);
+          }
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+
+    img.onerror = () => {
+      setUploadError('ไม่สามารถโหลดรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    img.src = objectUrl;
+  };
+
   const handleImageUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    setUploadError(null);
-    if (file) {
-      if (file.size > 20 * 1024 * 1024) {
-        setUploadError('File is too large (Max 20MB)');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setEditImageUrl(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) processImageFile(file, 'fiber');
+    e.target.value = '';
   };
 
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    setUploadError(null);
-    
-    if (file) {
-      if (file.size > 20 * 1024 * 1024) {
-        setUploadError('File is too large (Max 20MB)');
-        return;
-      }
-
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 256; // Increased quality
-          const MAX_HEIGHT = 256;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const resizedBase64 = canvas.toDataURL('image/png', 0.8);
-            setEditIcon(resizedBase64);
-          }
-        } catch (err) {
-          console.error('Image processing error:', err);
-          setUploadError('Failed to process image');
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
-      };
-
-      img.onerror = () => {
-        setUploadError('Invalid image file');
-        URL.revokeObjectURL(objectUrl);
-      };
-
-      img.src = objectUrl;
-    }
-    // Reset input value to allow selecting the same file again
+    if (file) processImageFile(file, 'enclosure-icon');
     e.target.value = '';
+  };
+
+  const handleEnclosureImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processImageFile(file, 'enclosure-image');
+    e.target.value = '';
+  };
+
+  const handlePasteFromClipboard = async (target: 'fiber' | 'enclosure-icon' | 'enclosure-image' = 'fiber') => {
+    setUploadError(null);
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        let found = false;
+        for (const item of items) {
+          const imageType = item.types.find(t => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const file = new File([blob], 'clipboard-image.png', { type: imageType });
+            processImageFile(file, target);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          setUploadError('ไม่พบรูปภาพในคลิปบอร์ด (กรุณาคัดลอกรูปภาพหรือจับภาพหน้าจอมาก่อน)');
+        }
+      } else {
+        setUploadError('เบราว์เซอร์ไม่รองรับการอ่านคลิปบอร์ดโดยตรง กรุณากดปุ่ม Ctrl+V (Cmd+V) บนคีย์บอร์ดเพื่อวางรูป');
+      }
+    } catch (err: any) {
+      console.warn('Clipboard read error:', err);
+      setUploadError('กรุณากดอนุญาตการเข้าถึงคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V) บนคีย์บอร์ดเพื่อวางรูป');
+    }
   };
 
   return (
@@ -318,7 +410,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                 </div>
                 {editingId !== 'new-enclosure' && (
                   <button 
-                    onClick={() => { setEditingId('new-enclosure'); setEditingType('enclosure'); setEditName(''); setEditCapacity(60); setEditSpliceTrays(1); setEditIcon(null); }}
+                    onClick={() => { setEditingId('new-enclosure'); setEditingType('enclosure'); setEditName(''); setEditCapacity(60); setEditSpliceTrays(1); setEditIcon(null); setEditImageUrl(null); }}
                     disabled={quotaExceeded}
                     className={`bg-brand-600 text-slate-100 flex items-center justify-center gap-3 py-3 px-8 text-sm font-black rounded-2xl shadow-2xl shadow-brand-500/20 hover:bg-brand-500 transition-all active:scale-95 uppercase tracking-widest ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
@@ -338,9 +430,9 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                   >
                     <div className="flex items-center gap-4 sm:gap-8 min-w-0">
                       <div className="relative shrink-0">
-                        {t.icon ? (
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[1.5rem] bg-slate-900 p-3 shadow-2xl border border-slate-800 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-                            <img src={t.icon} alt={t.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        {t.imageUrl || t.icon ? (
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[1.5rem] bg-slate-900 p-2 shadow-2xl border border-slate-800 flex items-center justify-center group-hover:scale-105 transition-transform duration-500 overflow-hidden">
+                            <img src={t.imageUrl || t.icon} alt={t.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                           </div>
                         ) : (
                           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[1.5rem] bg-slate-900 shadow-2xl border-2 border-slate-800 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
@@ -364,7 +456,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     </div>
                     <div className="flex items-center gap-2 justify-end shrink-0 border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-800/50">
                       <button 
-                        onClick={() => { setEditingId(t.id); setEditingType('enclosure'); setEditName(t.name); setEditCapacity(t.capacity || 60); setEditSpliceTrays(t.spliceTrays || 1); setEditIcon(t.icon || null); }}
+                        onClick={() => { setEditingId(t.id); setEditingType('enclosure'); setEditName(t.name); setEditCapacity(t.capacity || 60); setEditSpliceTrays(t.spliceTrays || 1); setEditIcon(t.icon || null); setEditImageUrl(t.imageUrl || null); }}
                         className="p-3 text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 rounded-2xl transition-all"
                         title="Edit"
                       >
@@ -643,14 +735,15 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                       </div>
                     </div>
 
+                    {/* Map Icon / Symbol */}
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Visual Icon</label>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Map Icon Symbol (ไอคอนสัญลักษณ์บนแผนที่)</label>
                       <div className="group relative flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8 p-6 sm:p-8 bg-slate-950/30 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-brand-500/50 transition-all">
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
                           {editIcon ? (
-                            <img src={editIcon} alt="Preview" className="w-full h-full object-contain p-3" />
+                            <img src={editIcon} alt="Map Icon" className="w-full h-full object-contain p-2" />
                           ) : (
-                            <Box className="w-10 h-10 text-slate-800" />
+                            <Box className="w-8 h-8 text-slate-800" />
                           )}
                         </div>
                         <div className="flex-1">
@@ -661,16 +754,65 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             className="hidden"
                             id="icon-upload"
                           />
-                          <label htmlFor="icon-upload" className="inline-flex items-center gap-3 px-5 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
-                            <Plus className="w-4 h-4" />
-                            Choose Image
-                          </label>
-                          <p className="text-[10px] text-slate-500 font-black mt-3 uppercase tracking-tight">
-                            {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB'}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <label htmlFor="icon-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                              <Plus className="w-4 h-4" />
+                              Choose Map Icon
+                            </label>
+                          </div>
                           {editIcon && (
-                            <button onClick={() => setEditIcon(null)} className="text-[10px] text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block">
-                              Remove Icon
+                            <button type="button" onClick={() => setEditIcon(null)} className="text-[10px] text-rose-500 font-black mt-2 uppercase tracking-widest hover:underline block">
+                              Remove Map Icon
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Approval Report Illustration Image */}
+                    <div className="space-y-4 pt-4 border-t border-slate-800">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Approval Report Illustration Image (รูปภาพประกอบรายงาน / แบบขออนุมัติ)</label>
+                      <div className="group relative flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8 p-6 sm:p-8 bg-slate-950/30 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-brand-500/50 transition-all">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                          {editImageUrl ? (
+                            <img src={editImageUrl} alt="Report Illustration" className="w-full h-full object-contain p-2" />
+                          ) : (
+                            <Box className="w-10 h-10 text-slate-800" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleEnclosureImageChange}
+                            className="hidden"
+                            id="image-upload"
+                          />
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <label htmlFor="image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                              <Plus className="w-4 h-4" />
+                              Choose Report Illustration
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handlePasteFromClipboard('enclosure-image')}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
+                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
+                            >
+                              <ClipboardPaste className="w-4 h-4" />
+                              Paste from Clipboard
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-black mt-3 uppercase tracking-tight">
+                            {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB • สำหรับแสดงในรายงานและแบบขออนุมัติ'}
+                          </p>
+                          {editImageUrl && (
+                            <button 
+                              type="button" 
+                              onClick={() => setEditImageUrl(null)} 
+                              className="text-[10px] text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block"
+                            >
+                              Remove Report Image
                             </button>
                           )}
                         </div>
@@ -755,12 +897,23 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             className="hidden"
                             id="fiber-image-upload"
                           />
-                          <label htmlFor="fiber-image-upload" className="inline-flex items-center gap-3 px-5 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
-                            <Plus className="w-4 h-4" />
-                            Choose Cable Image
-                          </label>
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <label htmlFor="fiber-image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                              <Plus className="w-4 h-4" />
+                              Choose Cable Image
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handlePasteFromClipboard('fiber')}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
+                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
+                            >
+                              <ClipboardPaste className="w-4 h-4" />
+                              Paste from Clipboard
+                            </button>
+                          </div>
                           <p className="text-[10px] text-slate-500 font-black mt-3 uppercase tracking-tight">
-                            {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB'}
+                            {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB • หรือกด Ctrl+V เพื่อวางรูป'}
                           </p>
                           {editImageUrl && (
                             <button onClick={() => setEditImageUrl(null)} className="text-[10px] text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block">

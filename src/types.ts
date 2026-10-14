@@ -75,8 +75,13 @@ export type DesignApproval = {
   designNotes?: string;
   estimatedInstallationDate?: string;
   contractorName?: string;
+  contractorContact?: string;
+  contractorPhone?: string;
+  contractorPoNumber?: string;
+  contractorScope?: string;
   projectCorridorDistanceKm?: number;
   totalOperationDistanceKm?: number;
+  routeEnclosureSelections?: Record<string, string[]>;
   planningSignOffs?: Record<string, OwnerSignOff>;
   omSignOffs?: Record<string, OwnerSignOff>;
   ownerSignOffs?: Record<string, OwnerSignOff>;
@@ -102,6 +107,7 @@ export type EnclosureType = {
   capacity?: number;
   spliceTrays?: number;
   icon?: string;
+  imageUrl?: string;
 };
 
 export type FiberType = {
@@ -122,6 +128,7 @@ export type FiberEnclosure = {
   locationName?: string;
   uid?: string;
   enclosureTypeId?: string;
+  imageUrl?: string;
   trayAssignments?: Record<number, CoreOwner>;
   portAssignments?: Record<number, { owner?: CoreOwner, routeId?: string }>;
   routeSideOverrides?: Record<string, 'left' | 'right' | 'top' | 'bottom'>;
