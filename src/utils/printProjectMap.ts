@@ -108,7 +108,7 @@ export function renderPrintableProjectMap(routes: PrintMapRoute[], enclosures: P
     `<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 18px; border-top: 4px solid ${safeColor(route.color, '#0284c7')};"></span>${escapeHtml(route.name)}</span>`
   ).join('');
 
-  return `<section style="margin-top: 14px; break-inside: avoid; page-break-inside: avoid;">
+  return `<section class="pdf-keep-together" style="margin-top: 14px; break-inside: avoid; page-break-inside: avoid;">
     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 11px; color: #334155;">
       <strong style="font-size: 13px; color: #0369a1;">แผนที่เส้นทางโครงการ (Project Map)</strong>
       <span>${visibleRoutes.filter(route => route.points.length >= 2).length} เส้นทาง · ${visibleEnclosures.length} จุด Enclosure</span>
