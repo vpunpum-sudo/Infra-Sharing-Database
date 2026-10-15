@@ -66,3 +66,33 @@ export function getClosestPointOnRoute(p: Point, path: Point[]): { point: Point;
 
   return { point: closestPoint, distance: minDistance, segmentIndex };
 }
+
+export function routeLength(path: Point[]): number {
+  return path.slice(1).reduce((total, point, index) => total + getDistance(path[index], point), 0);
+}
+
+/** Insert a point on a route without duplicating an existing vertex. */
+export function insertPointOnRoute(path: Point[], point: Point): { path: Point[]; index: number; point: Point } {
+  if (path.length < 2) throw new Error('A route needs at least two points.');
+  const closest = getClosestPointOnRoute(point, path);
+  const before = path[closest.segmentIndex];
+  const after = path[closest.segmentIndex + 1];
+  if (getDistance(closest.point, before) < 0.2) {
+    return { path, index: closest.segmentIndex, point: before };
+  }
+  if (getDistance(closest.point, after) < 0.2) {
+    return { path, index: closest.segmentIndex + 1, point: after };
+  }
+  const updated = [...path.slice(0, closest.segmentIndex + 1), closest.point, ...path.slice(closest.segmentIndex + 1)];
+  return { path: updated, index: closest.segmentIndex + 1, point: closest.point };
+}
+
+export function splitRoutePath(path: Point[], point: Point) {
+  const inserted = insertPointOnRoute(path, point);
+  const first = inserted.path.slice(0, inserted.index + 1);
+  const second = inserted.path.slice(inserted.index);
+  const firstLength = routeLength(first);
+  const secondLength = routeLength(second);
+  if (firstLength < 1 || secondLength < 1) throw new Error('Choose an Enclosure between the ends of the route.');
+  return { first, second, point: inserted.point, fraction: firstLength / (firstLength + secondLength) };
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
+import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import FiberMap from './components/FiberMap';
 import CoreManager from './components/CoreManager';
@@ -18,7 +18,8 @@ import { ForceChangePassword } from './components/ForceChangePassword';
 import SystemManual from './components/SystemManual';
 import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, User as AppUser } from './types';
 import { generateCores, DEFAULT_PERMISSIONS } from './constants';
-import { getClosestPointOnRoute } from './utils/geo';
+import { getClosestPointOnRoute, insertPointOnRoute, splitRoutePath } from './utils/geo';
+import { prepareRouteSplit } from './utils/splitRoute';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -77,6 +78,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [enclosureLocationType, setEnclosureLocationType] = useState('');
   const [enclosureLocationName, setEnclosureLocationName] = useState('');
   const [enclosureTypeId, setEnclosureTypeId] = useState('');
+  const [enclosureSnapCandidates, setEnclosureSnapCandidates] = useState<Array<{ routeId: string; point: Point; distance: number }>>([]);
+  const [enclosureSnapRouteId, setEnclosureSnapRouteId] = useState('');
+  const [splitRouteId, setSplitRouteId] = useState<string | null>(null);
+  const [splitEnclosureId, setSplitEnclosureId] = useState('');
+  const [splitFirstName, setSplitFirstName] = useState('');
+  const [splitSecondName, setSplitSecondName] = useState('');
+  const [splittingRoute, setSplittingRoute] = useState(false);
 
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -173,9 +181,18 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         setDrawingMode('none');
         return;
       }
+      const candidates = permissions.editRoutes ? routes.flatMap(route => {
+        if (route.path.length < 2 || route.path.length >= 1000) return [];
+        const closest = getClosestPointOnRoute(point, route.path);
+        return closest.distance <= 30 ? [{ routeId: route.id, point: closest.point, distance: closest.distance }] : [];
+      }).sort((a, b) => a.distance - b.distance) : [];
+      const selected = candidates[0];
+      const position = selected?.point || point;
+      setEnclosureSnapCandidates(candidates);
+      setEnclosureSnapRouteId(selected?.routeId || '');
       setPendingEnclosurePoint(point);
-      setEnclosureLatInput(point.lat.toFixed(6));
-      setEnclosureLngInput(point.lng.toFixed(6));
+      setEnclosureLatInput(position.lat.toFixed(6));
+      setEnclosureLngInput(position.lng.toFixed(6));
       setEnclosureModalOpen(true);
       setDrawingMode('none');
     } else if (drawingMode === 'route' || drawingMode === 'edit-route') {
@@ -269,6 +286,76 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     // Modal will be opened via finishRoute after position editing
   };
 
+  const openSplitRoute = (route: RouteType) => {
+    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    if (!permissions.editRoutes || !permissions.createRoutes) {
+      setErrorModalOpen('You do not have permission to split Fiber routes.');
+      return;
+    }
+    const candidates = enclosures.filter(enclosure => {
+      if (route.path.length < 2) return false;
+      try {
+        return getClosestPointOnRoute(enclosure.position, route.path).distance <= 3 &&
+          !!splitRoutePath(route.path, enclosure.position);
+      } catch {
+        return false;
+      }
+    });
+    if (!candidates.length) {
+      setErrorModalOpen('Place an Enclosure on the Fiber route, between its ends, before splitting it.');
+      return;
+    }
+    setSplitRouteId(route.id);
+    setSplitEnclosureId(candidates[0].id);
+    setSplitFirstName(`${route.name} (1)`);
+    setSplitSecondName(`${route.name} (2)`);
+  };
+
+  const confirmSplitRoute = async () => {
+    const route = routes.find(item => item.id === splitRouteId);
+    const enclosure = enclosures.find(item => item.id === splitEnclosureId);
+    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    if (!route || !enclosure || !activeProjectId || !user || !permissions.editRoutes || !permissions.createRoutes) return;
+    setSplittingRoute(true);
+    try {
+      const changes = prepareRouteSplit(route, enclosure, routes, enclosures, loops, uuidv4(), user.uid, splitFirstName, splitSecondName);
+      const batch = writeBatch(db);
+      const routePath = `projects/${activeProjectId}/routes`;
+      batch.set(doc(db, routePath, changes.first.id), changes.first);
+      batch.set(doc(db, routePath, changes.second.id), changes.second);
+      changes.updatedRoutes.forEach(item => batch.set(doc(db, routePath, item.id), item));
+      changes.updatedEnclosures.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/enclosures/${item.id}`), item));
+      changes.updatedLoops.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/loops/${item.id}`), item));
+
+      const approval = currentProject?.designApproval;
+      const selections = approval?.routeEnclosureSelections;
+      if (approval && selections?.[route.id]) {
+        const selected = new Set(selections[route.id]);
+        batch.set(doc(db, 'projects', activeProjectId), {
+          designApproval: {
+            ...approval,
+            routeEnclosureSelections: {
+              ...selections,
+              [route.id]: changes.firstEnclosureIds.filter(id => selected.has(id)),
+              [changes.second.id]: changes.secondEnclosureIds.filter(id => selected.has(id))
+            }
+          }
+        }, { merge: true });
+      }
+      if (2 + changes.updatedRoutes.length + changes.updatedEnclosures.length + changes.updatedLoops.length + (approval && selections?.[route.id] ? 1 : 0) > 500) {
+        throw new Error('This split affects too many records. Please contact the project administrator.');
+      }
+      await batch.commit();
+      setSplitRouteId(null);
+      setSelectedRouteId(changes.first.id);
+      logActivity('split_route', `Split ${route.name} at ${enclosure.name}`, { routeId: route.id, newRouteId: changes.second.id, enclosureId: enclosure.id, projectId: activeProjectId }).catch(console.warn);
+    } catch (error) {
+      setErrorModalOpen(error instanceof Error ? error.message : 'Could not split the Fiber route.');
+    } finally {
+      setSplittingRoute(false);
+    }
+  };
+
   const finishRoute = () => {
     if (draftRoute.length < 2) {
       setErrorModalOpen('A route must have at least 2 points.');
@@ -308,16 +395,33 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           await logActivity('edit_enclosure', `Edited enclosure ${enclosureNameInput.trim()}`, { enclosureId: editingEnclosureId, projectId: activeProjectId });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, path);
+          return;
         }
       } else {
         if (!permissions.createEnclosures) {
           setErrorModalOpen('You do not have permission to create enclosures.');
           return;
         }
+        const snapRoute = enclosureSnapRouteId ? routes.find(route => route.id === enclosureSnapRouteId) : undefined;
+        const snapCandidate = enclosureSnapCandidates.find(candidate => candidate.routeId === enclosureSnapRouteId);
+        if (enclosureSnapRouteId && (!snapRoute || !snapCandidate || !permissions.editRoutes)) {
+          setErrorModalOpen('The selected Fiber route is no longer available. Please choose the point again.');
+          return;
+        }
+        if (snapRoute && snapRoute.path.length < 2) {
+          setErrorModalOpen('The selected Fiber route has no drawable line.');
+          return;
+        }
+        const inserted = snapRoute && snapCandidate ? insertPointOnRoute(snapRoute.path, snapCandidate.point) : null;
+        if (inserted && inserted.path.length > 1000) {
+          setErrorModalOpen('This Fiber route has reached the maximum number of map points.');
+          return;
+        }
+        const position = inserted?.point || { lat, lng };
         const newEnclosure: any = { 
           id: uuidv4(), 
           name: enclosureNameInput.trim(), 
-          position: { lat, lng }, 
+          position,
           uid: user.uid
         };
         if (enclosureLocationType) newEnclosure.locationType = enclosureLocationType;
@@ -326,11 +430,19 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         
         const path = `projects/${activeProjectId}/enclosures/${newEnclosure.id}`;
         try {
-          await setDoc(doc(db, path), newEnclosure);
-          await logActivity('create_enclosure', `Created enclosure ${newEnclosure.name}`, { enclosureId: newEnclosure.id, projectId: activeProjectId });
+          if (snapRoute && inserted) {
+            const batch = writeBatch(db);
+            batch.set(doc(db, path), newEnclosure);
+            batch.set(doc(db, `projects/${activeProjectId}/routes/${snapRoute.id}`), { ...snapRoute, path: inserted.path });
+            await batch.commit();
+          } else {
+            await setDoc(doc(db, path), newEnclosure);
+          }
         } catch (error) {
           handleFirestoreError(error, OperationType.CREATE, path);
+          return;
         }
+        logActivity('create_enclosure', `Created enclosure ${newEnclosure.name}`, { enclosureId: newEnclosure.id, projectId: activeProjectId }).catch(console.warn);
       }
     } else {
       setErrorModalOpen('Please enter a valid name and coordinates.');
@@ -338,6 +450,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     }
     setEnclosureModalOpen(false);
     setPendingEnclosurePoint(null);
+    setEnclosureSnapCandidates([]);
+    setEnclosureSnapRouteId('');
     setEditingEnclosureId(null);
     setOriginalEnclosurePosition(null);
     setDrawingMode('none');
@@ -1228,6 +1342,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       setEnclosureLocationType('');
                       setEnclosureLocationName('');
                       setPendingEnclosurePoint(null);
+                      setEnclosureSnapCandidates([]);
+                      setEnclosureSnapRouteId('');
                       setEnclosureModalOpen(true);
                       setDrawingMode('none');
                       setDraftRoute([]); 
@@ -1355,6 +1471,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                 </div>
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
                                   <>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openSplitRoute(route); }}
+                                      title="Split route at Enclosure"
+                                      className="p-1.5 hover:bg-sky-500/20 rounded-lg text-sky-400 transition-colors"
+                                    >
+                                      <Scissors className="w-3.5 h-3.5" />
+                                    </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); startEditRoute(route); }}
                                       className="p-1.5 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors"
@@ -1559,6 +1682,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             }}
             onEnclosureClick={handleEnclosureClick}
             onEditRoute={startEditRoute}
+            onSplitRoute={openSplitRoute}
             onEditEnclosure={startEditEnclosure}
             onEnclosureDragEnd={(enclosure, point) => {
               setEnclosureLatInput(point.lat.toString());
@@ -1636,6 +1760,44 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         />
       )}
 
+        {splitRouteId && (() => {
+          const route = routes.find(item => item.id === splitRouteId);
+          if (!route) return null;
+          const candidates = enclosures.filter(item => {
+            try {
+              return getClosestPointOnRoute(item.position, route.path).distance <= 3 && !!splitRoutePath(route.path, item.position);
+            } catch { return false; }
+          });
+          const selected = candidates.find(item => item.id === splitEnclosureId);
+          const preview = selected ? splitRoutePath(route.path, selected.position) : null;
+          const total = route.totalLength ?? Math.abs((route.markEnd ?? 0) - (route.markStart ?? 0));
+          return (
+            <div className="fixed inset-0 bg-slate-950/70 z-[2100] flex items-center justify-center p-4">
+              <div className="glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
+                <h2 className="text-xl font-black flex items-center gap-2 mb-2"><Scissors className="text-sky-400" /> Split Fiber route</h2>
+                <p className="text-sm text-slate-400 mb-5">{route.name}</p>
+                <label className="block text-xs font-bold mb-2">Split at Enclosure</label>
+                <select className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitEnclosureId} onChange={e => setSplitEnclosureId(e.target.value)}>
+                  {candidates.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+                <label className="block text-xs font-bold mb-2">First segment name</label>
+                <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitFirstName} onChange={e => setSplitFirstName(e.target.value)} />
+                <label className="block text-xs font-bold mb-2">Second segment name</label>
+                <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitSecondName} onChange={e => setSplitSecondName(e.target.value)} />
+                {preview && <div className="text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
+                  {total > 0 ? `${(total * preview.fraction).toFixed(1)} m + ${(total * (1 - preview.fraction)).toFixed(1)} m = ${total.toFixed(1)} m` : 'Both segments retain the full Fiber path.'}
+                </div>}
+                <div className="flex justify-end gap-3">
+                  <button className="btn-secondary px-5" onClick={() => setSplitRouteId(null)} disabled={splittingRoute}>Cancel</button>
+                  <button className="btn-primary px-5" onClick={confirmSplitRoute} disabled={splittingRoute || quotaExceeded || !selected || !splitFirstName.trim() || !splitSecondName.trim()}>
+                    {splittingRoute ? 'Saving...' : 'Split route'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {enclosureModalOpen && (
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[2000] flex items-center justify-center p-4">
             <motion.div 
@@ -1662,6 +1824,32 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     onKeyDown={e => e.key === 'Enter' && handleSaveEnclosure()}
                   />
                 </div>
+                {!editingEnclosureId && enclosureSnapCandidates.length > 0 && (
+                  <div className="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-3 text-sm text-sky-100">
+                    <label className="block text-xs font-bold mb-2">Snap to Fiber route</label>
+                    <select
+                      className="w-full rounded-xl bg-slate-800 border border-slate-600 p-2 text-slate-100"
+                      value={enclosureSnapRouteId}
+                      onChange={e => {
+                        const candidate = enclosureSnapCandidates.find(item => item.routeId === e.target.value);
+                        setEnclosureSnapRouteId(e.target.value);
+                        const position = candidate?.point || pendingEnclosurePoint;
+                        if (position) {
+                          setEnclosureLatInput(position.lat.toFixed(6));
+                          setEnclosureLngInput(position.lng.toFixed(6));
+                        }
+                      }}
+                    >
+                      <option value="">Keep clicked location (no snap)</option>
+                      {enclosureSnapCandidates.map(candidate => (
+                        <option key={candidate.routeId} value={candidate.routeId}>
+                          {routes.find(route => route.id === candidate.routeId)?.name || 'Fiber route'} · {candidate.distance.toFixed(1)} m away
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs text-sky-200">The saved Enclosure will sit exactly on the selected line.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enclosure Type</label>
@@ -1709,7 +1897,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       placeholder="e.g., 13.7563"
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
                       value={enclosureLatInput}
-                      onChange={e => setEnclosureLatInput(e.target.value)}
+                      onChange={e => { setEnclosureLatInput(e.target.value); setEnclosureSnapRouteId(''); }}
                       onKeyDown={e => e.key === 'Enter' && handleSaveEnclosure()}
                     />
                   </div>
@@ -1721,7 +1909,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       placeholder="e.g., 100.5018"
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
                       value={enclosureLngInput}
-                      onChange={e => setEnclosureLngInput(e.target.value)}
+                      onChange={e => { setEnclosureLngInput(e.target.value); setEnclosureSnapRouteId(''); }}
                       onKeyDown={e => e.key === 'Enter' && handleSaveEnclosure()}
                     />
                   </div>

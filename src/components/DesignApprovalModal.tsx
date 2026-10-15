@@ -676,6 +676,7 @@ export function DesignApprovalModal({
 
       return [{
         id: 't2_default',
+        cableId: 't2_default',
         tier: projectTierCompactLabel,
         routeName: project.name || 'แนวสาย OFC 144 Core',
         capacity: 144,
@@ -750,6 +751,7 @@ export function DesignApprovalModal({
 
       return {
         id: route.id || `route_${idx}`,
+        cableId: route.lineageId || route.id || `route_${idx}`,
         tier: routeTierFormatted,
         routeName: displayRouteName,
         capacity: capacity,
@@ -770,13 +772,19 @@ export function DesignApprovalModal({
     let totalUIH = 0;
     let totalITEL = 0;
     let totalAllCores = 0;
+    const countedCables = new Set<string>();
 
-    fiberRouteSchedule.forEach(r => {
-      totalDist += parseFloat(r.distanceKm) || 0;
-      totalSYMC += r.symcCores || 0;
-      totalUIH += r.uihCores || 0;
-      totalITEL += r.itelCores || 0;
-      totalAllCores += r.totalCores || 0;
+    fiberRouteSchedule.forEach((r, index) => {
+      const rawLength = effectiveRoutes[index]?.totalLength;
+      totalDist += rawLength !== undefined && rawLength > 0 ? rawLength / 1000 : (parseFloat(r.distanceKm) || 0);
+      // Split segments are shown separately, but their shared cable cores count once.
+      if (!countedCables.has(r.cableId)) {
+        totalSYMC += r.symcCores || 0;
+        totalUIH += r.uihCores || 0;
+        totalITEL += r.itelCores || 0;
+        totalAllCores += r.totalCores || 0;
+        countedCables.add(r.cableId);
+      }
     });
 
     return {
@@ -786,7 +794,7 @@ export function DesignApprovalModal({
       itelCores: totalITEL,
       totalCores: totalAllCores
     };
-  }, [fiberRouteSchedule]);
+  }, [fiberRouteSchedule, effectiveRoutes]);
 
   const fiberOpticSummary = useMemo(() => {
     const distanceByType = new Map<string, number>();
@@ -799,7 +807,9 @@ export function DesignApprovalModal({
         : typeName.includes(String(route.capacity))
           ? typeName
           : `${capacityLabel} (${typeName})`;
-      distanceByType.set(label, (distanceByType.get(label) || 0) + (parseFloat(route.distanceKm) || 0));
+      const rawLength = effectiveRoutes[index]?.totalLength;
+      distanceByType.set(label, (distanceByType.get(label) || 0) +
+        (rawLength !== undefined && rawLength > 0 ? rawLength / 1000 : (parseFloat(route.distanceKm) || 0)));
     });
 
     return Array.from(distanceByType, ([label, distanceKm]) => ({
