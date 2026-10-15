@@ -40,6 +40,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [draftRoute, setDraftRoute] = useState<Point[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
   const [selectedEnclosureId, setSelectedEnclosureId] = useState<string | undefined>();
+  const [sidebarFocusTarget, setSidebarFocusTarget] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
   const [fiberTypes, setFiberTypes] = useState<FiberType[]>([]);
@@ -111,6 +112,19 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [enclosuresExpanded, setEnclosuresExpanded] = useState(false);
   const [loopsExpanded, setLoopsExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!sidebarFocusTarget || sidebarCollapsed) return;
+    if (sidebarFocusTarget.type === 'route' && !routesExpanded) return;
+    if (sidebarFocusTarget.type === 'enclosure' && !enclosuresExpanded) return;
+    // Wait for the sidebar section to expand before scrolling its selected row into view.
+    const timer = window.setTimeout(() => {
+      document.getElementById(`sidebar-${sidebarFocusTarget.type}-${sidebarFocusTarget.id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      setSidebarFocusTarget(null);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [sidebarFocusTarget, sidebarCollapsed, routesExpanded, enclosuresExpanded]);
 
   useEffect(() => {
     if (!user || !activeProjectId) {
@@ -238,6 +252,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     } else {
       setSelectedRouteId(undefined);
       setSelectedEnclosureId(undefined);
+      setSidebarFocusTarget(null);
     }
   };
 
@@ -245,6 +260,19 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (drawingMode === 'none') {
       setSelectedEnclosureId(enclosure.id);
       setSelectedRouteId(undefined);
+      setEnclosuresExpanded(true);
+      setSidebarCollapsed(false);
+      setSidebarFocusTarget({ type: 'enclosure', id: enclosure.id });
+    }
+  };
+
+  const handleRouteMapSelection = (route: RouteType) => {
+    if (drawingMode === 'none') {
+      setSelectedRouteId(route.id);
+      setSelectedEnclosureId(undefined);
+      setRoutesExpanded(true);
+      setSidebarCollapsed(false);
+      setSidebarFocusTarget({ type: 'route', id: route.id });
     }
   };
 
@@ -1454,6 +1482,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                         {routes.map(route => (
                           <li
                             key={route.id}
+                            id={`sidebar-route-${route.id}`}
                             onClick={() => {
                               if (drawingMode === 'none') setSelectedRouteId(route.id);
                             }}
@@ -1531,6 +1560,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                         {enclosures.map(enclosure => (
                           <li 
                             key={enclosure.id} 
+                            id={`sidebar-enclosure-${enclosure.id}`}
                             className={`p-3 rounded-2xl border text-sm transition-all cursor-pointer group ${
                               selectedEnclosureId === enclosure.id 
                                 ? 'bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10' 
@@ -1674,12 +1704,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             drawingMode={drawingMode}
             draftRoute={draftRoute}
             onMapClick={handleMapClick}
-            onRouteClick={(route) => {
-              if (drawingMode === 'none') {
-                setSelectedRouteId(route.id);
-                setSelectedEnclosureId(undefined);
-              }
-            }}
+            onRouteClick={handleRouteMapSelection}
             onEnclosureClick={handleEnclosureClick}
             onEditRoute={startEditRoute}
             onSplitRoute={openSplitRoute}
