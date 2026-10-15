@@ -20,8 +20,9 @@ import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core,
 import { generateCores, DEFAULT_PERMISSIONS } from './constants';
 import { getClosestPointOnRoute, getDistance, insertPointOnRoute, splitRoutePath } from './utils/geo';
 import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './utils/splitRoute';
+import { canChangeTubeOwner, validateTubeOwnerUpdates } from './utils/tubeOwnership';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { motion, AnimatePresence } from 'motion/react';
 import { logActivity } from './services/logService';
@@ -941,54 +942,101 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     }
   };
 
-  const handleUpdateCore = async (routeId: string, coreId: number, data: Partial<Core>) => {
-    if (!user || !activeProjectId) return;
-    console.log('Updating core:', { routeId, coreId, data });
-    const route = routes.find(r => r.id === routeId);
-    if (!route) {
-      console.error('Route not found:', routeId);
-      return;
+  const handleUpdateCore = async (routeId: string, coreId: number, data: Partial<Core>): Promise<boolean> => {
+    if (!user || !activeProjectId || !appUser || !DEFAULT_PERMISSIONS[appUser.role].editRoutes) {
+      setErrorModalOpen('You do not have permission to edit Fiber routes.');
+      return false;
     }
-
-    const updatedRoute: RouteType = {
-      ...route,
-      cores: route.cores.map(c => c.id === coreId ? { ...c, ...data } : c)
-    };
-
     const path = `projects/${activeProjectId}/routes/${routeId}`;
     try {
-      await setDoc(doc(db, path), updatedRoute);
-      await logActivity('update_core', `Updated core ${coreId} on route ${routeId}`, { routeId, coreId, data, projectId: activeProjectId });
+      await runTransaction(db, async transaction => {
+        const routeRef = doc(db, path);
+        const [routeSnapshot, userSnapshot] = await Promise.all([
+          transaction.get(routeRef),
+          transaction.get(doc(db, 'users', user.uid))
+        ]);
+        if (!routeSnapshot.exists()) throw new Error('The Fiber route is no longer available. Please reload the project.');
+        if (!userSnapshot.exists()) throw new Error('Your account permissions are no longer available. Please sign in again.');
+        const latestUser = userSnapshot.data() as AppUser;
+        if (!DEFAULT_PERMISSIONS[latestUser.role]?.editRoutes) {
+          throw new Error('You do not have permission to edit Fiber routes.');
+        }
+        const latestRoute = routeSnapshot.data() as RouteType;
+        const currentCore = latestRoute.cores.find(core => core.id === coreId);
+        if (!currentCore) throw new Error('This Core is no longer available. Please reload the route.');
+        if (data.owner !== undefined && data.owner !== currentCore.owner) {
+          if (!canChangeTubeOwner(latestUser, currentCore.owner)) {
+            throw new Error('Only the current Owner or Admin/Design can change this Core Owner.');
+          }
+          const availableOwners = latestRoute.owners?.length
+            ? latestRoute.owners
+            : ['ITEL', 'SYMC', 'UIH'] as CoreOwner[];
+          if (data.owner !== 'None' && !availableOwners.includes(data.owner)) {
+            throw new Error('This Owner is not available for the selected Fiber route.');
+          }
+        }
+        const newestHistory = data.history?.at(-1);
+        const updatedCores = latestRoute.cores.map(core => core.id === coreId ? {
+          ...core, ...data,
+          ...(newestHistory ? { history: [...(core.history || []), newestHistory] } : {})
+        } : core);
+        transaction.update(routeRef, { cores: updatedCores });
+      });
+      logActivity('update_core', `Updated core ${coreId} on route ${routeId}`, {
+        routeId, coreId, data, projectId: activeProjectId
+      }).catch(console.warn);
+      return true;
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+      setErrorModalOpen(error instanceof Error ? error.message : 'Could not save the Core changes.');
+      return false;
     }
   };
 
-  const handleUpdateCores = async (routeId: string, updates: { coreId: number, data: Partial<Core> }[]) => {
-    if (!user || !activeProjectId) return;
-    console.log('Updating cores:', { routeId, updates });
-    const route = routes.find(r => r.id === routeId);
-    if (!route) {
-      console.error('Route not found:', routeId);
-      return;
+  const handleUpdateCores = async (routeId: string, updates: { coreId: number, data: Partial<Core> }[]): Promise<boolean> => {
+    if (!user || !activeProjectId || !appUser || !DEFAULT_PERMISSIONS[appUser.role].editRoutes) {
+      setErrorModalOpen('You do not have permission to edit Fiber routes.');
+      return false;
     }
-
-    const updatedCores = route.cores.map(c => {
-      const update = updates.find(u => u.coreId === c.id);
-      return update ? { ...c, ...update.data } : c;
-    });
-
-    const updatedRoute: RouteType = {
-      ...route,
-      cores: updatedCores
-    };
-
+    if (updates.length === 0) return true;
     const path = `projects/${activeProjectId}/routes/${routeId}`;
     try {
-      await setDoc(doc(db, path), updatedRoute);
-      await logActivity('update_cores_bulk', `Bulk updated cores on route ${routeId}`, { routeId, updatesCount: updates.length, projectId: activeProjectId });
+      await runTransaction(db, async transaction => {
+        const routeRef = doc(db, path);
+        const [snapshot, userSnapshot] = await Promise.all([
+          transaction.get(routeRef),
+          transaction.get(doc(db, 'users', user.uid))
+        ]);
+        if (!snapshot.exists()) throw new Error('The Fiber route is no longer available. Please reload the project.');
+        if (!userSnapshot.exists()) throw new Error('Your account permissions are no longer available. Please sign in again.');
+        const latestUser = userSnapshot.data() as AppUser;
+        if (!DEFAULT_PERMISSIONS[latestUser.role]?.editRoutes) {
+          throw new Error('You do not have permission to edit Fiber routes.');
+        }
+        const latestRoute = snapshot.data() as RouteType;
+        const availableOwners = latestRoute.owners?.length
+          ? latestRoute.owners
+          : ['ITEL', 'SYMC', 'UIH'] as CoreOwner[];
+        validateTubeOwnerUpdates(latestRoute.cores, updates, latestUser, availableOwners);
+        const byId = new Map(updates.map(update => [update.coreId, update.data]));
+        const updatedCores = latestRoute.cores.map(core => {
+          const data = byId.get(core.id);
+          if (!data) return core;
+          // Keep history written by another user since the edit panel opened.
+          const newestHistory = data.history?.at(-1);
+          return {
+            ...core, ...data,
+            ...(newestHistory ? { history: [...(core.history || []), newestHistory] } : {})
+          };
+        });
+        transaction.update(routeRef, { cores: updatedCores });
+      });
+      logActivity('update_cores_bulk', `Bulk updated cores on route ${routeId}`, {
+        routeId, updatesCount: updates.length, projectId: activeProjectId
+      }).catch(console.warn);
+      return true;
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+      setErrorModalOpen(error instanceof Error ? error.message : 'Could not save the Tube changes.');
+      return false;
     }
   };
 

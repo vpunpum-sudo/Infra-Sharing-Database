@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Route, Core, CoreStatus, CoreOwner, CorePriority, User as AppUser } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
+import { canChangeTubeOwner, getTubeOwner, tubeIdForCore } from '../utils/tubeOwnership';
 import { X, Activity, User, ShieldAlert, Box, CheckCircle2, Eye, History, Clock, Maximize2, Minimize2, ChevronRight, ChevronDown, Filter, Lock, Pencil, AlertCircle, Save, RotateCcw } from 'lucide-react';
 
 interface CoreManagerProps {
   route: Route;
   appUser: AppUser | null;
   onClose: () => void;
-  onUpdateCore: (routeId: string, coreId: number, data: Partial<Core>) => void;
-  onUpdateCores: (routeId: string, updates: { coreId: number, data: Partial<Core> }[]) => void;
+  onUpdateCore: (routeId: string, coreId: number, data: Partial<Core>) => Promise<boolean>;
+  onUpdateCores: (routeId: string, updates: { coreId: number, data: Partial<Core> }[]) => Promise<boolean>;
 }
 
 export default function CoreManager({ route, appUser, onClose, onUpdateCore, onUpdateCores }: CoreManagerProps) {
@@ -27,6 +28,8 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
   const [pendingUpdates, setPendingUpdates] = useState<Record<number, CoreOwner>>({});
   const [pendingPriorityUpdates, setPendingPriorityUpdates] = useState<Record<number, CorePriority>>({});
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
+  const [isSavingBulk, setIsSavingBulk] = useState(false);
+  const [isSavingCore, setIsSavingCore] = useState(false);
 
   const toggleTube = (tubeId: number) => {
     setExpandedTubes(prev => ({ ...prev, [tubeId]: !prev[tubeId] }));
@@ -43,7 +46,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     setIsEditing(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedCore) return;
     
     // Create history entry
@@ -57,12 +60,19 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
     const updatedHistory = [...(selectedCore.history || []), newHistoryEntry];
     
-    onUpdateCore(route.id, selectedCore.id, { ...editData, history: updatedHistory });
-    setIsEditing(false);
-    setSelectedCore({ ...selectedCore, ...editData, history: updatedHistory });
+    setIsSavingCore(true);
+    try {
+      const saved = await onUpdateCore(route.id, selectedCore.id, { ...editData, history: updatedHistory });
+      if (saved) {
+        setIsEditing(false);
+        setSelectedCore({ ...selectedCore, ...editData, history: updatedHistory });
+      }
+    } finally {
+      setIsSavingCore(false);
+    }
   };
 
-  const handleBulkSave = () => {
+  const handleBulkSave = async () => {
     const allUpdates: { coreId: number, data: Partial<Core> }[] = [];
     const modifiedTubeIds = Array.from(new Set([
       ...Object.keys(pendingUpdates).map(Number),
@@ -72,7 +82,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     modifiedTubeIds.forEach(tubeId => {
       const nextOwner = pendingUpdates[tubeId];
       const nextPriority = pendingPriorityUpdates[tubeId];
-      const tubeCores = route.cores.filter(c => Math.floor((c.id - 1) / 12) + 1 === tubeId);
+      const tubeCores = route.cores.filter(c => tubeIdForCore(c.id) === tubeId);
       
       tubeCores.forEach(core => {
         const dataToUpdate: Partial<Core> = {};
@@ -108,10 +118,17 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
       });
     });
 
-    onUpdateCores(route.id, allUpdates);
-    setPendingUpdates({});
-    setPendingPriorityUpdates({});
-    setIsConfirmingSave(false);
+    setIsSavingBulk(true);
+    try {
+      const saved = await onUpdateCores(route.id, allUpdates);
+      if (saved) {
+        setPendingUpdates({});
+        setPendingPriorityUpdates({});
+      }
+      setIsConfirmingSave(false);
+    } finally {
+      setIsSavingBulk(false);
+    }
   };
 
   const statusColors: Record<CoreStatus, string> = {
@@ -133,7 +150,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     High: 'text-rose-400 font-bold'
   };
 
-  const availableOwners = route.owners || ['ITEL', 'SYMC', 'UIH'];
+  const availableOwners: CoreOwner[] = route.owners?.length
+    ? route.owners
+    : ['ITEL', 'SYMC', 'UIH'];
   const filterOptions = ['All', 'None', ...availableOwners] as const;
   const priorityFilterOptions = ['All', 'High', 'Medium', 'Low'] as const;
 
@@ -296,33 +315,27 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                 Object.entries(tubes).map(([tubeIdStr, tubeCores]) => {
                   const tubeId = parseInt(tubeIdStr);
                   const isExpanded = expandedTubes[tubeId];
-                  const isAllSameOwner = tubeCores.every(c => c.owner === tubeCores[0].owner);
-                  const tubeOwner = isAllSameOwner ? tubeCores[0].owner : 'Mixed';
+                  const fullTubeCores = route.cores.filter(c => tubeIdForCore(c.id) === tubeId);
+                  const tubeOwner = getTubeOwner(fullTubeCores);
                   const effectiveOwner = pendingUpdates[tubeId] || tubeOwner;
 
-                  const isAllSamePriority = tubeCores.every(c => c.priority === tubeCores[0].priority);
-                  const effectivePriority = pendingPriorityUpdates[tubeId] || (isAllSamePriority ? tubeCores[0].priority : (tubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'));
+                  const isAllSamePriority = fullTubeCores.every(c => c.priority === fullTubeCores[0].priority);
+                  const effectivePriority = pendingPriorityUpdates[tubeId] || (isAllSamePriority ? fullTubeCores[0].priority : (fullTubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'));
                   
                   const userCompany = appUser?.owner && appUser.owner !== 'None' ? appUser.owner : null;
-                  const isGlobalAdminOrDesign = !userCompany && (appUser?.role === 'Admin' || appUser?.role === 'Design');
+                  const isGlobalAdminOrDesign = appUser?.role === 'Admin' || appUser?.role === 'Design';
 
                   // 1. Permission check for expanding tube:
                   // Can expand if global Admin/Design, or if tube belongs to user's company, or unassigned ('None')
                   const canExpand = 
                     isGlobalAdminOrDesign || 
                     !userCompany || 
-                    effectiveOwner === 'None' || 
-                    effectiveOwner === userCompany;
+                    tubeOwner === 'None' ||
+                    tubeOwner === userCompany;
 
-                  // 2. Permission check for editing tube owner:
-                  // Global Admin/Design can reassign any tube.
-                  // Company user can ONLY claim an unassigned tube ('None') or unassign their own tube ('None').
-                  // Company user CANNOT change owner of other companies' tubes!
-                  const canEditTubeOwner = 
-                    permissions.editRoutes && (
-                      isGlobalAdminOrDesign || 
-                      (userCompany && (effectiveOwner === 'None' || effectiveOwner === userCompany))
-                    );
+                  // Check the saved Owner of all 12 Cores, so filters and pending
+                  // selections cannot grant reassignment rights.
+                  const canEditTubeOwner = canChangeTubeOwner(appUser, tubeOwner);
 
                   // 3. Permission check for editing tube priority:
                   // ONLY the company that owns the tube can set/change its priority!
@@ -334,13 +347,6 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                       isGlobalAdminOrDesign || 
                       (userCompany && effectiveOwner === userCompany)
                     );
-
-                  // Options available in Owner dropdown for this user
-                  const selectableOwners = isGlobalAdminOrDesign 
-                    ? ['None', ...availableOwners] 
-                    : userCompany 
-                      ? ['None', userCompany] 
-                      : ['None'];
 
                   return (
                     <motion.div 
@@ -411,7 +417,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
                                     : 'bg-slate-800/60 border-slate-700 text-slate-400'
                               } ${!canEditTubePriority ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-500'}`}
-                              value={pendingPriorityUpdates[tubeId] || (isAllSamePriority ? tubeCores[0].priority : (tubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'))}
+                              value={pendingPriorityUpdates[tubeId] || (isAllSamePriority ? fullTubeCores[0].priority : (fullTubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'))}
                               onChange={(e) => {
                                 const nextPriority = e.target.value as CorePriority;
                                 setPendingPriorityUpdates(prev => ({ ...prev, [tubeId]: nextPriority }));
@@ -441,12 +447,10 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                   ? ownerColors[(pendingUpdates[tubeId] || tubeOwner) as CoreOwner]
                                   : 'bg-slate-800/60 border-slate-700 text-slate-400'
                               } ${(!permissions.editRoutes || !canEditTubeOwner) ? 'opacity-80 cursor-not-allowed' : 'hover:border-slate-500'}`}
-                              value={pendingUpdates[tubeId] || (isAllSameOwner ? tubeCores[0].owner : "None")}
+                              value={pendingUpdates[tubeId] || (tubeOwner === 'Mixed' ? 'None' : tubeOwner)}
                               onChange={(e) => {
                                 const nextOwner = e.target.value as CoreOwner;
-                                if (userCompany && nextOwner !== 'None' && nextOwner !== userCompany) {
-                                  return;
-                                }
+                                if (!canEditTubeOwner || (nextOwner !== 'None' && !availableOwners.includes(nextOwner))) return;
                                 setPendingUpdates(prev => ({ ...prev, [tubeId]: nextOwner }));
                               }}
                               title={
@@ -455,14 +459,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                   : undefined
                               }
                             >
-                              {['None', ...availableOwners].map(owner => {
-                                const isOptionDisabled = !!(userCompany && owner !== 'None' && owner !== userCompany && owner !== effectiveOwner);
-                                return (
-                                  <option key={owner} value={owner} disabled={isOptionDisabled}>
-                                    {owner}
-                                  </option>
-                                );
-                              })}
+                              {['None', ...availableOwners].map(owner => (
+                                <option key={owner} value={owner}>{owner}</option>
+                              ))}
                             </select>
                           </div>
                         </div>
@@ -587,9 +586,10 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                 </button>
                 <button 
                   onClick={handleBulkSave}
-                  className="flex-1 py-2.5 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all"
+                  disabled={isSavingBulk}
+                  className="flex-1 py-2.5 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all disabled:opacity-50"
                 >
-                  Confirm Save
+                  {isSavingBulk ? 'Saving...' : 'Confirm Save'}
                 </button>
               </div>
             </motion.div>
@@ -737,9 +737,10 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                             </button>
                             <button 
                               onClick={handleSave}
-                              className="flex-1 py-2 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all"
+                              disabled={isSavingCore}
+                              className="flex-1 py-2 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all disabled:opacity-50"
                             >
-                              Save Changes
+                              {isSavingCore ? 'Saving...' : 'Save Changes'}
                             </button>
                           </div>
                         </div>
