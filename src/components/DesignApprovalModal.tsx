@@ -1089,7 +1089,7 @@ export function DesignApprovalModal({
     const manyTypes = usedTypes.length > 2;
 
     return (
-      <div className={`${extraClass} flex ${manyTypes ? 'flex-col' : 'flex-col md:flex-row'} items-start gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl`}>
+      <div className={`${extraClass} approval-dark-feature flex ${manyTypes ? 'flex-col' : 'flex-col md:flex-row'} items-start gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl`}>
         <div className={`grid ${usedTypes.length === 1 ? 'grid-cols-1' : manyTypes ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : 'grid-cols-2'} gap-3 ${manyTypes ? 'w-full' : 'w-full md:w-[48%]'}`}>
           {usedTypes.map(encType => (
             <div key={encType.key} className="min-w-0 rounded-xl bg-white border border-sky-500/30 p-2 shadow-lg">
@@ -1121,18 +1121,18 @@ export function DesignApprovalModal({
         </div>
         <div className="space-y-2.5 flex-1 w-full">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-base md:text-lg font-black text-white tracking-wide">Enclosure Types ที่ใช้งานในเส้นทางนี้</h4>
-            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+            <h4 className="approval-dark-title text-base md:text-lg font-black text-white tracking-wide">Enclosure Types ที่ใช้งานในเส้นทางนี้</h4>
+            <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
               {usedTypes.length} Type
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+            <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
               OFC {totalC} Cores Standard
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+            <span className="approval-dark-badge-amber px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
               จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
             </span>
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed font-medium">
+          <p className="approval-dark-description text-xs text-slate-300 leading-relaxed font-medium">
             แสดงรูป Enclosure แยกตาม Type ที่ใช้งานในเส้นทางนี้ โดยแสดงแต่ละ Type เพียงครั้งเดียว
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
@@ -2933,13 +2933,13 @@ export function DesignApprovalModal({
                             return (
                               <div key={routeSched.id || rIdx} className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-900/90 shadow-lg">
                                 {/* Fiber Route Sharing Card Header */}
-                                <div className="p-3 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                                <div className="approval-dark-route-header p-3 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
                                   <div className="flex items-center gap-2.5 flex-wrap">
                                     <span className="px-2.5 py-1 rounded-md bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
                                       เส้นที่ {displayIdx}
                                     </span>
-                                    <strong className="text-white text-sm font-extrabold">{routeSched.routeName}</strong>
-                                    <span className="text-xs text-slate-400 font-medium">({routeSched.sectionName})</span>
+                                    <strong className="approval-dark-title text-white text-sm font-extrabold">{routeSched.routeName}</strong>
+                                    <span className="approval-dark-description text-xs text-slate-400 font-medium">({routeSched.sectionName})</span>
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="px-2 py-0.5 rounded bg-slate-800 text-sky-300 font-mono text-[11px] font-bold border border-slate-700">
@@ -2948,7 +2948,7 @@ export function DesignApprovalModal({
                                     <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[11px] font-bold border border-slate-700">
                                       ระยะทาง {routeSched.distanceKm} km
                                     </span>
-                                    <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-mono text-[11px] font-bold border border-sky-800">
+                                    <span className="approval-dark-badge-sky px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-mono text-[11px] font-bold border border-sky-800">
                                       Tier: {routeSched.tier || projectTierCompactLabel}
                                     </span>
                                   </div>
@@ -3211,7 +3211,7 @@ export function DesignApprovalModal({
                               const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
                               const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
                               return routeFt?.imageUrl ? (
-                                <div className="flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
+                                <div className="approval-dark-feature flex flex-col md:flex-row items-center gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl">
                                   <div className="relative group shrink-0">
                                     <img
                                       src={routeFt.imageUrl}
@@ -3228,17 +3228,17 @@ export function DesignApprovalModal({
                                   </div>
                                   <div className="space-y-2.5 flex-1 w-full">
                                     <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
-                                      <span className="text-base md:text-lg font-black text-white tracking-wide">
+                                      <span className="approval-dark-title text-base md:text-lg font-black text-white tracking-wide">
                                         ประเภทสาย Fiber Optic: {routeFt.name}
                                       </span>
-                                      <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
+                                      <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
                                         OFC {totalC} Cores Standard
                                       </span>
-                                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
+                                      <span className="approval-dark-badge-amber px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
                                         จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
                                       </span>
                                     </div>
-                                    <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                                    <p className="approval-dark-description text-xs text-slate-300 leading-relaxed font-medium">
                                       โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานขนาด {totalC} Core สำหรับการติดตั้งระบบโครงข่ายร่วมกัน (Infra Sharing) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล TIA/EIA-598
                                     </p>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">

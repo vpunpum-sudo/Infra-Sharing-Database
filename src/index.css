@@ -769,6 +769,35 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
   color: #ffffff !important;
 }
 
+/* Approval slides retain dark feature panels in the light theme. Keep their
+   foreground light without changing the white detail cards inside them. */
+.light-theme #root :is(.approval-dark-feature, .approval-dark-route-header) .approval-dark-title {
+  color: #ffffff !important;
+}
+
+.light-theme #root :is(.approval-dark-feature, .approval-dark-route-header) .approval-dark-description {
+  color: #cbd5e1 !important;
+}
+
+.light-theme #root :is(.approval-dark-feature, .approval-dark-route-header) .approval-dark-badge-sky {
+  color: #bae6fd !important;
+}
+
+.light-theme #root :is(.approval-dark-feature, .approval-dark-route-header) .approval-dark-badge-amber {
+  color: #fde68a !important;
+}
+
+/* The map remains visible behind the dialog, while its text and hint stay solid. */
+.light-theme #root .cut-fiber-modal {
+  background-color: #ffffff !important;
+}
+
+.light-theme #root .cut-fiber-info {
+  background-color: #e0f2fe !important;
+  color: #075985 !important;
+  border-color: #7dd3fc !important;
+}
+
 /* Physical & Tray Layout Viewers in Light Theme */
 .light-theme #physical-container [class*="bg-slate-800"] {
   background-color: #e2e8f0 !important;

@@ -2898,7 +2898,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                   const encIllustrationUrl = enclosure.imageUrl || encType?.imageUrl || encType?.icon || '';
                   if (!encIllustrationUrl) return null;
                   return (
-                    <div className="p-6 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-3xl border-2 border-slate-700/80 shadow-2xl flex flex-col sm:flex-row items-center gap-6">
+                    <div className="approval-dark-feature p-6 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-3xl border-2 border-slate-700/80 shadow-2xl flex flex-col sm:flex-row items-center gap-6">
                       <div className="relative group shrink-0">
                         <img 
                           src={encIllustrationUrl} 
@@ -2916,14 +2916,14 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                       </div>
                       <div className="space-y-2 flex-1 w-full">
                         <div className="text-xs font-black text-amber-300 flex items-center gap-2 flex-wrap">
-                          <span className="text-sm sm:text-base font-black text-white">
+                          <span className="approval-dark-title text-sm sm:text-base font-black text-white">
                             รูปภาพประกอบอุปกรณ์ Enclosure: {enclosure.name}
                           </span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-[10.5px] font-mono font-bold border border-brand-500/40">
+                          <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-[10.5px] font-mono font-bold border border-brand-500/40">
                             Approval Report Illustration
                           </span>
                         </div>
-                        <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                        <p className="approval-dark-description text-xs text-slate-300 leading-relaxed font-medium">
                           รูปภาพไดอะแกรมหรือภาพถ่ายฮาร์ดแวร์ Enclosure นี้ใช้สำหรับประกอบรายงานการออกแบบและแบบขออนุมัติโครงการ (Design Approval) ตามมาตรฐานงานก่อสร้างโครงข่าย
                         </p>
                       </div>

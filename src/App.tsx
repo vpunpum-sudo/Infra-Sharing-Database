@@ -1995,7 +1995,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           const total = route.totalLength ?? Math.abs((route.markEnd ?? 0) - (route.markStart ?? 0));
           return (
             <div className="fixed inset-0 bg-slate-950/70 z-[2100] flex items-center justify-center p-4">
-              <div className="glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
+              <div className="cut-fiber-modal glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
                 <h2 className="text-xl font-black flex items-center gap-2 mb-2"><Scissors className="text-sky-400" /> Split Fiber route</h2>
                 <p className="text-sm text-slate-400 mb-5">{route.name}</p>
                 <label className="block text-xs font-bold mb-2">Split at Enclosure</label>
@@ -2006,7 +2006,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitFirstName} onChange={e => setSplitFirstName(e.target.value)} />
                 <label className="block text-xs font-bold mb-2">Second segment name</label>
                 <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitSecondName} onChange={e => setSplitSecondName(e.target.value)} />
-                {preview && <div className="text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
+                {preview && <div className="cut-fiber-info text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
                   {total > 0 ? `${(total * preview.fraction).toFixed(1)} m + ${(total * (1 - preview.fraction)).toFixed(1)} m = ${total.toFixed(1)} m` : 'Both segments retain the full Fiber path.'}
                 </div>}
                 <div className="flex justify-end gap-3">
@@ -2028,7 +2028,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           const total = route.totalLength ?? Math.abs((route.markEnd ?? 0) - (route.markStart ?? 0));
           return (
             <div className="fixed inset-0 bg-slate-950/70 z-[2100] flex items-center justify-center p-4">
-              <div className="glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
+              <div className="cut-fiber-modal glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
                 <h2 className="text-xl font-black flex items-center gap-2 mb-2"><Scissors className="text-sky-400" /> Cut Fiber Here</h2>
                 <p className="text-sm text-slate-400 mb-2">{route.name}</p>
                 <p className="text-xs text-sky-200 mb-5">Cut point: {preview.point.lat.toFixed(6)}, {preview.point.lng.toFixed(6)} · Fiber remains visible on both sides.</p>
@@ -2036,7 +2036,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitFirstName} onChange={e => setSplitFirstName(e.target.value)} />
                 <label className="block text-xs font-bold mb-2">Second segment name</label>
                 <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitSecondName} onChange={e => setSplitSecondName(e.target.value)} />
-                <div className="text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
+                <div className="cut-fiber-info text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
                   {total > 0
                     ? `${(total * preview.fraction).toFixed(1)} m + ${(total * (1 - preview.fraction)).toFixed(1)} m = ${total.toFixed(1)} m`
                     : 'Both segments retain the full Fiber path.'}
