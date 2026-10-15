@@ -734,7 +734,21 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 .light-theme #root :is(.bg-rose-500, .bg-rose-600, .bg-pink-500, .bg-pink-600) { background-color: #be123c !important; }
 .light-theme #root :is(.bg-indigo-500, .bg-indigo-600) { background-color: #4338ca !important; }
 .light-theme #root :is(.bg-amber-500, .bg-amber-600) { color: #0f172a !important; }
-.light-theme #root [class*="from-brand-"][class*="to-brand-"].text-white { color: #ffffff !important; }
+.light-theme #root :is(
+  [class*="from-brand-"][class*="to-brand-"],
+  [class*="from-sky-"][class*="to-brand-"],
+  [class*="from-sky-"][class*="to-blue-"]
+) {
+  color: #ffffff !important;
+}
+
+.light-theme #root :is(
+  [class*="from-brand-"][class*="to-brand-"],
+  [class*="from-sky-"][class*="to-brand-"],
+  [class*="from-sky-"][class*="to-blue-"]
+) :is(h1, h2, h3, p, span, svg) {
+  color: #ffffff !important;
+}
 
 .light-theme #root :is(.bg-brand-500, .bg-brand-600, .bg-brand-700,
   .bg-sky-500, .bg-sky-600, .bg-blue-500, .bg-blue-600,
