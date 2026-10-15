@@ -1,6 +1,6 @@
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, Tooltip, useMap, LayersControl, LayerGroup, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, Tooltip, useMap, LayersControl, LayerGroup, Pane, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
 import { useMapDrawing } from '../hooks/useMapDrawing';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
@@ -54,12 +54,15 @@ interface FiberMapProps {
   onMapClick: (point: Point) => void;
   onRouteClick: (route: Route) => void;
   onEnclosureClick?: (enclosure: FiberEnclosure) => void;
+  onOpenRouteDetail?: (route: Route) => void;
+  onOpenEnclosureDetail?: (enclosure: FiberEnclosure) => void;
   onEditRoute?: (route: Route) => void;
   onSplitRoute?: (route: Route) => void;
   onEditEnclosure?: (enclosure: FiberEnclosure) => void;
   onEnclosureDragEnd?: (enclosure: FiberEnclosure, point: Point) => void;
   selectedRouteId?: string;
   selectedEnclosureId?: string;
+  detailPanelOpen?: boolean;
   editingRouteId?: string | null;
   editingEnclosureId?: string | null;
   onMarkerDragEnd?: (index: number, point: Point) => void;
@@ -1251,6 +1254,185 @@ function MapSearchControl({
   );
 }
 
+function RouteTooltipContent({ route }: { route: Route }) {
+  return (
+    <div className="p-1 space-y-2 text-slate-800 dark:text-slate-100">
+      {/* Route Name & Capacity Header */}
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-1.5">
+        <div className="flex items-start justify-between gap-3">
+          <span className="font-bold text-[11.5px] leading-snug text-slate-900 dark:text-slate-100">
+            {route.name}
+          </span>
+          <span className="px-2 py-0.5 rounded bg-blue-500/15 border border-blue-500/30 text-[9.5px] font-black text-blue-600 dark:text-blue-400 shrink-0">
+            {route.capacity}F
+          </span>
+        </div>
+        {(route.tier || route.fiberType) && (
+          <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500 block mt-0.5">
+            {route.tier} {route.fiberType ? `• ${route.fiberType}` : ''}
+          </span>
+        )}
+      </div>
+
+      {/* Length & ML หัว-ท้าย */}
+      <div className="grid grid-cols-2 gap-2 py-1.5 bg-slate-100 dark:bg-slate-950/60 rounded-xl px-2.5 text-[9px] font-semibold border border-slate-200 dark:border-slate-800">
+        <div>
+          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">Length</span>
+          <span className="font-bold text-blue-600 dark:text-blue-400 text-[10px]">
+            {route.totalLength !== undefined
+              ? `${route.totalLength.toLocaleString()} m`
+              : (route.markEnd !== undefined && route.markStart !== undefined
+                  ? `${Math.abs(route.markEnd - route.markStart).toLocaleString()} m`
+                  : '-')}
+          </span>
+        </div>
+        <div>
+          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">ML (หัว - ท้าย)</span>
+          <span className="font-bold text-slate-700 dark:text-slate-200">
+            {(route.markStart !== undefined || route.markEnd !== undefined) ? (
+              <span className="font-mono text-[9px]">
+                {route.markStart !== undefined ? route.markStart.toLocaleString() : '-'} → {route.markEnd !== undefined ? route.markEnd.toLocaleString() : '-'}
+              </span>
+            ) : (
+              <span className="text-slate-400 text-[9px]">-</span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* Owner Usage Proportion (สัดส่วนการใช้งานของแต่ละ Owner) */}
+      {(() => {
+        const ownerColorMap: Record<string, { text: string, bar: string }> = {
+          ITEL: { text: 'text-amber-500 font-bold', bar: 'bg-amber-500' },
+          SYMC: { text: 'text-pink-500 font-bold', bar: 'bg-pink-500' },
+          UIH: { text: 'text-sky-500 font-bold', bar: 'bg-sky-500' },
+          None: { text: 'text-slate-400 font-bold', bar: 'bg-slate-400' }
+        };
+
+        const cores = route.cores || [];
+        const totalCores = route.capacity || cores.length || 1;
+
+        const routeOwnersList: CoreOwner[] = (route.owners && route.owners.length > 0)
+          ? route.owners
+          : ((route.tierSharingPartners && route.tierSharingPartners.length > 0)
+            ? route.tierSharingPartners
+            : []);
+
+        const distinctOwners = Array.from(new Set([
+          ...routeOwnersList,
+          ...cores.map(c => c.owner)
+        ])).filter(o => o && o !== 'None');
+
+        if (distinctOwners.length === 0) distinctOwners.push('None');
+
+        const ownerBreakdowns = distinctOwners.map(owner => {
+          const ownerCores = cores.filter(c => c.owner === owner);
+          const assignedCount = ownerCores.length;
+          const percentCapacity = totalCores > 0 ? (assignedCount / totalCores) * 100 : 0;
+
+          const coreIds = ownerCores.map(c => c.id);
+          const coreRangesStr = formatNumberRanges(coreIds);
+          const tubeIds = ownerCores.map(c => Math.floor((c.id - 1) / 12) + 1);
+          const tubeRangesStr = formatNumberRanges(tubeIds).split(', ').map(r => r.includes('-') ? `T${r.replace('-', '-T')}` : `T${r}`).join(', ');
+
+          const priorityTubeIds = Array.from(new Set(
+            ownerCores
+              .filter(c => c.priority === 'High')
+              .map(c => Math.floor((c.id - 1) / 12) + 1)
+          )).sort((a, b) => a - b);
+
+          const priorityTubeRangesStr = priorityTubeIds.length > 0
+            ? formatNumberRanges(priorityTubeIds).split(', ').map(r => r.includes('-') ? `T${r.replace('-', '-T')}` : `T${r}`).join(', ')
+            : null;
+
+          return {
+            owner,
+            assignedCount,
+            percentCapacity,
+            coreRangesStr,
+            tubeRangesStr,
+            priorityTubeIds,
+            priorityTubeRangesStr
+          };
+        }).filter(b => b.assignedCount > 0);
+
+        const totalPriorityTubesCount = Array.from(new Set(
+          cores.filter(c => c.priority === 'High').map(c => Math.floor((c.id - 1) / 12) + 1)
+        )).length;
+
+        return (
+          <div className="space-y-1.5 pt-0.5">
+            <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-slate-500">
+              <span>Owner Share & Tube Priority</span>
+              {totalPriorityTubesCount > 0 ? (
+                <span className="text-rose-500 font-bold flex items-center gap-1">
+                  ★ {totalPriorityTubesCount} Priority {totalPriorityTubesCount === 1 ? 'Tube' : 'Tubes'}
+                </span>
+              ) : (
+                <span>Standard Priority</span>
+              )}
+            </div>
+
+            {/* Segmented Progress Bar */}
+            <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex">
+              {ownerBreakdowns.map((b) => (
+                <div
+                  key={b.owner}
+                  style={{ width: `${b.percentCapacity}%` }}
+                  className={`h-full ${ownerColorMap[b.owner]?.bar || 'bg-slate-400'}`}
+                  title={`${b.owner}: ${b.assignedCount} Cores (${b.percentCapacity.toFixed(0)}%)`}
+                />
+              ))}
+            </div>
+
+            {/* Owner Breakdown Rows with Priority Tubes */}
+            <div className="space-y-1 pt-1">
+              {ownerBreakdowns.map((b) => {
+                const theme = ownerColorMap[b.owner] || ownerColorMap.None;
+                return (
+                  <div key={b.owner} className="flex items-center justify-between text-[9px] py-1 border-b border-slate-100 dark:border-slate-800/60 last:border-0 gap-3">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${theme.bar}`} />
+                      <span className={`font-black uppercase tracking-tight ${theme.text}`}>
+                        {b.owner}
+                      </span>
+                      {b.tubeRangesStr !== '-' && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[8px] font-bold text-slate-700 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700">
+                          {b.tubeRangesStr}
+                        </span>
+                      )}
+                      {b.coreRangesStr !== '-' && (
+                        <span className="font-mono text-[8.5px] text-slate-500 font-semibold truncate">
+                          (Core {b.coreRangesStr})
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 font-mono text-[8.5px]">
+                      <span className="text-slate-400 font-medium">
+                        {b.assignedCount}C ({b.percentCapacity.toFixed(0)}%)
+                      </span>
+                      {b.priorityTubeRangesStr ? (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold text-[8px] flex items-center gap-1">
+                          ★ Priority: {b.priorityTubeRangesStr}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[8px] italic">
+                          Normal
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 export default function FiberMap({ 
   enclosures, 
   routes, 
@@ -1263,8 +1445,11 @@ export default function FiberMap({
   onMapClick, 
   onRouteClick, 
   onEnclosureClick,
+  onOpenRouteDetail,
+  onOpenEnclosureDetail,
   selectedRouteId,
   selectedEnclosureId,
+  detailPanelOpen,
   editingRouteId,
   onMarkerDragEnd,
   onMarkerClick,
@@ -1300,6 +1485,10 @@ export default function FiberMap({
   useEffect(() => {
     if (drawingMode !== 'none') setPopupData(null);
   }, [drawingMode]);
+
+  useEffect(() => {
+    if (detailPanelOpen) setPopupData(null);
+  }, [detailPanelOpen]);
 
   const handleEnclosureClick = (enclosure: FiberEnclosure, e: L.LeafletMouseEvent) => {
     if (e.originalEvent) {
@@ -1451,7 +1640,8 @@ export default function FiberMap({
         </LayersControl.BaseLayer>
 
         <LayersControl.Overlay checked name="Enclosures">
-          <LayerGroup>
+          <Pane name="enclosures" style={{ zIndex: 450 }}>
+            <LayerGroup>
             {enclosures.map(enclosure => {
               const type = getEnclosureType(enclosure);
               const color = type ? type.color : '#ef4444';
@@ -1486,13 +1676,11 @@ export default function FiberMap({
                       }
                     }}
                   >
-                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
-                      <EnclosureTooltipContent 
-                        enclosure={enclosure} 
-                        enclosureTypes={enclosureTypes} 
-                        routes={routes} 
-                      />
-                    </Tooltip>
+                    {!popupData && (
+                      <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
+                        <EnclosureTooltipContent enclosure={enclosure} enclosureTypes={enclosureTypes} routes={routes} />
+                      </Tooltip>
+                    )}
                   </Marker>
                 );
               }
@@ -1514,213 +1702,58 @@ export default function FiberMap({
                     contextmenu: (e) => handleEnclosureContextMenu(enclosure, e)
                   }}
                 >
-                  <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
-                    <EnclosureTooltipContent 
-                      enclosure={enclosure} 
-                      enclosureTypes={enclosureTypes} 
-                      routes={routes} 
-                    />
-                  </Tooltip>
+                  {!popupData && (
+                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
+                      <EnclosureTooltipContent enclosure={enclosure} enclosureTypes={enclosureTypes} routes={routes} />
+                    </Tooltip>
+                  )}
                 </CircleMarker>
               );
             })}
-          </LayerGroup>
+            </LayerGroup>
+          </Pane>
         </LayersControl.Overlay>
 
         <LayersControl.Overlay checked name="Routes">
           <LayerGroup>
             {visibleRoutes.map(route => (
-              <Polyline
-                key={route.id}
-                positions={route.path.map(p => [p.lat, p.lng])}
-                bubblingMouseEvents={false}
-                pathOptions={{
-                  color: (selectedRouteId === route.id || hoveredObjectId === route.id) ? '#3b82f6' : getRouteColor(route),
-                  weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 3.8 : 2.2,
-                  opacity: 0.8
-                }}
-                eventHandlers={{
-                  click: (e) => handleRouteClick(route, e),
-                  contextmenu: (e) => handleRouteContextMenu(route, e)
-                }}
-              >
-                <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
-                  <div className="p-1 space-y-2 text-slate-800 dark:text-slate-100">
-                    {/* Route Name & Capacity Header */}
-                    <div className="border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="font-bold text-[11.5px] leading-snug text-slate-900 dark:text-slate-100">
-                          {route.name}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-blue-500/15 border border-blue-500/30 text-[9.5px] font-black text-blue-600 dark:text-blue-400 shrink-0">
-                          {route.capacity}F
-                        </span>
-                      </div>
-                      {(route.tier || route.fiberType) && (
-                        <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500 block mt-0.5">
-                          {route.tier} {route.fiberType ? `• ${route.fiberType}` : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Length & ML หัว-ท้าย */}
-                    <div className="grid grid-cols-2 gap-2 py-1.5 bg-slate-100 dark:bg-slate-950/60 rounded-xl px-2.5 text-[9px] font-semibold border border-slate-200 dark:border-slate-800">
-                      <div>
-                        <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">Length</span>
-                        <span className="font-bold text-blue-600 dark:text-blue-400 text-[10px]">
-                          {route.totalLength !== undefined 
-                            ? `${route.totalLength.toLocaleString()} m` 
-                            : (route.markEnd !== undefined && route.markStart !== undefined 
-                                ? `${Math.abs(route.markEnd - route.markStart).toLocaleString()} m` 
-                                : '-')}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">ML (หัว - ท้าย)</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-200">
-                          {(route.markStart !== undefined || route.markEnd !== undefined) ? (
-                            <span className="font-mono text-[9px]">
-                              {route.markStart !== undefined ? route.markStart.toLocaleString() : '-'} → {route.markEnd !== undefined ? route.markEnd.toLocaleString() : '-'}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[9px]">-</span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Owner Usage Proportion (สัดส่วนการใช้งานของแต่ละ Owner) */}
-                    {(() => {
-                      const ownerColorMap: Record<string, { text: string, bar: string }> = {
-                        ITEL: { text: 'text-amber-500 font-bold', bar: 'bg-amber-500' },
-                        SYMC: { text: 'text-pink-500 font-bold', bar: 'bg-pink-500' },
-                        UIH: { text: 'text-sky-500 font-bold', bar: 'bg-sky-500' },
-                        None: { text: 'text-slate-400 font-bold', bar: 'bg-slate-400' }
-                      };
-
-                      const cores = route.cores || [];
-                      const totalCores = route.capacity || cores.length || 1;
-                      
-                      const routeOwnersList: CoreOwner[] = (route.owners && route.owners.length > 0)
-                        ? route.owners
-                        : ((route.tierSharingPartners && route.tierSharingPartners.length > 0)
-                          ? route.tierSharingPartners
-                          : []);
-
-                      const distinctOwners = Array.from(new Set([
-                        ...routeOwnersList,
-                        ...cores.map(c => c.owner)
-                      ])).filter(o => o && o !== 'None');
-
-                      if (distinctOwners.length === 0) distinctOwners.push('None');
-
-                      const ownerBreakdowns = distinctOwners.map(owner => {
-                        const ownerCores = cores.filter(c => c.owner === owner);
-                        const assignedCount = ownerCores.length;
-                        const percentCapacity = totalCores > 0 ? (assignedCount / totalCores) * 100 : 0;
-
-                        const coreIds = ownerCores.map(c => c.id);
-                        const coreRangesStr = formatNumberRanges(coreIds);
-                        const tubeIds = ownerCores.map(c => Math.floor((c.id - 1) / 12) + 1);
-                        const tubeRangesStr = formatNumberRanges(tubeIds).split(', ').map(r => r.includes('-') ? `T${r.replace('-', '-T')}` : `T${r}`).join(', ');
-
-                        const priorityTubeIds = Array.from(new Set(
-                          ownerCores
-                            .filter(c => c.priority === 'High')
-                            .map(c => Math.floor((c.id - 1) / 12) + 1)
-                        )).sort((a, b) => a - b);
-
-                        const priorityTubeRangesStr = priorityTubeIds.length > 0
-                          ? formatNumberRanges(priorityTubeIds).split(', ').map(r => r.includes('-') ? `T${r.replace('-', '-T')}` : `T${r}`).join(', ')
-                          : null;
-
-                        return {
-                          owner,
-                          assignedCount,
-                          percentCapacity,
-                          coreRangesStr,
-                          tubeRangesStr,
-                          priorityTubeIds,
-                          priorityTubeRangesStr
-                        };
-                      }).filter(b => b.assignedCount > 0);
-
-                      const totalPriorityTubesCount = Array.from(new Set(
-                        cores.filter(c => c.priority === 'High').map(c => Math.floor((c.id - 1) / 12) + 1)
-                      )).length;
-
-                      return (
-                        <div className="space-y-1.5 pt-0.5">
-                          <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-slate-500">
-                            <span>Owner Share & Tube Priority</span>
-                            {totalPriorityTubesCount > 0 ? (
-                              <span className="text-rose-500 font-bold flex items-center gap-1">
-                                ★ {totalPriorityTubesCount} Priority {totalPriorityTubesCount === 1 ? 'Tube' : 'Tubes'}
-                              </span>
-                            ) : (
-                              <span>Standard Priority</span>
-                            )}
-                          </div>
-
-                          {/* Segmented Progress Bar */}
-                          <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                            {ownerBreakdowns.map((b) => (
-                              <div 
-                                key={b.owner}
-                                style={{ width: `${b.percentCapacity}%` }}
-                                className={`h-full ${ownerColorMap[b.owner]?.bar || 'bg-slate-400'}`}
-                                title={`${b.owner}: ${b.assignedCount} Cores (${b.percentCapacity.toFixed(0)}%)`}
-                              />
-                            ))}
-                          </div>
-
-                          {/* Owner Breakdown Rows with Priority Tubes */}
-                          <div className="space-y-1 pt-1">
-                            {ownerBreakdowns.map((b) => {
-                              const theme = ownerColorMap[b.owner] || ownerColorMap.None;
-                              return (
-                                <div key={b.owner} className="flex items-center justify-between text-[9px] py-1 border-b border-slate-100 dark:border-slate-800/60 last:border-0 gap-3">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${theme.bar}`} />
-                                    <span className={`font-black uppercase tracking-tight ${theme.text}`}>
-                                      {b.owner}
-                                    </span>
-                                    {b.tubeRangesStr !== '-' && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[8px] font-bold text-slate-700 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700">
-                                        {b.tubeRangesStr}
-                                      </span>
-                                    )}
-                                    {b.coreRangesStr !== '-' && (
-                                      <span className="font-mono text-[8.5px] text-slate-500 font-semibold truncate">
-                                        (Core {b.coreRangesStr})
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-2 shrink-0 font-mono text-[8.5px]">
-                                    <span className="text-slate-400 font-medium">
-                                      {b.assignedCount}C ({b.percentCapacity.toFixed(0)}%)
-                                    </span>
-                                    {b.priorityTubeRangesStr ? (
-                                      <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold text-[8px] flex items-center gap-1">
-                                        ★ Priority: {b.priorityTubeRangesStr}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400 text-[8px] italic">
-                                        Normal
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </Tooltip>
-              </Polyline>
+              <Fragment key={route.id}>
+                {/* A wider invisible stroke makes thin Fiber routes practical to click without changing their appearance. */}
+                <Polyline
+                  positions={route.path.map(p => [p.lat, p.lng])}
+                  bubblingMouseEvents={false}
+                  pathOptions={{ color: '#000000', weight: 16, opacity: 0.001 }}
+                  eventHandlers={{
+                    click: (e) => handleRouteClick(route, e),
+                    contextmenu: (e) => handleRouteContextMenu(route, e)
+                  }}
+                >
+                  {!popupData && (
+                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
+                      <RouteTooltipContent route={route} />
+                    </Tooltip>
+                  )}
+                </Polyline>
+                <Polyline
+                  positions={route.path.map(p => [p.lat, p.lng])}
+                  bubblingMouseEvents={false}
+                  pathOptions={{
+                    color: (selectedRouteId === route.id || hoveredObjectId === route.id) ? '#3b82f6' : getRouteColor(route),
+                    weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 3.8 : 2.2,
+                    opacity: 0.8
+                  }}
+                  eventHandlers={{
+                    click: (e) => handleRouteClick(route, e),
+                    contextmenu: (e) => handleRouteContextMenu(route, e)
+                  }}
+                >
+                  {!popupData && (
+                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
+                      <RouteTooltipContent route={route} />
+                    </Tooltip>
+                  )}
+                </Polyline>
+              </Fragment>
             ))}
           </LayerGroup>
         </LayersControl.Overlay>
@@ -1856,8 +1889,8 @@ export default function FiberMap({
         <Popup
           key={`${popupData.kind}-${popupData.type}-${popupData.data.id}-${popupData.position.join('-')}`}
           position={popupData.position}
-          maxWidth={popupData.kind === 'detail' ? 420 : 180}
-          minWidth={popupData.kind === 'detail' ? 220 : 140}
+          maxWidth={popupData.kind === 'menu' ? 220 : popupData.type === 'route' ? 500 : 420}
+          minWidth={popupData.kind === 'menu' ? 190 : 280}
           eventHandlers={{
             remove: () => setPopupData(current =>
               current?.kind === popupData.kind &&
@@ -1869,11 +1902,11 @@ export default function FiberMap({
                 : current
             )
           }}
-          className={popupData.kind === 'menu' ? 'fiber-context-menu' : 'fiber-detail-popup'}
+          className={popupData.kind === 'menu' ? 'fiber-context-menu' : 'fiber-detail-popup light-theme'}
         >
           {popupData.kind === 'detail' ? (
             popupData.type === 'enclosure' ? (
-              <div className="max-h-[55vh] max-w-[420px] overflow-y-auto">
+              <div className="max-h-[55vh] overflow-y-auto" style={{ width: 'min(360px, calc(100vw - 96px))' }}>
                 <EnclosureTooltipContent
                   enclosure={popupData.data}
                   enclosureTypes={enclosureTypes}
@@ -1881,20 +1914,12 @@ export default function FiberMap({
                 />
               </div>
             ) : (
-              <div className="min-w-[220px] max-w-[340px] space-y-2 p-1 text-slate-800 dark:text-slate-100">
-                <div className="font-bold text-sm leading-snug">{popupData.data.name}</div>
-                <div className="flex flex-wrap gap-1 text-[10px] font-semibold">
-                  <span className="rounded bg-blue-500/15 px-2 py-1 text-blue-600 dark:text-blue-400">{popupData.data.capacity}F</span>
-                  {popupData.data.fiberType && <span className="rounded bg-slate-500/15 px-2 py-1">{popupData.data.fiberType}</span>}
-                  {popupData.data.tier && <span className="rounded bg-slate-500/15 px-2 py-1">{popupData.data.tier}</span>}
-                </div>
-                {popupData.data.totalLength !== undefined && (
-                  <div className="text-xs">Length: {popupData.data.totalLength.toLocaleString()} m</div>
-                )}
+              <div className="max-h-[55vh] overflow-y-auto" style={{ width: 'min(460px, calc(100vw - 96px))' }}>
+                <RouteTooltipContent route={popupData.data} />
               </div>
             )
           ) : (
-          <div className="flex flex-col gap-1 p-1 min-w-[140px] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
+          <div className="flex flex-col gap-1 p-1 min-w-[180px] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -1926,12 +1951,17 @@ export default function FiberMap({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setPopupData({ ...popupData, kind: 'detail' });
+                if (popupData.type === 'route') {
+                  onOpenRouteDetail?.(popupData.data);
+                } else {
+                  onOpenEnclosureDetail?.(popupData.data);
+                }
+                setPopupData(null);
               }}
               className="flex items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest"
             >
               <ExternalLink className="w-3 h-3 text-brand-500" />
-              <span>Detail</span>
+              <span>{popupData.type === 'route' ? 'Core details' : 'Enclosure details'}</span>
             </button>
           </div>
           )}

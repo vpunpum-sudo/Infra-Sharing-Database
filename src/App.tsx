@@ -40,6 +40,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [draftRoute, setDraftRoute] = useState<Point[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
   const [selectedEnclosureId, setSelectedEnclosureId] = useState<string | undefined>();
+  const [detailPanel, setDetailPanel] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
   const [sidebarFocusTarget, setSidebarFocusTarget] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
@@ -252,6 +253,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     } else {
       setSelectedRouteId(undefined);
       setSelectedEnclosureId(undefined);
+      setDetailPanel(null);
       setSidebarFocusTarget(null);
     }
   };
@@ -260,6 +262,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (drawingMode === 'none') {
       setSelectedEnclosureId(enclosure.id);
       setSelectedRouteId(undefined);
+      setDetailPanel(null);
       setEnclosuresExpanded(true);
       setSidebarCollapsed(false);
       setSidebarFocusTarget({ type: 'enclosure', id: enclosure.id });
@@ -270,6 +273,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (drawingMode === 'none') {
       setSelectedRouteId(route.id);
       setSelectedEnclosureId(undefined);
+      setDetailPanel(null);
       setRoutesExpanded(true);
       setSidebarCollapsed(false);
       setSidebarFocusTarget({ type: 'route', id: route.id });
@@ -301,6 +305,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       setErrorModalOpen('You do not have permission to edit routes.');
       return;
     }
+    setDetailPanel(null);
     setDrawingMode('edit-route');
     setEditingRouteId(route.id);
     setDraftRoute(route.path);
@@ -720,6 +725,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       setErrorModalOpen('You do not have permission to edit enclosures.');
       return;
     }
+    setDetailPanel(null);
     setEditingEnclosureId(enclosure.id);
     setEnclosureNameInput(enclosure.name);
     setEnclosureLatInput(enclosure.position.lat.toString());
@@ -1212,7 +1218,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     }
   };
 
-  const selectedRoute = routes.find(r => r.id === selectedRouteId);
+  const panelRoute = detailPanel?.type === 'route' ? routes.find(r => r.id === detailPanel.id) : undefined;
+  const panelEnclosure = detailPanel?.type === 'enclosure' ? enclosures.find(e => e.id === detailPanel.id) : undefined;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden font-sans bg-slate-950 text-slate-100">
@@ -1484,7 +1491,11 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                             key={route.id}
                             id={`sidebar-route-${route.id}`}
                             onClick={() => {
-                              if (drawingMode === 'none') setSelectedRouteId(route.id);
+                              if (drawingMode === 'none') {
+                                setSelectedRouteId(route.id);
+                                setSelectedEnclosureId(undefined);
+                                setDetailPanel({ type: 'route', id: route.id });
+                              }
                             }}
                             className={`p-3 rounded-2xl cursor-pointer text-sm transition-all border ${selectedRouteId === route.id ? 'bg-slate-800 border-brand-500 shadow-lg shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${editingRouteId === route.id ? 'opacity-50 ring-2 ring-amber-500' : ''}`}
                           >
@@ -1570,6 +1581,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                               if (drawingMode === 'none') {
                                 setSelectedEnclosureId(enclosure.id);
                                 setSelectedRouteId(undefined);
+                                setDetailPanel({ type: 'enclosure', id: enclosure.id });
                               }
                             }}
                           >
@@ -1706,6 +1718,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             onMapClick={handleMapClick}
             onRouteClick={handleRouteMapSelection}
             onEnclosureClick={handleEnclosureClick}
+            onOpenRouteDetail={(route) => setDetailPanel({ type: 'route', id: route.id })}
+            onOpenEnclosureDetail={(enclosure) => setDetailPanel({ type: 'enclosure', id: enclosure.id })}
             onEditRoute={startEditRoute}
             onSplitRoute={openSplitRoute}
             onEditEnclosure={startEditEnclosure}
@@ -1716,6 +1730,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             }}
             selectedRouteId={selectedRouteId}
             selectedEnclosureId={selectedEnclosureId}
+            detailPanelOpen={detailPanel !== null}
             editingRouteId={editingRouteId}
             editingEnclosureId={editingEnclosureId}
             onMarkerDragEnd={handleMarkerDragEnd}
@@ -1727,26 +1742,26 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       </div>
 
       {/* Right Panel: Core Manager */}
-      {selectedRoute && drawingMode === 'none' && (
+      {panelRoute && drawingMode === 'none' && (
         <CoreManager
-          route={selectedRoute}
+          route={panelRoute}
           appUser={appUser}
-          onClose={() => setSelectedRouteId(undefined)}
+          onClose={() => setDetailPanel(null)}
           onUpdateCore={handleUpdateCore}
           onUpdateCores={handleUpdateCores}
         />
       )}
 
       {/* Right Panel: Splice Manager */}
-      {selectedEnclosureId && drawingMode === 'none' && enclosures.find(n => n.id === selectedEnclosureId) && (
+      {panelEnclosure && drawingMode === 'none' && (
         <SpliceManager
-          enclosure={enclosures.find(n => n.id === selectedEnclosureId)!}
+          enclosure={panelEnclosure}
           routes={routes}
           enclosureTypes={enclosureTypes}
           fiberTypes={fiberTypes}
           fiberColorConfigs={fiberColorConfigs}
           appUser={appUser}
-          onClose={() => setSelectedEnclosureId(undefined)}
+          onClose={() => setDetailPanel(null)}
           onSplice={handleSplice}
           onUnsplice={handleUnsplice}
           onUnspliceAll={handleUnspliceAll}
@@ -1758,6 +1773,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           onUpdateCore={handleUpdateCore}
           onUpdateEnclosure={handleUpdateEnclosure}
           onEditEnclosure={(enclosure) => {
+            setDetailPanel(null);
             setEditingEnclosureId(enclosure.id);
             setEnclosureNameInput(enclosure.name);
             setEnclosureLatInput(enclosure.position.lat.toFixed(6));
