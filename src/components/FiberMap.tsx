@@ -1891,6 +1891,7 @@ export default function FiberMap({
           position={popupData.position}
           maxWidth={popupData.kind === 'menu' ? 220 : popupData.type === 'route' ? 500 : 420}
           minWidth={popupData.kind === 'menu' ? 190 : 280}
+          autoPanPaddingTopLeft={[16, popupData.kind === 'detail' ? 80 : 16]}
           eventHandlers={{
             remove: () => setPopupData(current =>
               current?.kind === popupData.kind &&
