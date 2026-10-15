@@ -126,6 +126,8 @@
 
 .enclosure-map-icon {
   box-sizing: border-box;
+  max-width: none !important;
+  max-height: none !important;
   object-fit: contain;
   padding: 2px;
   background: #ffffff;
