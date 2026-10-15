@@ -18,8 +18,8 @@ import { ForceChangePassword } from './components/ForceChangePassword';
 import SystemManual from './components/SystemManual';
 import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, User as AppUser } from './types';
 import { generateCores, DEFAULT_PERMISSIONS } from './constants';
-import { getClosestPointOnRoute, insertPointOnRoute, splitRoutePath } from './utils/geo';
-import { prepareRouteSplit } from './utils/splitRoute';
+import { getClosestPointOnRoute, getDistance, insertPointOnRoute, splitRoutePath } from './utils/geo';
+import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './utils/splitRoute';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -87,6 +87,10 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [splitFirstName, setSplitFirstName] = useState('');
   const [splitSecondName, setSplitSecondName] = useState('');
   const [splittingRoute, setSplittingRoute] = useState(false);
+  const [cutRouteId, setCutRouteId] = useState<string | null>(null);
+  const [cutPoint, setCutPoint] = useState<Point | null>(null);
+  const [cutEnclosurePrompt, setCutEnclosurePrompt] = useState<{ firstId: string; secondId: string; cutId: string; point: Point } | null>(null);
+  const [pendingCutEnclosure, setPendingCutEnclosure] = useState<{ firstId: string; secondId: string; cutId: string; point: Point } | null>(null);
 
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -344,6 +348,78 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     setSplitSecondName(`${route.name} (2)`);
   };
 
+  const openCutRoute = (route: RouteType, clickedPoint: Point) => {
+    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    if (!permissions.editRoutes || !permissions.createRoutes) {
+      setErrorModalOpen('You do not have permission to cut Fiber routes.');
+      return;
+    }
+    try {
+      if (route.path.length < 2) throw new Error('The selected Fiber route has no drawable line.');
+      const closest = getClosestPointOnRoute(clickedPoint, route.path);
+      if (closest.distance > 30) throw new Error('Click closer to the Fiber route.');
+      splitRoutePath(route.path, closest.point);
+      if (enclosures.some(item => getDistance(item.position, closest.point) <= 1)) {
+        throw new Error('An Enclosure is already at this point. Use Split at Enclosure instead.');
+      }
+      setCutRouteId(route.id);
+      setCutPoint(closest.point);
+      setSplitFirstName(`${route.name} (1)`);
+      setSplitSecondName(`${route.name} (2)`);
+    } catch (error) {
+      setErrorModalOpen(error instanceof Error ? error.message : 'Could not select this cut point.');
+    }
+  };
+
+  const confirmCutRoute = async () => {
+    const route = routes.find(item => item.id === cutRouteId);
+    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    if (!route || !cutPoint || !activeProjectId || !user || !permissions.editRoutes || !permissions.createRoutes) return;
+    setSplittingRoute(true);
+    try {
+      const cutId = uuidv4();
+      const changes = prepareRouteCut(route, cutPoint, routes, enclosures, loops, uuidv4(), cutId, user.uid, splitFirstName, splitSecondName);
+      const batch = writeBatch(db);
+      const routePath = `projects/${activeProjectId}/routes`;
+      batch.set(doc(db, routePath, changes.first.id), changes.first);
+      batch.set(doc(db, routePath, changes.second.id), changes.second);
+      changes.updatedRoutes.forEach(item => batch.set(doc(db, routePath, item.id), item));
+      changes.updatedEnclosures.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/enclosures/${item.id}`), item));
+      changes.updatedLoops.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/loops/${item.id}`), item));
+      const approval = currentProject?.designApproval;
+      const selections = approval?.routeEnclosureSelections;
+      if (approval && selections?.[route.id]) {
+        const selected = new Set(selections[route.id]);
+        batch.set(doc(db, 'projects', activeProjectId), {
+          designApproval: {
+            ...approval,
+            routeEnclosureSelections: {
+              ...selections,
+              [route.id]: changes.firstEnclosureIds.filter(id => selected.has(id)),
+              [changes.second.id]: changes.secondEnclosureIds.filter(id => selected.has(id))
+            }
+          }
+        }, { merge: true });
+      }
+      if (2 + changes.updatedRoutes.length + changes.updatedEnclosures.length + changes.updatedLoops.length +
+          (approval && selections?.[route.id] ? 1 : 0) > 500) {
+        throw new Error('This cut affects too many records. Please contact the project administrator.');
+      }
+      await batch.commit();
+      setCutRouteId(null);
+      setCutPoint(null);
+      setSelectedRouteId(changes.first.id);
+      setCutEnclosurePrompt({ firstId: changes.first.id, secondId: changes.second.id, cutId, point: changes.first.path.at(-1)! });
+      logActivity('cut_route', `Cut ${route.name} at clicked point`, {
+        routeId: route.id, newRouteId: changes.second.id, cutId, projectId: activeProjectId
+      }).catch(console.warn);
+    } catch (error) {
+      setErrorModalOpen(error instanceof Error ? error.message : 'Could not cut the Fiber route.');
+    } finally {
+      setSplittingRoute(false);
+    }
+  };
+
   const confirmSplitRoute = async () => {
     const route = routes.find(item => item.id === splitRouteId);
     const enclosure = enclosures.find(item => item.id === splitEnclosureId);
@@ -434,6 +510,51 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         if (!permissions.createEnclosures) {
           setErrorModalOpen('You do not have permission to create enclosures.');
           return;
+        }
+        if (pendingCutEnclosure) {
+          if (!permissions.editRoutes) {
+            setErrorModalOpen('You do not have permission to connect the cut Fiber routes.');
+            return;
+          }
+          const { firstId, secondId, cutId, point } = pendingCutEnclosure;
+          const enclosure: FiberEnclosure = {
+            id: uuidv4(), name: enclosureNameInput.trim(), position: point, uid: user.uid,
+            ...(enclosureLocationType ? { locationType: enclosureLocationType } : {}),
+            ...(enclosureLocationName.trim() ? { locationName: enclosureLocationName.trim() } : {}),
+            ...(enclosureTypeId ? { enclosureTypeId } : {})
+          };
+          try {
+            const routePath = `projects/${activeProjectId}/routes`;
+            const [firstSnap, secondSnap] = await Promise.all([
+              getDoc(doc(db, routePath, firstId)), getDoc(doc(db, routePath, secondId))
+            ]);
+            if (!firstSnap.exists() || !secondSnap.exists()) throw new Error('The cut Fiber segments are no longer available.');
+            const connected = attachEnclosureToRouteCut(
+              firstSnap.data() as RouteType, secondSnap.data() as RouteType, enclosure, cutId
+            );
+            const batch = writeBatch(db);
+            batch.set(doc(db, `projects/${activeProjectId}/enclosures/${enclosure.id}`), enclosure);
+            batch.set(doc(db, routePath, firstId), connected.first);
+            batch.set(doc(db, routePath, secondId), connected.second);
+            await batch.commit();
+            logActivity('create_enclosure', `Created enclosure ${enclosure.name} at Fiber cut`, {
+              enclosureId: enclosure.id, routeIds: [firstId, secondId], projectId: activeProjectId
+            }).catch(console.warn);
+            setPendingCutEnclosure(null);
+            setEnclosureModalOpen(false);
+            setPendingEnclosurePoint(null);
+            setEnclosureNameInput('');
+            setEnclosureLatInput('');
+            setEnclosureLngInput('');
+            setEnclosureLocationType('');
+            setEnclosureLocationName('');
+            setEnclosureTypeId('');
+            setSelectedEnclosureId(enclosure.id);
+            return;
+          } catch (error) {
+            setErrorModalOpen(error instanceof Error ? error.message : 'Could not add the Enclosure at the cut.');
+            return;
+          }
         }
         const snapRoute = enclosureSnapRouteId ? routes.find(route => route.id === enclosureSnapRouteId) : undefined;
         const snapCandidate = enclosureSnapCandidates.find(candidate => candidate.routeId === enclosureSnapRouteId);
@@ -1722,6 +1843,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             onOpenEnclosureDetail={(enclosure) => setDetailPanel({ type: 'enclosure', id: enclosure.id })}
             onEditRoute={startEditRoute}
             onSplitRoute={openSplitRoute}
+            onCutRoute={openCutRoute}
             onEditEnclosure={startEditEnclosure}
             onEnclosureDragEnd={(enclosure, point) => {
               setEnclosureLatInput(point.lat.toString());
@@ -1839,6 +1961,68 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           );
         })()}
 
+        {cutRouteId && (() => {
+          const route = routes.find(item => item.id === cutRouteId);
+          if (!route || !cutPoint) return null;
+          let preview;
+          try { preview = splitRoutePath(route.path, cutPoint); } catch { return null; }
+          const total = route.totalLength ?? Math.abs((route.markEnd ?? 0) - (route.markStart ?? 0));
+          return (
+            <div className="fixed inset-0 bg-slate-950/70 z-[2100] flex items-center justify-center p-4">
+              <div className="glass-panel w-full max-w-lg rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
+                <h2 className="text-xl font-black flex items-center gap-2 mb-2"><Scissors className="text-sky-400" /> Cut Fiber Here</h2>
+                <p className="text-sm text-slate-400 mb-2">{route.name}</p>
+                <p className="text-xs text-sky-200 mb-5">Cut point: {preview.point.lat.toFixed(6)}, {preview.point.lng.toFixed(6)} · Fiber remains visible on both sides.</p>
+                <label className="block text-xs font-bold mb-2">First segment name</label>
+                <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitFirstName} onChange={e => setSplitFirstName(e.target.value)} />
+                <label className="block text-xs font-bold mb-2">Second segment name</label>
+                <input className="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 mb-4" value={splitSecondName} onChange={e => setSplitSecondName(e.target.value)} />
+                <div className="text-xs text-sky-200 rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 mb-5">
+                  {total > 0
+                    ? `${(total * preview.fraction).toFixed(1)} m + ${(total * (1 - preview.fraction)).toFixed(1)} m = ${total.toFixed(1)} m`
+                    : 'Both segments retain the full Fiber path.'}
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button className="btn-secondary px-5" onClick={() => { setCutRouteId(null); setCutPoint(null); }} disabled={splittingRoute}>Cancel</button>
+                  <button className="btn-primary px-5" onClick={confirmCutRoute} disabled={splittingRoute || quotaExceeded || !splitFirstName.trim() || !splitSecondName.trim()}>
+                    {splittingRoute ? 'Saving...' : 'Cut Fiber'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {cutEnclosurePrompt && (
+          <div className="fixed inset-0 bg-slate-950/70 z-[2100] flex items-center justify-center p-4">
+            <div className="glass-panel w-full max-w-md rounded-3xl border border-slate-700 p-6 shadow-2xl text-slate-100">
+              <h2 className="text-xl font-black mb-3">Fiber cut saved</h2>
+              <p className="text-sm text-slate-300 mb-5">Add an Enclosure at this cut point?</p>
+              <div className="flex justify-end gap-3">
+                <button className="btn-secondary px-5" onClick={() => setCutEnclosurePrompt(null)}>No, finish</button>
+                <button
+                  className="btn-primary px-5"
+                  disabled={quotaExceeded || !(appUser && DEFAULT_PERMISSIONS[appUser.role].createEnclosures)}
+                  onClick={() => {
+                    const cut = cutEnclosurePrompt;
+                    setPendingCutEnclosure(cut);
+                    setCutEnclosurePrompt(null);
+                    setEnclosureNameInput('');
+                    setEnclosureLatInput(cut.point.lat.toFixed(6));
+                    setEnclosureLngInput(cut.point.lng.toFixed(6));
+                    setEnclosureLocationType('');
+                    setEnclosureLocationName('');
+                    setEnclosureTypeId('');
+                    setEnclosureSnapCandidates([]);
+                    setEnclosureSnapRouteId('');
+                    setEnclosureModalOpen(true);
+                  }}
+                >Add Enclosure</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {enclosureModalOpen && (
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[2000] flex items-center justify-center p-4">
             <motion.div 
@@ -1935,6 +2119,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     <input
                       type="number"
                       step="any"
+                      readOnly={!!pendingCutEnclosure}
                       placeholder="e.g., 13.7563"
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
                       value={enclosureLatInput}
@@ -1947,6 +2132,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     <input
                       type="number"
                       step="any"
+                      readOnly={!!pendingCutEnclosure}
                       placeholder="e.g., 100.5018"
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
                       value={enclosureLngInput}
@@ -1957,7 +2143,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 </div>
               </div>
               <div className="flex justify-between items-center mt-10">
-                <button
+                {!pendingCutEnclosure && <button
                   onClick={() => {
                     setEnclosureModalOpen(false);
                     setDrawingMode('enclosure');
@@ -1965,11 +2151,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                   className="text-sm text-brand-400 hover:text-brand-300 font-black flex items-center gap-2 transition-colors uppercase tracking-widest"
                 >
                   <MapPin className="w-5 h-5" /> Pick on Map
-                </button>
+                </button>}
                 <div className="flex gap-4">
                   <button onClick={() => {
                     setEnclosureModalOpen(false);
                     setEditingEnclosureId(null);
+                    setPendingCutEnclosure(null);
                   }} className="btn-secondary px-6">Cancel</button>
                   <button 
                     onClick={handleSaveEnclosure} 
