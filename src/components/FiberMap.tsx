@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, Tooltip, useMap, LayersControl, LayerGroup, Pane, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, useMap, LayersControl, LayerGroup, Pane, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
@@ -1496,7 +1496,6 @@ export default function FiberMap({
     }
     
     if (drawingMode === 'none') {
-      e.target.closeTooltip();
       onEnclosureClick?.(enclosure);
       setPopupData({
         kind: 'detail',
@@ -1514,7 +1513,6 @@ export default function FiberMap({
     e.originalEvent?.preventDefault();
     e.originalEvent?.stopPropagation();
     if (drawingMode !== 'none') return;
-    e.target.closeTooltip();
     onEnclosureClick?.(enclosure);
     setPopupData({ kind: 'menu', type: 'enclosure', data: enclosure, position: [enclosure.position.lat, enclosure.position.lng] });
     setHoveredObjectId(enclosure.id);
@@ -1525,7 +1523,6 @@ export default function FiberMap({
       e.originalEvent.stopPropagation();
     }
     if (drawingMode === 'none') {
-      e.target.closeTooltip();
       onRouteClick(route);
       setPopupData({
         kind: 'detail',
@@ -1545,7 +1542,6 @@ export default function FiberMap({
     e.originalEvent?.preventDefault();
     e.originalEvent?.stopPropagation();
     if (drawingMode !== 'none') return;
-    e.target.closeTooltip();
     onRouteClick(route);
     setPopupData({ kind: 'menu', type: 'route', data: route, position: [e.latlng.lat, e.latlng.lng] });
     setHoveredObjectId(route.id);
@@ -1652,9 +1648,9 @@ export default function FiberMap({
               if (iconUrl) {
                 const customIcon = new L.Icon({
                   iconUrl: iconUrl,
-                  iconSize: isEditingThis ? [18, 18] : [10, 10],
-                  iconAnchor: isEditingThis ? [9, 9] : [5, 5],
-                  className: (selectedEnclosureId === enclosure.id || isEditingThis) ? 'border-2 border-blue-500 rounded-sm shadow-lg' : ''
+                  iconSize: isEditingThis ? [30, 30] : [26, 26],
+                  iconAnchor: isEditingThis ? [15, 15] : [13, 13],
+                  className: `enclosure-map-icon ${selectedEnclosureId === enclosure.id || isEditingThis ? 'enclosure-map-icon-selected' : ''}`
                 });
 
                 return (
@@ -1675,13 +1671,7 @@ export default function FiberMap({
                         }
                       }
                     }}
-                  >
-                    {!popupData && (
-                      <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
-                        <EnclosureTooltipContent enclosure={enclosure} enclosureTypes={enclosureTypes} routes={routes} />
-                      </Tooltip>
-                    )}
-                  </Marker>
+                  />
                 );
               }
 
@@ -1689,25 +1679,19 @@ export default function FiberMap({
                 <CircleMarker 
                   key={enclosure.id} 
                   center={[enclosure.position.lat, enclosure.position.lng]} 
-                  radius={isEditingThis ? 6 : 3} 
+                  radius={isEditingThis ? 11 : 9}
                   bubblingMouseEvents={false}
                   pathOptions={{ 
-                    color: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? '#3b82f6' : color, 
-                    fillColor: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? '#3b82f6' : color, 
+                    color: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? '#2563eb' : '#ffffff',
+                    fillColor: color,
                     fillOpacity: 1, 
-                    weight: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? 2.2 : 1.2 
+                    weight: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? 3 : 2
                   }}
                   eventHandlers={{
                     click: (e) => handleEnclosureClick(enclosure, e),
                     contextmenu: (e) => handleEnclosureContextMenu(enclosure, e)
                   }}
-                >
-                  {!popupData && (
-                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
-                      <EnclosureTooltipContent enclosure={enclosure} enclosureTypes={enclosureTypes} routes={routes} />
-                    </Tooltip>
-                  )}
-                </CircleMarker>
+                />
               );
             })}
             </LayerGroup>
@@ -1727,13 +1711,7 @@ export default function FiberMap({
                     click: (e) => handleRouteClick(route, e),
                     contextmenu: (e) => handleRouteContextMenu(route, e)
                   }}
-                >
-                  {!popupData && (
-                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
-                      <RouteTooltipContent route={route} />
-                    </Tooltip>
-                  )}
-                </Polyline>
+                />
                 <Polyline
                   positions={route.path.map(p => [p.lat, p.lng])}
                   bubblingMouseEvents={false}
@@ -1746,13 +1724,7 @@ export default function FiberMap({
                     click: (e) => handleRouteClick(route, e),
                     contextmenu: (e) => handleRouteContextMenu(route, e)
                   }}
-                >
-                  {!popupData && (
-                    <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
-                      <RouteTooltipContent route={route} />
-                    </Tooltip>
-                  )}
-                </Polyline>
+                />
               </Fragment>
             ))}
           </LayerGroup>
@@ -1764,7 +1736,8 @@ export default function FiberMap({
               <CircleMarker
                 key={loop.id}
                 center={[loop.position.lat, loop.position.lng]}
-                radius={3}
+                radius={7}
+                bubblingMouseEvents={false}
                 pathOptions={{
                   color: '#f97316',
                   fillColor: '#f97316',
@@ -1772,9 +1745,10 @@ export default function FiberMap({
                   weight: 1.2
                 }}
               >
-                <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-                  <span className="font-bold text-[10px]">{loop.name}</span> <span className="text-[9px]">({loop.length}m)</span>
-                </Tooltip>
+                <Popup className="fiber-detail-popup light-theme">
+                  <div className="text-slate-900 text-xs font-bold">{loop.name}</div>
+                  <div className="text-slate-600 text-[10px]">{loop.length} m</div>
+                </Popup>
               </CircleMarker>
             ))}
           </LayerGroup>
@@ -1879,9 +1853,7 @@ export default function FiberMap({
             dragend: (e) => handleMarkerDragEnd(i, e),
             click: (e) => handleMarkerClick(i, e)
           }}
-        >
-          <Tooltip direction="top">Drag to move, Click to remove</Tooltip>
-        </Marker>
+        />
       ))}
 
       {/* Left click shows object details; right click shows object actions. */}
