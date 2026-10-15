@@ -3,7 +3,7 @@ import L from 'leaflet';
 import { useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
 import { useMapDrawing } from '../hooks/useMapDrawing';
-import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
+import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
   className: 'bg-yellow-500 border-2 border-slate-100 rounded-full shadow-md',
@@ -55,6 +55,7 @@ interface FiberMapProps {
   onRouteClick: (route: Route) => void;
   onEnclosureClick?: (enclosure: FiberEnclosure) => void;
   onEditRoute?: (route: Route) => void;
+  onSplitRoute?: (route: Route) => void;
   onEditEnclosure?: (enclosure: FiberEnclosure) => void;
   onEnclosureDragEnd?: (enclosure: FiberEnclosure, point: Point) => void;
   selectedRouteId?: string;
@@ -1266,6 +1267,7 @@ export default function FiberMap({
   onDraftRouteClick,
   sidebarCollapsed,
   onEditRoute,
+  onSplitRoute,
   onEditEnclosure,
   onEnclosureDragEnd,
   editingEnclosureId
@@ -1323,6 +1325,8 @@ export default function FiberMap({
         position: [e.latlng.lat, e.latlng.lng]
       });
       setHoveredObjectId(route.id);
+    } else if (drawingMode === 'enclosure') {
+      onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
     } else {
       onRouteClick(route);
     }
@@ -1824,6 +1828,18 @@ export default function FiberMap({
           className="fiber-context-menu"
         >
           <div className="flex flex-col gap-1 p-1 min-w-[140px] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (menuData.type === 'route' && onSplitRoute) onSplitRoute(menuData.data);
+                setMenuData(null);
+                setHoveredObjectId(null);
+              }}
+              className={`${menuData.type === 'route' && onSplitRoute ? 'flex' : 'hidden'} items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest`}
+            >
+              <Scissors className="w-3 h-3 text-sky-500" />
+              <span>Split at Enclosure</span>
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();

@@ -70,7 +70,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
             if (editingType === 'fiber') {
               processImageFile(file, 'fiber');
             } else if (editingType === 'enclosure') {
-              processImageFile(file, 'enclosure');
+              processImageFile(file, 'enclosure-image');
             }
             break;
           }
@@ -202,7 +202,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
             setUploadError('รูปภาพมีขนาดใหญ่เกินไป (PNG)');
             return;
           }
-          if (target === 'enclosure' && resizedDataUrl.length > 800000) {
+          if (target === 'enclosure-image' && resizedDataUrl.length > 800000) {
             setUploadError('รูปภาพมีขนาดใหญ่เกินไป (PNG)');
             return;
           }

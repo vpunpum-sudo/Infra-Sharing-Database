@@ -179,6 +179,8 @@ export type Core = {
 
 export type Route = {
   id: string;
+  /** Shared by segments made from the same original cable. */
+  lineageId?: string;
   name: string;
   path: Point[];
   capacity: number;
