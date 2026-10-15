@@ -68,6 +68,10 @@ interface FiberMapProps {
   sidebarCollapsed?: boolean;
 }
 
+type MapPopupData =
+  | { kind: 'detail' | 'menu'; type: 'route'; data: Route; position: [number, number] }
+  | { kind: 'detail' | 'menu'; type: 'enclosure'; data: FiberEnclosure; position: [number, number] };
+
 function MapEvents({ onMapClick }: { onMapClick: (latlng: L.LatLng) => void }) {
   useMapEvents({
     click(e) {
@@ -1274,11 +1278,7 @@ export default function FiberMap({
 }: FiberMapProps) {
   const [searchPin, setSearchPin] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [copiedPin, setCopiedPin] = useState(false);
-  const [menuData, setMenuData] = useState<{
-    type: 'route' | 'enclosure';
-    data: any;
-    position: [number, number];
-  } | null>(null);
+  const [popupData, setPopupData] = useState<MapPopupData | null>(null);
 
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
 
@@ -1292,10 +1292,14 @@ export default function FiberMap({
   );
 
   const handleMapClick = (latlng: L.LatLng) => {
-    setMenuData(null);
+    setPopupData(null);
     setHoveredObjectId(null);
     originalHandleMapClick(latlng);
   };
+
+  useEffect(() => {
+    if (drawingMode !== 'none') setPopupData(null);
+  }, [drawingMode]);
 
   const handleEnclosureClick = (enclosure: FiberEnclosure, e: L.LeafletMouseEvent) => {
     if (e.originalEvent) {
@@ -1303,7 +1307,10 @@ export default function FiberMap({
     }
     
     if (drawingMode === 'none') {
-      setMenuData({
+      e.target.closeTooltip();
+      onEnclosureClick?.(enclosure);
+      setPopupData({
+        kind: 'detail',
         type: 'enclosure',
         data: enclosure,
         position: [enclosure.position.lat, enclosure.position.lng]
@@ -1314,12 +1321,25 @@ export default function FiberMap({
     }
   };
 
+  const handleEnclosureContextMenu = (enclosure: FiberEnclosure, e: L.LeafletMouseEvent) => {
+    e.originalEvent?.preventDefault();
+    e.originalEvent?.stopPropagation();
+    if (drawingMode !== 'none') return;
+    e.target.closeTooltip();
+    onEnclosureClick?.(enclosure);
+    setPopupData({ kind: 'menu', type: 'enclosure', data: enclosure, position: [enclosure.position.lat, enclosure.position.lng] });
+    setHoveredObjectId(enclosure.id);
+  };
+
   const handleRouteClick = (route: Route, e: L.LeafletMouseEvent) => {
     if (e.originalEvent) {
       e.originalEvent.stopPropagation();
     }
     if (drawingMode === 'none') {
-      setMenuData({
+      e.target.closeTooltip();
+      onRouteClick(route);
+      setPopupData({
+        kind: 'detail',
         type: 'route',
         data: route,
         position: [e.latlng.lat, e.latlng.lng]
@@ -1330,6 +1350,16 @@ export default function FiberMap({
     } else {
       onRouteClick(route);
     }
+  };
+
+  const handleRouteContextMenu = (route: Route, e: L.LeafletMouseEvent) => {
+    e.originalEvent?.preventDefault();
+    e.originalEvent?.stopPropagation();
+    if (drawingMode !== 'none') return;
+    e.target.closeTooltip();
+    onRouteClick(route);
+    setPopupData({ kind: 'menu', type: 'route', data: route, position: [e.latlng.lat, e.latlng.lng] });
+    setHoveredObjectId(route.id);
   };
 
   // Default center (Bangkok, Thailand)
@@ -1446,6 +1476,7 @@ export default function FiberMap({
                     bubblingMouseEvents={false}
                     eventHandlers={{
                       click: (e) => handleEnclosureClick(enclosure, e),
+                      contextmenu: (e) => handleEnclosureContextMenu(enclosure, e),
                       dragend: (e) => {
                         if (onEnclosureDragEnd) {
                           const marker = e.target;
@@ -1479,7 +1510,8 @@ export default function FiberMap({
                     weight: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? 2.2 : 1.2 
                   }}
                   eventHandlers={{
-                    click: (e) => handleEnclosureClick(enclosure, e)
+                    click: (e) => handleEnclosureClick(enclosure, e),
+                    contextmenu: (e) => handleEnclosureContextMenu(enclosure, e)
                   }}
                 >
                   <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[320px] max-w-[420px] w-auto">
@@ -1508,7 +1540,8 @@ export default function FiberMap({
                   opacity: 0.8
                 }}
                 eventHandlers={{
-                  click: (e) => handleRouteClick(route, e)
+                  click: (e) => handleRouteClick(route, e),
+                  contextmenu: (e) => handleRouteContextMenu(route, e)
                 }}
               >
                 <Tooltip sticky opacity={1} className="route-detail-tooltip min-w-[340px] max-w-[500px] w-auto">
@@ -1818,24 +1851,58 @@ export default function FiberMap({
         </Marker>
       ))}
 
-        {/* Context Menu Popup */}
-      {menuData && (
+      {/* Left click shows object details; right click shows object actions. */}
+      {popupData && (
         <Popup
-          position={menuData.position}
+          key={`${popupData.kind}-${popupData.type}-${popupData.data.id}-${popupData.position.join('-')}`}
+          position={popupData.position}
+          maxWidth={popupData.kind === 'detail' ? 420 : 180}
+          minWidth={popupData.kind === 'detail' ? 220 : 140}
           eventHandlers={{
-            remove: () => setMenuData(null)
+            remove: () => setPopupData(current =>
+              current?.kind === popupData.kind &&
+              current.type === popupData.type &&
+              current.data.id === popupData.data.id &&
+              current.position[0] === popupData.position[0] &&
+              current.position[1] === popupData.position[1]
+                ? null
+                : current
+            )
           }}
-          className="fiber-context-menu"
+          className={popupData.kind === 'menu' ? 'fiber-context-menu' : 'fiber-detail-popup'}
         >
+          {popupData.kind === 'detail' ? (
+            popupData.type === 'enclosure' ? (
+              <div className="max-h-[55vh] max-w-[420px] overflow-y-auto">
+                <EnclosureTooltipContent
+                  enclosure={popupData.data}
+                  enclosureTypes={enclosureTypes}
+                  routes={routes}
+                />
+              </div>
+            ) : (
+              <div className="min-w-[220px] max-w-[340px] space-y-2 p-1 text-slate-800 dark:text-slate-100">
+                <div className="font-bold text-sm leading-snug">{popupData.data.name}</div>
+                <div className="flex flex-wrap gap-1 text-[10px] font-semibold">
+                  <span className="rounded bg-blue-500/15 px-2 py-1 text-blue-600 dark:text-blue-400">{popupData.data.capacity}F</span>
+                  {popupData.data.fiberType && <span className="rounded bg-slate-500/15 px-2 py-1">{popupData.data.fiberType}</span>}
+                  {popupData.data.tier && <span className="rounded bg-slate-500/15 px-2 py-1">{popupData.data.tier}</span>}
+                </div>
+                {popupData.data.totalLength !== undefined && (
+                  <div className="text-xs">Length: {popupData.data.totalLength.toLocaleString()} m</div>
+                )}
+              </div>
+            )
+          ) : (
           <div className="flex flex-col gap-1 p-1 min-w-[140px] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (menuData.type === 'route' && onSplitRoute) onSplitRoute(menuData.data);
-                setMenuData(null);
+                if (popupData.type === 'route' && onSplitRoute) onSplitRoute(popupData.data);
+                setPopupData(null);
                 setHoveredObjectId(null);
               }}
-              className={`${menuData.type === 'route' && onSplitRoute ? 'flex' : 'hidden'} items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest`}
+              className={`${popupData.type === 'route' && onSplitRoute ? 'flex' : 'hidden'} items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest`}
             >
               <Scissors className="w-3 h-3 text-sky-500" />
               <span>Split at Enclosure</span>
@@ -1843,12 +1910,12 @@ export default function FiberMap({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (menuData.type === 'route' && onEditRoute) {
-                  onEditRoute(menuData.data);
-                } else if (menuData.type === 'enclosure' && onEditEnclosure) {
-                  onEditEnclosure(menuData.data);
+                if (popupData.type === 'route' && onEditRoute) {
+                  onEditRoute(popupData.data);
+                } else if (popupData.type === 'enclosure' && onEditEnclosure) {
+                  onEditEnclosure(popupData.data);
                 }
-                setMenuData(null);
+                setPopupData(null);
                 setHoveredObjectId(null);
               }}
               className="flex items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest"
@@ -1859,13 +1926,7 @@ export default function FiberMap({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (menuData.type === 'route') {
-                  onRouteClick(menuData.data);
-                } else if (menuData.type === 'enclosure' && onEnclosureClick) {
-                  onEnclosureClick(menuData.data);
-                }
-                setMenuData(null);
-                setHoveredObjectId(null);
+                setPopupData({ ...popupData, kind: 'detail' });
               }}
               className="flex items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest"
             >
@@ -1873,6 +1934,7 @@ export default function FiberMap({
               <span>Detail</span>
             </button>
           </div>
+          )}
         </Popup>
       )}
     </MapContainer>
