@@ -11,7 +11,6 @@ import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 import { DesignApprovalModal } from './DesignApprovalModal';
-import { OwnerLogo } from './OwnerLogo';
 
 export default function ProjectsDashboard({ user, appUser, quotaExceeded = false }: { user: FirebaseUser, appUser: AppUser | null, quotaExceeded?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -370,7 +369,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     <Sparkles size={12} /> Workspaces Overview
                   </span>
                 </div>
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Network Projects</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight font-display">Network Projects</h2>
                 <p className="text-slate-300 mt-1 text-sm font-medium">Select an optical fiber project to inspect routes, splice enclosures, and core assignments.</p>
               </div>
 
@@ -454,7 +453,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="flex flex-col gap-3" aria-label="Project workspaces">
                 {filteredProjects.map(project => {
                   const orderMap: Record<string, number> = { 'ITEL': 1, 'SYMC': 2, 'UIH': 3 };
                   const owners = [...(project.owners || (project.owner ? [project.owner] : ['ITEL']))].sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
@@ -464,15 +463,27 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => navigate(`/project/${project.id}`)}
-                      className="card p-6 cursor-pointer group flex flex-col justify-between relative overflow-hidden"
+                      className="card p-4 sm:p-5 cursor-pointer group flex flex-col justify-between relative overflow-hidden"
                     >
                       <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity blur-xl pointer-events-none"></div>
 
                       <div>
-                        {/* Card topbar */}
-                        <div className="flex items-start justify-between gap-3 mb-5">
-                          <div className="w-11 h-11 bg-brand-500/15 text-brand-400 rounded-xl flex items-center justify-center border border-brand-500/30 shadow-sm group-hover:scale-105 group-hover:bg-brand-500 group-hover:text-white transition-all">
-                            <Map className="w-5 h-5" />
+                        {/* Compact project heading */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-9 h-9 shrink-0 bg-brand-500/15 text-brand-400 rounded-lg flex items-center justify-center border border-brand-500/30 shadow-sm group-hover:bg-brand-500 group-hover:text-white transition-all">
+                              <Map className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex flex-wrap items-center gap-2 pt-1">
+                              <h3 className="text-base font-bold text-white tracking-tight group-hover:text-brand-300 transition-colors font-display break-words">
+                                {project.name}
+                              </h3>
+                              {project.uid === user.uid && (
+                                <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
+                                  Created by you
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -497,18 +508,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           </div>
                         </div>
 
-                        {/* Title & info */}
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="text-xl font-bold text-white tracking-tight group-hover:text-brand-300 transition-colors font-display line-clamp-1">
-                            {project.name}
-                          </h3>
-                          {project.uid === user.uid && (
-                            <span className="shrink-0 px-2 py-0.5 text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
-                              Created by you
-                            </span>
-                          )}
-                        </div>
-
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:gap-4 mb-3">
                         {/* Project Status Banner (2-Level Progress) */}
                         {(() => {
                           const status: ProjectStatus = project.status || project.designApproval?.status || 'Draft';
@@ -522,7 +522,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           const isPlanningAllDone = totalOwners > 0 && planningApprovedCount === totalOwners;
 
                           return (
-                            <div className="mb-4">
+                            <div className="mb-3 lg:mb-0 lg:flex-[1.15] min-w-0">
                               <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
                                 status === 'Approved'
                                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
@@ -545,7 +545,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                     <FileText className="w-4 h-4 text-slate-400" />
                                   )}
                                   <div className="text-left">
-                                    <span className="text-[10.5px] font-black uppercase tracking-wider block leading-tight">
+                                    <span className="text-xs font-bold block leading-snug">
                                       {status === 'Approved' 
                                         ? 'ผ่านการอนุมัติ (Approved)' 
                                         : status === 'Pending Approval' 
@@ -557,7 +557,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                         : 'แบบร่าง (Draft)'}
                                     </span>
                                     {status === 'Pending Approval' && (
-                                      <span className="text-[9px] text-slate-400 font-mono">
+                                      <span className="text-xs text-slate-300 font-mono">
                                         Planning: {planningApprovedCount}/{totalOwners} &bull; O&M: {omApprovedCount}/{totalOwners}
                                       </span>
                                     )}
@@ -569,7 +569,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                     e.stopPropagation();
                                     setApprovalModalProject(project);
                                   }}
-                                  className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all ${
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                                     status === 'Approved'
                                       ? 'bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/40 text-emerald-300'
                                       : status === 'Pending Approval'
@@ -585,28 +585,29 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                         })()}
 
                         {/* Owner badges */}
-                        <div className="flex flex-col gap-1.5 mb-5">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="flex flex-wrap items-center gap-2 lg:flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-slate-300">
                             Authorized Operators ({owners.length}):
                           </span>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {owners.map(o => (
                               <span 
                                 key={o}
-                                className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md border flex items-center gap-1 ${getOwnerBadgeStyle(o)}`}
+                                className={`px-2 py-0.5 text-xs font-bold rounded-md border flex items-center gap-1 ${getOwnerBadgeStyle(o)}`}
                               >
-                                <OwnerLogo owner={o} size="xs" />
+                                {o}
                               </span>
                             ))}
                           </div>
                         </div>
+                        </div>
                       </div>
 
                       {/* Card Footer */}
-                      <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse"></span>
-                          <span className="text-[11px] font-semibold text-slate-300">Active Workspace</span>
+                          <span className="text-xs font-semibold text-slate-300">Active Workspace</span>
                         </div>
                         
                         <span className="text-xs font-bold text-brand-400 group-hover:text-brand-300 flex items-center gap-1">

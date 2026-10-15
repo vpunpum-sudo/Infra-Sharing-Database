@@ -1,6 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
 @import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -438,15 +438,6 @@
   color: #0f172a !important;
 }
 
-/* Explicit Light Mode Bang Text Colors (Generated) */
-
-.light-theme .hover\:text-white:hover:not(.bg-brand-500):not(.bg-brand-600):not(.bg-rose-500):not(.bg-rose-600):not(.bg-emerald-500):not(.bg-emerald-600):not(.btn-primary) {
-  color: #0f172a !important;
-}
-.light-theme .text-white:not(.bg-brand-500):not(.bg-brand-600):not(.bg-rose-500):not(.bg-rose-600):not(.bg-emerald-500):not(.bg-emerald-600):not(.btn-primary):not(h1) {
-  color: #0f172a !important;
-}
-
 /* Explicit Light Mode Text Colors (Generated) */
 .light-theme .text-amber-300 { color: #d97706 !important; }
 .light-theme .text-amber-400 { color: #d97706 !important; }
@@ -696,6 +687,72 @@
 .light-theme .diagram-toolbar {
   background-color: rgba(255, 255, 255, 0.9) !important;
   border-color: #e2e8f0 !important;
+}
+
+/* Consistent, compact typography for the on-screen application.
+   The approval PDF is rendered from its own print document. */
+@media screen {
+  #root :is([class~="text-[6px]"], [class~="text-[6.5px]"], [class~="text-[7px]"], [class~="text-[7.5px]"], [class~="text-[8px]"], [class~="text-[8.5px]"], [class~="text-[9px]"], [class~="text-[9.5px]"], [class~="text-[10px]"], [class~="text-[10.5px]"], [class~="text-[11px]"], [class~="text-[11.5px]"]):not(#diagram-content *):not(#physical-container *):not(.leaflet-marker-icon *) {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+
+  #root .text-3xl { font-size: 26px !important; line-height: 1.25 !important; }
+  #root .text-4xl { font-size: 29px !important; line-height: 1.2 !important; }
+  #root .text-5xl { font-size: 32px !important; line-height: 1.2 !important; }
+
+  #root :is(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
+  }
+}
+
+/* Muted labels remain readable on the dark panels. */
+html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
+  color: #a8b9cf;
+}
+
+/* The light theme's legacy neutral-text rules must not darken text on solid
+   colored controls. These are exact utility matches, so pale status tints
+   continue to use dark foreground text. */
+.light-theme #root .text-white { color: #0f172a !important; }
+.light-theme #root .btn-primary,
+.light-theme #root .btn-primary *,
+.light-theme #root :is(.badge-solid-brand, .badge-solid-rose, .badge-solid-emerald) {
+  color: #ffffff !important;
+}
+
+.light-theme #root :is(.bg-brand-500, .bg-brand-600, .bg-brand-700,
+  .bg-sky-500, .bg-sky-600, .bg-blue-500, .bg-blue-600,
+  .bg-emerald-500, .bg-emerald-600, .bg-rose-500, .bg-rose-600,
+  .bg-indigo-500, .bg-indigo-600, .bg-pink-500, .bg-pink-600) {
+  background-color: #075985 !important;
+  color: #ffffff !important;
+}
+
+.light-theme #root :is(.bg-emerald-500, .bg-emerald-600) { background-color: #047857 !important; }
+.light-theme #root :is(.bg-rose-500, .bg-rose-600, .bg-pink-500, .bg-pink-600) { background-color: #be123c !important; }
+.light-theme #root :is(.bg-indigo-500, .bg-indigo-600) { background-color: #4338ca !important; }
+.light-theme #root :is(.bg-amber-500, .bg-amber-600) { color: #0f172a !important; }
+.light-theme #root [class*="from-brand-"][class*="to-brand-"].text-white { color: #ffffff !important; }
+
+.light-theme #root :is(.bg-brand-500, .bg-brand-600, .bg-brand-700,
+  .bg-sky-500, .bg-sky-600, .bg-blue-500, .bg-blue-600,
+  .bg-emerald-500, .bg-emerald-600, .bg-rose-500, .bg-rose-600,
+  .bg-indigo-500, .bg-indigo-600, .bg-pink-500, .bg-pink-600) :is(span, p, label, svg, strong, h1, h2, h3, h4, h5, h6) {
+  color: inherit !important;
+}
+
+.light-theme #root :is(.text-brand-300, .text-brand-400, .text-sky-300, .text-sky-400) { color: #075985 !important; }
+.light-theme #root :is(.text-emerald-300, .text-emerald-400, .text-emerald-500, .text-green-700) { color: #047857 !important; }
+.light-theme #root :is(.text-amber-300, .text-amber-400, .text-amber-500) { color: #92400e !important; }
+.light-theme #root :is(.text-pink-300, .text-rose-300, .text-rose-400) { color: #be185d !important; }
+
+.light-theme #root :is(.bg-brand-500, .bg-brand-600, .bg-brand-700,
+  .bg-sky-500, .bg-sky-600, .bg-blue-500, .bg-blue-600,
+  .bg-emerald-500, .bg-emerald-600, .bg-rose-500, .bg-rose-600,
+  .bg-indigo-500, .bg-indigo-600, .bg-pink-500, .bg-pink-600) {
+  color: #ffffff !important;
 }
 
 /* Physical & Tray Layout Viewers in Light Theme */
