@@ -356,7 +356,7 @@ const CoreList = memo(({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center mb-2">
-        {(!appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && route.cores.every(c => c.owner === 'None' || c.owner === appUser.owner))) ? (
+        {(appUser && (appUser.role === 'Admin' || (appUser.owner && appUser.owner !== 'None' && route.cores.every(c => c.owner === 'None' || c.owner === appUser.owner)))) ? (
           <button 
             onClick={() => onUnspliceAll(enclosureId, route.id)}
             className="text-[10px] px-4 py-2 bg-rose-900/20 hover:bg-rose-900/30 rounded-2xl text-rose-400 font-black border border-rose-800/50 transition-all flex items-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg"
@@ -381,7 +381,7 @@ const CoreList = memo(({
           <button 
             onClick={() => {
               const allowedTubeIds = Object.entries(tubes)
-                .filter(([_, cores]) => !appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && (cores.every(c => c.owner === 'None' || c.owner === appUser.owner))))
+                .filter(([_, cores]) => appUser && (appUser.role === 'Admin' || (appUser.owner && appUser.owner !== 'None' && cores.every(c => c.owner === 'None' || c.owner === appUser.owner))))
                 .map(([id, _]) => Number(id));
               onSelectAllTubes(allowedTubeIds);
             }}
@@ -405,8 +405,8 @@ const CoreList = memo(({
           const isPartialSpliced = splicedCount > 0 && splicedCount < cores.length;
 
           const firstOwner = cores[0].owner;
-          const tubeOwner = cores.every(c => c.owner === firstOwner) ? firstOwner : 'None';
-          const canExpand = !appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && (tubeOwner === 'None' || tubeOwner === appUser.owner));
+          const tubeOwner = cores.every(c => c.owner === firstOwner) ? firstOwner : 'Mixed';
+          const canExpand = !!appUser && (appUser.role === 'Admin' || (!!appUser.owner && appUser.owner !== 'None' && (tubeOwner === 'None' || tubeOwner === appUser.owner)));
 
           return (
             <motion.div 
@@ -468,7 +468,7 @@ const CoreList = memo(({
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  {splicedCount > 0 && (!appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && tubeOwner === appUser.owner)) && (
+                  {splicedCount > 0 && appUser && (appUser.role === 'Admin' || (appUser.owner && appUser.owner !== 'None' && tubeOwner === appUser.owner)) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -672,8 +672,9 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
     if (!permissions.manageSplices) return false;
     if (!selectedCoreA || !selectedCoreB) return false;
     if (routeAId === routeBId && selectedCoreA === selectedCoreB) return false;
-    if (!appUser || appUser.role === 'Admin' || appUser.role === 'Design') return true;
-    if (!appUser.owner) return false;
+    if (!appUser) return false;
+    if (appUser.role === 'Admin') return true;
+    if (!appUser.owner || appUser.owner === 'None') return false;
     const coreA = routeA?.cores.find(c => c.id === selectedCoreA);
     const coreB = routeB?.cores.find(c => c.id === selectedCoreB);
     if (!coreA || !coreB) return false;
@@ -686,8 +687,9 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
     if (!permissions.manageSplices) return false;
     if (selectedTubesA.length === 0 || selectedTubesB.length === 0) return false;
     if (routeAId === routeBId && selectedTubesA.some(t => selectedTubesB.includes(t))) return false;
-    if (!appUser || appUser.role === 'Admin' || appUser.role === 'Design') return true;
-    if (!appUser.owner) return false;
+    if (!appUser) return false;
+    if (appUser.role === 'Admin') return true;
+    if (!appUser.owner || appUser.owner === 'None') return false;
     
     const count = Math.min(selectedTubesA.length, selectedTubesB.length);
     for (let i = 0; i < count; i++) {
@@ -1322,7 +1324,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
         )}
         {permissions.viewSpliceTrays && trayIds.map((trayId, i) => {
           const owner = trayAssignments[trayId] || 'None';
-          const canEditTray = permissions.editSpliceTrays && (!appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && (owner === 'None' || owner === appUser.owner)));
+          const canEditTray = permissions.editSpliceTrays && !!appUser && (appUser.role === 'Admin' || (!!appUser.owner && appUser.owner !== 'None' && (owner === 'None' || owner === appUser.owner)));
           return (
             <motion.div 
               key={trayId} 
@@ -2044,7 +2046,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
 
                     if (item.type === 'tube' || item.type === 'tube-header') {
                       const isCollapsed = item.type === 'tube';
-                      const canExpand = !appUser || appUser.role === 'Admin' || appUser.role === 'Design' || (appUser.owner && (item.owner === 'None' || item.owner === appUser.owner));
+                      const canExpand = !!appUser && (appUser.role === 'Admin' || (!!appUser.owner && appUser.owner !== 'None' && (item.owner === 'None' || item.owner === appUser.owner)));
                       const isExpanded = expandedTubes[`diagram-${vr.id}-${item.tubeId}`] ?? expandedTubes[`diagram-${route.id}-${item.tubeId}`];
                       return (
                         <motion.div 
@@ -2791,6 +2793,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                       <select 
                         value={coreEditData.owner}
                         onChange={(e) => setCoreEditData({ ...coreEditData, owner: e.target.value as CoreOwner })}
+                        disabled={editingCore.route.cores.some(core => core.label.startsWith('T'))}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-black text-slate-300 focus:ring-2 focus:ring-brand-500 outline-none transition-all"
                       >
                         <option value="None">None</option>
@@ -2798,6 +2801,9 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                         <option value="SYMC">SYMC</option>
                         <option value="UIH">UIH</option>
                       </select>
+                      {editingCore.route.cores.some(core => core.label.startsWith('T')) && (
+                        <p className="text-[10px] text-slate-500 mt-1">Change Owner for the whole Tube in Core Manager.</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
