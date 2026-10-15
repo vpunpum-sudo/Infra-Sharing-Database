@@ -38,6 +38,8 @@ test('splitting preserves both halves and moves references to the second segment
   assert.equal(result.first.markEnd, result.second.markStart);
   assert.equal(result.first.cores[0].splices?.end, undefined);
   assert.equal(result.second.cores[0].splices?.end?.routeId, 'other');
+  assert.equal(result.first.cores[0].splices?.cut?.routeId, 'new');
+  assert.equal(result.second.cores[0].splices?.cut?.routeId, 'original');
   assert.equal(result.updatedRoutes[0].cores[0].splices?.end?.routeId, 'new');
   assert.equal(result.updatedEnclosures[0].portAssignments?.[1].routeId, 'new');
   assert.equal(result.updatedLoops[0].routeId, 'new');
@@ -46,4 +48,14 @@ test('splitting preserves both halves and moves references to the second segment
 
 test('refuses a split at a route endpoint', () => {
   assert.throws(() => prepareRouteSplit(route, { ...cut, position: a }, [route], [cut], [], 'new', 'editor', 'A', 'B'));
+});
+
+test('an existing splice at the cut stays attached to its original segment', () => {
+  const spliced: Route = {
+    ...route,
+    cores: [{ ...route.cores[0], splices: { cut: { routeId: 'other', coreId: 1 } } }]
+  };
+  const result = prepareRouteSplit(spliced, cut, [spliced], [cut], [], 'new', 'editor', 'A', 'B');
+  assert.equal(result.first.cores[0].splices?.cut?.routeId, 'other');
+  assert.equal(result.second.cores[0].splices?.cut, undefined);
 });

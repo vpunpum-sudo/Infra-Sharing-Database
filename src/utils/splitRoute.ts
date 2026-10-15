@@ -67,6 +67,19 @@ export function prepareRouteSplit(
     ...(markAtCut !== undefined ? { markStart: markAtCut } : {}),
     ...(secondLength !== undefined ? { totalLength: secondLength } : {})
   };
+  // Keep an unspliced core continuous across the new enclosure. An existing
+  // splice at this enclosure remains with the first segment instead.
+  route.cores.forEach((core, index) => {
+    if (core.splices?.[enclosure.id]) return;
+    first.cores[index] = {
+      ...first.cores[index],
+      splices: { ...first.cores[index].splices, [enclosure.id]: { routeId: newRouteId, coreId: core.id } }
+    };
+    second.cores[index] = {
+      ...second.cores[index],
+      splices: { ...second.cores[index].splices, [enclosure.id]: { routeId: route.id, coreId: core.id } }
+    };
+  });
   if (!first.name || !second.name) throw new Error('Enter names for both Fiber segments.');
 
   // Splices are stored on both cables. Update reciprocal references on the far side.
