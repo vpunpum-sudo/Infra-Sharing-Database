@@ -124,6 +124,21 @@
   outline: none !important;
 }
 
+.enclosure-map-icon {
+  box-sizing: border-box;
+  object-fit: contain;
+  padding: 2px;
+  background: #ffffff;
+  border: 2px solid #facc15;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.55);
+}
+
+.enclosure-map-icon-selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28), 0 2px 8px rgba(15, 23, 42, 0.55);
+}
+
 .leaflet-control-zoom {
   border: none !important;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
