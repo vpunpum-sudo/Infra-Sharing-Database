@@ -323,13 +323,12 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                   const effectivePriority = pendingPriorityUpdates[tubeId] || (isAllSamePriority ? fullTubeCores[0].priority : (fullTubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'));
                   
                   const userCompany = appUser?.owner && appUser.owner !== 'None' ? appUser.owner : null;
-                  const isGlobalAdminOrDesign = appUser?.role === 'Admin' || appUser?.role === 'Design';
+                  const isGlobalAdmin = appUser?.role === 'Admin';
 
                   // 1. Permission check for expanding tube:
-                  // Can expand if global Admin/Design, or if tube belongs to user's company, or unassigned ('None')
+                  // Can expand if Admin, or if the Tube belongs to the user's company, or is unassigned.
                   const canExpand = 
-                    isGlobalAdminOrDesign || 
-                    !userCompany || 
+                    isGlobalAdmin ||
                     tubeOwner === 'None' ||
                     tubeOwner === userCompany;
 
@@ -344,7 +343,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                     permissions.editRoutes && 
                     effectiveOwner !== 'None' && 
                     effectiveOwner !== 'Mixed' && (
-                      isGlobalAdminOrDesign || 
+                      isGlobalAdmin ||
                       (userCompany && effectiveOwner === userCompany)
                     );
 
@@ -601,17 +600,11 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
       <AnimatePresence>
         {selectedCore && (() => {
           const userCompany = appUser?.owner && appUser.owner !== 'None' ? appUser.owner : null;
-          const isGlobalAdminOrDesign = !userCompany && (appUser?.role === 'Admin' || appUser?.role === 'Design');
-          const canEditSelectedCore = 
-            permissions.editRoutes && (
-              isGlobalAdminOrDesign || 
-              (userCompany && (selectedCore.owner === userCompany || selectedCore.owner === 'None'))
-            );
-          const selectableOwnersForCore = isGlobalAdminOrDesign 
-            ? ['None', ...availableOwners] 
-            : userCompany 
-              ? Array.from(new Set(['None', userCompany, selectedCore.owner])) 
-              : ['None', selectedCore.owner];
+          const savedTubeOwner = hasTubes
+            ? getTubeOwner(route.cores.filter(core => tubeIdForCore(core.id) === tubeIdForCore(selectedCore.id)))
+            : selectedCore.owner;
+          const canEditSelectedCore = permissions.editRoutes && canChangeTubeOwner(appUser, savedTubeOwner);
+          const selectableOwnersForCore = ['None', ...availableOwners];
 
           return (
             <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -702,7 +695,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                           <div>
                             <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Owner</label>
                             <div className="flex flex-wrap gap-1">
-                              {selectableOwnersForCore.map((owner) => (
+                              {hasTubes ? (
+                                <p className="text-[9px] text-slate-500">Change Owner for the whole Tube using the selector above.</p>
+                              ) : selectableOwnersForCore.map((owner) => (
                                 <button
                                   key={owner}
                                   onClick={() => setEditData({ ...editData, owner: owner as CoreOwner })}

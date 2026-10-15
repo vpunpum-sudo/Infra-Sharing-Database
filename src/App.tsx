@@ -964,20 +964,31 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         const latestRoute = routeSnapshot.data() as RouteType;
         const currentCore = latestRoute.cores.find(core => core.id === coreId);
         if (!currentCore) throw new Error('This Core is no longer available. Please reload the route.');
-        if (data.owner !== undefined && data.owner !== currentCore.owner) {
+        const changedData = { ...data };
+        if (changedData.owner === currentCore.owner) delete changedData.owner;
+        if (changedData.priority === currentCore.priority) delete changedData.priority;
+        const hasTubes = latestRoute.cores.some(core => core.label.startsWith('T'));
+        if (hasTubes) {
+          validateTubeOwnerUpdates(latestRoute.cores, [{ coreId, data: changedData }], latestUser,
+            latestRoute.owners?.length ? latestRoute.owners : ['ITEL', 'SYMC', 'UIH']);
+        } else {
           if (!canChangeTubeOwner(latestUser, currentCore.owner)) {
-            throw new Error('Only the current Owner or Admin/Design can change this Core Owner.');
+            throw new Error('Only the current Owner or Admin can manage this Core.');
           }
           const availableOwners = latestRoute.owners?.length
             ? latestRoute.owners
             : ['ITEL', 'SYMC', 'UIH'] as CoreOwner[];
-          if (data.owner !== 'None' && !availableOwners.includes(data.owner)) {
+          if (changedData.owner !== undefined && changedData.owner !== 'None' && !availableOwners.includes(changedData.owner)) {
             throw new Error('This Owner is not available for the selected Fiber route.');
           }
+          if (changedData.priority !== undefined &&
+              latestUser.role !== 'Admin' && (changedData.owner ?? currentCore.owner) !== latestUser.owner) {
+            throw new Error('Only the current Owner or Admin can change Core priority.');
+          }
         }
-        const newestHistory = data.history?.at(-1);
+        const newestHistory = changedData.history?.at(-1);
         const updatedCores = latestRoute.cores.map(core => core.id === coreId ? {
-          ...core, ...data,
+          ...core, ...changedData,
           ...(newestHistory ? { history: [...(core.history || []), newestHistory] } : {})
         } : core);
         transaction.update(routeRef, { cores: updatedCores });
