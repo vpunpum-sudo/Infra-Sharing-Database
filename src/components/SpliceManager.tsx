@@ -174,7 +174,7 @@ interface SpliceManagerProps {
   onUpdateTrayOwner: (enclosureId: string, trayId: number, owner: CoreOwner) => void;
   onUpdateRouteSide?: (enclosureId: string, routeId: string, side: 'left' | 'right' | 'top' | 'bottom') => void;
   onUpdatePortAssignment?: (enclosureId: string, portId: number, data: { owner?: CoreOwner, routeId?: string }) => void;
-  onUpdateCore?: (routeId: string, coreId: number, data: Partial<Core>) => void;
+  onUpdateCore?: (routeId: string, coreId: number, data: Partial<Core>) => Promise<boolean>;
   onUpdateEnclosure?: (enclosureId: string, data: Partial<FiberEnclosure>) => void;
   onEditEnclosure?: (enclosure: FiberEnclosure) => void;
   quotaExceeded?: boolean;
@@ -1466,8 +1466,8 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
         date: new Date().toISOString()
       };
       const updatedHistory = [...(editingCore.core.history || []), newHistoryEntry];
-      await onUpdateCore(editingCore.route.id, editingCore.core.id, { ...coreEditData, history: updatedHistory });
-      setEditingCore(null);
+      const saved = await onUpdateCore(editingCore.route.id, editingCore.core.id, { ...coreEditData, history: updatedHistory });
+      if (saved) setEditingCore(null);
     } catch (error) {
       console.error('Error saving core:', error);
     } finally {

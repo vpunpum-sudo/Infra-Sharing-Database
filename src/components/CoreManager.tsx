@@ -9,7 +9,7 @@ interface CoreManagerProps {
   route: Route;
   appUser: AppUser | null;
   onClose: () => void;
-  onUpdateCore: (routeId: string, coreId: number, data: Partial<Core>) => void;
+  onUpdateCore: (routeId: string, coreId: number, data: Partial<Core>) => Promise<boolean>;
   onUpdateCores: (routeId: string, updates: { coreId: number, data: Partial<Core> }[]) => Promise<boolean>;
 }
 
@@ -29,6 +29,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
   const [pendingPriorityUpdates, setPendingPriorityUpdates] = useState<Record<number, CorePriority>>({});
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
   const [isSavingBulk, setIsSavingBulk] = useState(false);
+  const [isSavingCore, setIsSavingCore] = useState(false);
 
   const toggleTube = (tubeId: number) => {
     setExpandedTubes(prev => ({ ...prev, [tubeId]: !prev[tubeId] }));
@@ -45,7 +46,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     setIsEditing(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedCore) return;
     
     // Create history entry
@@ -59,9 +60,16 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
     const updatedHistory = [...(selectedCore.history || []), newHistoryEntry];
     
-    onUpdateCore(route.id, selectedCore.id, { ...editData, history: updatedHistory });
-    setIsEditing(false);
-    setSelectedCore({ ...selectedCore, ...editData, history: updatedHistory });
+    setIsSavingCore(true);
+    try {
+      const saved = await onUpdateCore(route.id, selectedCore.id, { ...editData, history: updatedHistory });
+      if (saved) {
+        setIsEditing(false);
+        setSelectedCore({ ...selectedCore, ...editData, history: updatedHistory });
+      }
+    } finally {
+      setIsSavingCore(false);
+    }
   };
 
   const handleBulkSave = async () => {
@@ -729,9 +737,10 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                             </button>
                             <button 
                               onClick={handleSave}
-                              className="flex-1 py-2 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all"
+                              disabled={isSavingCore}
+                              className="flex-1 py-2 bg-brand-600 text-slate-100 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all disabled:opacity-50"
                             >
-                              Save Changes
+                              {isSavingCore ? 'Saving...' : 'Save Changes'}
                             </button>
                           </div>
                         </div>
