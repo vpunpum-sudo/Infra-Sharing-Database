@@ -67,6 +67,9 @@ export function prepareRouteSplit(
     ...(markAtCut !== undefined ? { markStart: markAtCut } : {}),
     ...(secondLength !== undefined ? { totalLength: secondLength } : {})
   };
+  // A newly split end replaces any earlier endpoint metadata from the source route.
+  delete first.endCutId;
+  delete second.startCutId;
   // Keep an unspliced core continuous across the new enclosure. An existing
   // splice at this enclosure remains with the first segment instead.
   route.cores.forEach((core, index) => {
@@ -129,4 +132,76 @@ export function prepareRouteSplit(
   const firstEnclosureIds = enclosures.filter(item => item.id === enclosure.id || !belongsToSecond(item.id)).map(item => item.id);
   const secondEnclosureIds = enclosures.filter(item => item.id === enclosure.id || belongsToSecond(item.id)).map(item => item.id);
   return { first, second, updatedRoutes, updatedEnclosures, updatedLoops, firstEnclosureIds, secondEnclosureIds };
+}
+
+/** Split a Fiber route at a clicked point while leaving the cable continuous on the map.
+ * The paired cut IDs keep the two ends identifiable until an optional Enclosure is added.
+ * No physical splice is recorded before an Enclosure exists.
+ */
+export function prepareRouteCut(
+  route: Route,
+  clickedPoint: Point,
+  routes: Route[],
+  enclosures: FiberEnclosure[],
+  loops: FiberLoop[],
+  newRouteId: string,
+  cutId: string,
+  uid: string,
+  firstName: string,
+  secondName: string
+): RouteSplit {
+  if (route.path.length < 2) throw new Error('The selected Fiber route has no drawable line.');
+  const closest = getClosestPointOnRoute(clickedPoint, route.path);
+  if (closest.distance > 30) throw new Error('Click closer to the selected Fiber route.');
+  // Reuse the established split logic to partition references, then remove the
+  // temporary junction before anything is written to Firestore.
+  const virtualEnclosure: FiberEnclosure = {
+    id: cutId, name: 'Temporary cut point', position: closest.point, uid
+  };
+  const result = prepareRouteSplit(
+    route, virtualEnclosure, routes, enclosures, loops,
+    newRouteId, uid, firstName, secondName
+  );
+  const withoutVirtualSplice = (cores: Core[]) => cores.map(core => {
+    if (!core.splices?.[cutId]) return core;
+    const splices = { ...core.splices };
+    delete splices[cutId];
+    return { ...core, splices };
+  });
+  const first = { ...result.first, cores: withoutVirtualSplice(result.first.cores), endCutId: cutId };
+  const second = { ...result.second, cores: withoutVirtualSplice(result.second.cores), startCutId: cutId };
+  delete first.endEnclosureId;
+  delete second.startEnclosureId;
+  return { ...result, first, second };
+}
+
+/** Convert a saved cut into an Enclosure connection, preserving each Core ID. */
+export function attachEnclosureToRouteCut(
+  first: Route,
+  second: Route,
+  enclosure: FiberEnclosure,
+  cutId: string
+): { first: Route; second: Route } {
+  if (first.endCutId !== cutId || second.startCutId !== cutId ||
+      getDistance(first.path.at(-1)!, enclosure.position) > 0.2 ||
+      getDistance(second.path[0], enclosure.position) > 0.2) {
+    throw new Error('The cut point has changed. Please select it again.');
+  }
+  if (first.cores.length !== second.cores.length ||
+      first.cores.some(core => !second.cores.some(other => other.id === core.id))) {
+    throw new Error('The Core assignments changed after cutting. Please review both Fiber segments.');
+  }
+  const firstCores = first.cores.map(core => ({
+    ...core,
+    splices: { ...core.splices, [enclosure.id]: { routeId: second.id, coreId: core.id } }
+  }));
+  const secondCores = second.cores.map(core => ({
+    ...core,
+    splices: { ...core.splices, [enclosure.id]: { routeId: first.id, coreId: core.id } }
+  }));
+  const updatedFirst = { ...first, cores: firstCores, endEnclosureId: enclosure.id };
+  const updatedSecond = { ...second, cores: secondCores, startEnclosureId: enclosure.id };
+  delete updatedFirst.endCutId;
+  delete updatedSecond.startCutId;
+  return { first: updatedFirst, second: updatedSecond };
 }

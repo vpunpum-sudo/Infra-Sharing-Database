@@ -58,6 +58,7 @@ interface FiberMapProps {
   onOpenEnclosureDetail?: (enclosure: FiberEnclosure) => void;
   onEditRoute?: (route: Route) => void;
   onSplitRoute?: (route: Route) => void;
+  onCutRoute?: (route: Route, point: Point) => void;
   onEditEnclosure?: (enclosure: FiberEnclosure) => void;
   onEnclosureDragEnd?: (enclosure: FiberEnclosure, point: Point) => void;
   selectedRouteId?: string;
@@ -1457,6 +1458,7 @@ export default function FiberMap({
   sidebarCollapsed,
   onEditRoute,
   onSplitRoute,
+  onCutRoute,
   onEditEnclosure,
   onEnclosureDragEnd,
   editingEnclosureId
@@ -1893,6 +1895,20 @@ export default function FiberMap({
             )
           ) : (
           <div className="flex flex-col gap-1 p-1 min-w-[180px] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (popupData.type === 'route' && onCutRoute) {
+                  onCutRoute(popupData.data, { lat: popupData.position[0], lng: popupData.position[1] });
+                }
+                setPopupData(null);
+                setHoveredObjectId(null);
+              }}
+              className={`${popupData.type === 'route' && onCutRoute ? 'flex' : 'hidden'} items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest`}
+            >
+              <Scissors className="w-3 h-3 text-sky-500" />
+              <span>Cut Fiber Here</span>
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();

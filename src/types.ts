@@ -187,6 +187,9 @@ export type Route = {
   cores: Core[];
   startEnclosureId?: string;
   endEnclosureId?: string;
+  /** Identifies two adjacent route ends cut without an Enclosure. */
+  startCutId?: string;
+  endCutId?: string;
   tier?: string; // Changed from RouteTier to string to allow dynamic types
   fiberType?: string; // Added to store the actual Fiber Type name for color mapping
   tierSharing?: 'Tier 1' | 'Tier 2';

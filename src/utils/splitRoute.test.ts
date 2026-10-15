@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FiberEnclosure, FiberLoop, Route } from '../types';
 import { getDistance, insertPointOnRoute, routeLength } from './geo';
-import { prepareRouteSplit } from './splitRoute';
+import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './splitRoute';
 
 const a = { lat: 13.7, lng: 100.5 };
 const mid = { lat: 13.7, lng: 100.505 };
@@ -58,4 +58,34 @@ test('an existing splice at the cut stays attached to its original segment', () 
   const result = prepareRouteSplit(spliced, cut, [spliced], [cut], [], 'new', 'editor', 'A', 'B');
   assert.equal(result.first.cores[0].splices?.cut?.routeId, 'other');
   assert.equal(result.second.cores[0].splices?.cut, undefined);
+});
+
+test('cutting at a clicked point keeps both Fiber halves and does not invent a splice', () => {
+  const result = prepareRouteCut(route, mid, [route, other], [end], [loop],
+    'new', 'cut-point', 'editor', 'Fiber A', 'Fiber B');
+  assert.deepEqual(result.first.path.at(-1), result.second.path[0]);
+  assert.equal(result.first.endCutId, 'cut-point');
+  assert.equal(result.second.startCutId, 'cut-point');
+  assert.equal(result.first.endEnclosureId, undefined);
+  assert.equal(result.second.startEnclosureId, undefined);
+  assert.equal(result.first.cores[0].splices?.['cut-point'], undefined);
+  assert.equal(result.second.cores[0].splices?.['cut-point'], undefined);
+  assert.equal(result.first.totalLength! + result.second.totalLength!, route.totalLength);
+  assert.equal(result.updatedRoutes[0].cores[0].splices?.end?.routeId, 'new');
+  assert.equal(result.updatedLoops[0].routeId, 'new');
+});
+
+test('adding an Enclosure at a saved cut connects both segments by matching Core', () => {
+  const result = prepareRouteCut(route, mid, [route], [], [], 'new', 'cut-point', 'editor', 'A', 'B');
+  const connected = attachEnclosureToRouteCut(result.first, result.second, cut, 'cut-point');
+  assert.equal(connected.first.endEnclosureId, cut.id);
+  assert.equal(connected.second.startEnclosureId, cut.id);
+  assert.equal(connected.first.endCutId, undefined);
+  assert.equal(connected.second.startCutId, undefined);
+  assert.deepEqual(connected.first.cores[0].splices?.[cut.id], { routeId: 'new', coreId: 1 });
+  assert.deepEqual(connected.second.cores[0].splices?.[cut.id], { routeId: 'original', coreId: 1 });
+});
+
+test('cutting at a route endpoint is rejected', () => {
+  assert.throws(() => prepareRouteCut(route, a, [route], [], [], 'new', 'cut-point', 'editor', 'A', 'B'));
 });
