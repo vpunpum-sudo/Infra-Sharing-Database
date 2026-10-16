@@ -22,6 +22,7 @@ import { OwnerLogo } from './OwnerLogo';
 import { getEffectiveOwnerLogo } from '../services/ownerLogosService';
 import { getClosestPointOnRoute } from '../utils/geo';
 import { renderPrintableProjectMap } from '../utils/printProjectMap';
+import { normalizePrintLogo } from '../utils/printLogo';
 import { getApprovalAllocation } from '../utils/approvalAllocation';
 import { exportApprovalPdf } from '../utils/exportApprovalPdf';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1043,19 +1044,17 @@ export function DesignApprovalModal({
   const approvalSummaryRows = fiberRouteSchedule.map((route, index) => {
     const routeEnclosures = getRouteEnclosures(route.id);
     const typeCounts = new Map<string, number>();
-    const bjDetails = routeEnclosures.map((enclosure, enclosureIndex) => {
+    routeEnclosures.forEach(enclosure => {
       const type = getEnclosureType(enclosure);
       const baseName = type?.name || enclosure.locationType || 'ไม่ระบุ Type';
       const typeName = type?.capacity && !baseName.includes(String(type.capacity))
         ? `${baseName} (${type.capacity} Core)` : baseName;
       typeCounts.set(typeName, (typeCounts.get(typeName) || 0) + 1);
-      return { ...parseEnclosureName(enclosure, enclosureIndex), typeName };
     });
     return {
       route,
       index,
-      typeCounts: Array.from(typeCounts, ([name, count]) => ({ name, count })),
-      bjDetails
+      typeCounts: Array.from(typeCounts, ([name, count]) => ({ name, count }))
     };
   });
 
@@ -1557,7 +1556,11 @@ export function DesignApprovalModal({
     setIsExporting(true);
     setExportError(null);
     try {
-      const printDoc = generatePrintableHtml();
+      const printLogos = Object.fromEntries(await Promise.all(participatingOwners.map(async owner => {
+        const fallback = owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg';
+        return [owner, await normalizePrintLogo(getEffectiveOwnerLogo(owner) || fallback, fallback)];
+      }))) as Partial<Record<CoreOwner, string>>;
+      const printDoc = generatePrintableHtml(printLogos);
       const projectName = project.name.replace(/[\\/:*?"<>|\s]+/g, '_');
       await exportApprovalPdf(printDoc, `Fiber_Infra_Sharing_Approval_${projectName}_${new Date().toISOString().split('T')[0]}.pdf`);
       setExportSuccess(true);
@@ -1571,7 +1574,7 @@ export function DesignApprovalModal({
   };
 
   // Generate complete printable HTML
-  const generatePrintableHtml = () => {
+  const generatePrintableHtml = (printLogos: Partial<Record<CoreOwner, string>>) => {
     const docNum = designApproval?.documentNumber || `APP-2026-${projectTierName.replace('Tier ', 'T')}-01`;
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
     const contractor = designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.';
@@ -1601,32 +1604,25 @@ export function DesignApprovalModal({
         position: enc.position
       };
     });
-    // Keep the route table on the overview page. Large projects receive several
-    // full-size map pages so every Enclosure can retain a readable callout.
-    const mapGroups = printMapEnclosures.length > 12
-      ? Array.from({ length: Math.ceil(printMapEnclosures.length / 12) }, (_, index) =>
-          printMapEnclosures.slice(index * 12, (index + 1) * 12))
-      : [printMapEnclosures];
-
     // Generate dynamic cover logos HTML for ONLY participating owners
     const coverLogosHtml = participatingOwners.map(owner => {
-      const logoUrl = getEffectiveOwnerLogo(owner) || (owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg');
+      const logoUrl = printLogos[owner];
       return `<span class="pdf-logo-slot"><img src="${logoUrl}" alt="${owner}" /></span>`;
     }).join('');
 
     // Generate dynamic header logos HTML for ONLY participating owners
     const headerLogosHtml = participatingOwners.map(owner => {
-      const logoUrl = getEffectiveOwnerLogo(owner) || (owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg');
+      const logoUrl = printLogos[owner];
       return `<span class="pdf-logo-slot"><img src="${logoUrl}" alt="${owner}" /></span>`;
     }).join('');
-    const projectMapPages = mapGroups.map((group, index) => `
+    const projectMapPage = `
       <div class="slide-page pdf-map-page">
         <div class="slide-header">
-          <h2 class="slide-title">แผนที่เส้นทางโครงการ (Project Map)${mapGroups.length > 1 ? ` · ${index + 1}/${mapGroups.length}` : ''}</h2>
+          <h2 class="slide-title">แผนที่เส้นทางโครงการ (Project Map)</h2>
           <div class="logos-bar">${headerLogosHtml}</div>
         </div>
-        ${renderPrintableProjectMap(printMapRoutes, group, { focusOnEnclosures: mapGroups.length > 1 })}
-      </div>`).join('');
+        ${renderPrintableProjectMap(printMapRoutes, printMapEnclosures)}
+      </div>`;
     
     return `<!DOCTYPE html>
 <html lang="th">
@@ -1877,7 +1873,7 @@ export function DesignApprovalModal({
       </tbody>
     </table>
   </div>
-  ${projectMapPages}
+  ${projectMapPage}
 
   <!-- Slide 4: Enclosure Details Table -->
   <div class="slide-page">
@@ -2029,7 +2025,7 @@ export function DesignApprovalModal({
                             const owner = trayAssignments[tId] || 'None';
                             if (owner === 'None') spare++;
                           }
-                          return spare;
+                          return spare || '-';
                         }
                         return 'ยังไม่ได้กำหนด';
                       })()}
@@ -2077,6 +2073,7 @@ export function DesignApprovalModal({
           trayStr: allocation.trayText
         };
       });
+      const spareAllocation = getApprovalAllocation(actualRoute, routeEncs, 'None', enc => getEnclosureType(enc)?.spliceTrays || 7);
 
       return `
         <div class="pdf-keep-together" style="margin-top: 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white;">
@@ -2138,9 +2135,9 @@ export function DesignApprovalModal({
               <tr>
                 <td style="font-weight: 700; color: #64748b;">Spare</td>
                 <td>${routeBjDisplay}</td>
-                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').trayText)}</td>
-                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').tubeText)}</td>
-                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').coreText)}</td>
+                <td>${escapePrintText(spareAllocation.trayText)}</td>
+                <td>${escapePrintText(spareAllocation.tubeText)}</td>
+                <td>${escapePrintText(spareAllocation.coreText)}</td>
               </tr>
             </tbody>
           </table>
@@ -2174,8 +2171,8 @@ export function DesignApprovalModal({
         <strong style="color: #0369a1; font-size: 13px;">สรุปเส้น Fiber Optic และการใช้งานร่วมกัน</strong>
         <table style="table-layout: fixed; width: 100%; font-size: 10px; margin: 8px 0;">
           <colgroup>
-            <col style="width: 13%;" /><col style="width: 24%;" /><col style="width: 11%;" />
-            <col style="width: 18%;" /><col style="width: 16%;" /><col style="width: 18%;" />
+            <col style="width: 15%;" /><col style="width: 29%;" /><col style="width: 13%;" />
+            <col style="width: 22%;" /><col style="width: 21%;" />
           </colgroup>
           <thead>
             <tr>
@@ -2184,11 +2181,10 @@ export function DesignApprovalModal({
               <th>สาย / ระยะทาง</th>
               <th>สัดส่วนการใช้งาน</th>
               <th>Type Enclosure</th>
-              <th>BJ รายจุด</th>
             </tr>
           </thead>
           <tbody>
-            ${approvalSummaryRows.map(({ route, typeCounts, bjDetails }) => `
+            ${approvalSummaryRows.map(({ route, typeCounts }) => `
               <tr>
                 <td style="vertical-align: top; overflow-wrap: anywhere;"><strong>${escapePrintText(route.tier)}</strong></td>
                 <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;"><strong>${escapePrintText(route.routeName)}</strong></td>
@@ -2201,9 +2197,6 @@ export function DesignApprovalModal({
                 <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;">
                   ${typeCounts.length ? typeCounts.map(type => `<div>${escapePrintText(type.name)} <strong>(${type.count} หัว)</strong></div>`).join('') : '-'}
                 </td>
-                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;">
-                  ${bjDetails.length ? bjDetails.map(bj => `<div><strong>${escapePrintText(bj.bjNo)}</strong> · ${escapePrintText(bj.typeName)}</div>`).join('') : '-'}
-                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -2214,7 +2207,6 @@ export function DesignApprovalModal({
               <td>${totalLengthKm} กม.</td>
               <td style="text-align: left;">${participatingOwners.map(owner => `<div>${owner}: ${owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>`).join('')}</td>
               <td>ตาม Type ที่ใช้จริง</td>
-              <td>${sldEnclosures.length} หัว</td>
             </tr>
           </tfoot>
         </table>
@@ -3116,7 +3108,7 @@ export function DesignApprovalModal({
                                                     const owner = trayAssignments[tId] || 'None';
                                                     if (owner === 'None') spare++;
                                                   }
-                                                  return spare;
+                                                  return spare || '-';
                                                 }
                                                 return 'ยังไม่ได้กำหนด';
                                               })()}
@@ -3158,6 +3150,7 @@ export function DesignApprovalModal({
                             colorStyle
                           };
                         });
+                        const spareAllocation = getApprovalAllocation(actualRoute, routeEncs, 'None', enc => getEnclosureType(enc)?.spliceTrays || 7);
 
                         return (
                           <div key={routeSched.id || rIdx} className="space-y-2">
@@ -3284,9 +3277,9 @@ export function DesignApprovalModal({
                                         <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
                                           {routeBjDisplay}
                                         </td>
-                                        <td className="p-2 border-r border-slate-800 text-slate-400">{getApprovalAllocation(actualRoute, routeEncs, 'None').trayText}</td>
-                                        <td className="p-2 border-r border-slate-800 text-slate-500">{getApprovalAllocation(actualRoute, routeEncs, 'None').tubeText}</td>
-                                        <td className="p-2 text-slate-500">{getApprovalAllocation(actualRoute, routeEncs, 'None').coreText}</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-400">{spareAllocation.trayText}</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-500">{spareAllocation.tubeText}</td>
+                                        <td className="p-2 text-slate-500">{spareAllocation.coreText}</td>
                                       </tr>
                                     </tbody>
                                   </table>
@@ -3467,10 +3460,10 @@ export function DesignApprovalModal({
                             </span>
                           </div>
                           <div className="overflow-x-auto rounded-lg border border-slate-700">
-                            <table className="w-full min-w-[1080px] table-fixed border-collapse text-[11px] text-left">
+                            <table className="w-full min-w-[900px] table-fixed border-collapse text-[11px] text-left">
                               <colgroup>
-                                <col className="w-[13%]" /><col className="w-[24%]" /><col className="w-[11%]" />
-                                <col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[18%]" />
+                                <col className="w-[15%]" /><col className="w-[29%]" /><col className="w-[13%]" />
+                                <col className="w-[22%]" /><col className="w-[21%]" />
                               </colgroup>
                               <thead className="bg-slate-800 text-slate-200">
                                 <tr>
@@ -3479,11 +3472,10 @@ export function DesignApprovalModal({
                                   <th className="p-2 border-r border-slate-700">สาย / ระยะทาง</th>
                                   <th className="p-2 border-r border-slate-700">สัดส่วนการใช้งาน</th>
                                   <th className="p-2 border-r border-slate-700">Type Enclosure</th>
-                                  <th className="p-2">BJ รายจุด</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-800 bg-slate-950/70 align-top text-slate-200">
-                                {approvalSummaryRows.map(({ route, index, typeCounts, bjDetails }) => (
+                                {approvalSummaryRows.map(({ route, index, typeCounts }) => (
                                   <tr key={route.id || index}>
                                     <td className="p-2 border-r border-slate-800 font-bold text-sky-300 break-words">{route.tier}</td>
                                     <td className="p-2 border-r border-slate-800 font-semibold break-words">{route.routeName}</td>
@@ -3504,13 +3496,6 @@ export function DesignApprovalModal({
                                         <div key={type.name} className="break-words">{type.name} <strong className="text-amber-300">({type.count} หัว)</strong></div>
                                       )) : '-'}
                                     </td>
-                                    <td className="p-2 space-y-1">
-                                      {bjDetails.length ? bjDetails.map((bj, bjIndex) => (
-                                        <div key={`${bj.bjNo}-${bjIndex}`} title={bj.bjName} className="break-words">
-                                          <strong className="text-sky-300">{bj.bjNo}</strong> <span className="text-slate-400">· {bj.typeName}</span>
-                                        </div>
-                                      )) : '-'}
-                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -3525,7 +3510,6 @@ export function DesignApprovalModal({
                                     ))}
                                   </td>
                                   <td className="p-2 border-r border-slate-700">ตาม Type ที่ใช้จริง</td>
-                                  <td className="p-2">{sldEnclosures.length} หัว</td>
                                 </tr>
                               </tfoot>
                             </table>
