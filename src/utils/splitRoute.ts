@@ -1,5 +1,6 @@
 import { Core, FiberEnclosure, FiberLoop, Point, Route } from '../types';
 import { getClosestPointOnRoute, getDistance, splitRoutePath } from './geo';
+import { getRouteEnclosureSpans } from './routeSegments';
 
 export type RouteSplit = {
   first: Route;
@@ -67,6 +68,22 @@ export function prepareRouteSplit(
     ...(markAtCut !== undefined ? { markStart: markAtCut } : {}),
     ...(secondLength !== undefined ? { totalLength: secondLength } : {})
   };
+  // Preserve Tube priorities on the physical span when the new Enclosure
+  // divides that span into two named sections.
+  const originalSpans = getRouteEnclosureSpans(route, enclosures);
+  const childEnclosures = [...enclosures.filter(item => item.id !== enclosure.id), enclosure];
+  const inheritedPriorities = (child: Route, offset: number) => {
+    const values: NonNullable<Route['segmentTubePriorities']> = {};
+    for (const span of getRouteEnclosureSpans(child, childEnclosures)) {
+      const midpoint = offset + (span.startDistance + span.endDistance) / 2;
+      const source = originalSpans.find(item => midpoint >= item.startDistance - 0.2 && midpoint <= item.endDistance + 0.2);
+      const priorities = source && route.segmentTubePriorities?.[source.key];
+      if (priorities) values[span.key] = { ...priorities };
+    }
+    return values;
+  };
+  first.segmentTubePriorities = inheritedPriorities(first, 0);
+  second.segmentTubePriorities = inheritedPriorities(second, cutDistance);
   // A newly split end replaces any earlier endpoint metadata from the source route.
   delete first.endCutId;
   delete second.startCutId;
@@ -201,6 +218,13 @@ export function attachEnclosureToRouteCut(
   }));
   const updatedFirst = { ...first, cores: firstCores, endEnclosureId: enclosure.id };
   const updatedSecond = { ...second, cores: secondCores, startEnclosureId: enclosure.id };
+  const replaceCutKey = (priorities: Route['segmentTubePriorities']) => Object.fromEntries(
+    Object.entries(priorities || {}).map(([key, values]) => [
+      key.split('|').map(id => id === cutId ? enclosure.id : id).join('|'), values
+    ])
+  );
+  updatedFirst.segmentTubePriorities = replaceCutKey(first.segmentTubePriorities);
+  updatedSecond.segmentTubePriorities = replaceCutKey(second.segmentTubePriorities);
   delete updatedFirst.endCutId;
   delete updatedSecond.startCutId;
   return { first: updatedFirst, second: updatedSecond };

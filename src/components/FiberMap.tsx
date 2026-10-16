@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
 import { useMapDrawing } from '../hooks/useMapDrawing';
+import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -54,7 +55,7 @@ interface FiberMapProps {
   onMapClick: (point: Point) => void;
   onRouteClick: (route: Route) => void;
   onEnclosureClick?: (enclosure: FiberEnclosure) => void;
-  onOpenRouteDetail?: (route: Route) => void;
+  onOpenRouteDetail?: (route: Route, point?: Point) => void;
   onOpenEnclosureDetail?: (enclosure: FiberEnclosure) => void;
   onEditRoute?: (route: Route) => void;
   onSplitRoute?: (route: Route) => void;
@@ -1255,7 +1256,7 @@ function MapSearchControl({
   );
 }
 
-function RouteTooltipContent({ route }: { route: Route }) {
+function RouteTooltipContent({ route, span, hasSpans }: { route: Route; span: EnclosureSpan | null; hasSpans: boolean }) {
   return (
     <div className="p-1 space-y-2 text-slate-800 dark:text-slate-100">
       {/* Route Name & Capacity Header */}
@@ -1274,6 +1275,16 @@ function RouteTooltipContent({ route }: { route: Route }) {
           </span>
         )}
       </div>
+
+      {span ? (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-[10px] font-bold text-sky-900">
+          ช่วงที่เลือก: {span.from.name} → {span.to.name}
+        </div>
+      ) : hasSpans ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-900">
+          จุดนี้อยู่นอกช่วงระหว่าง Enclosure กรุณาคลิกบนช่วงที่ต้องการ
+        </div>
+      ) : null}
 
       {/* Length & ML หัว-ท้าย */}
       <div className="grid grid-cols-2 gap-2 py-1.5 bg-slate-100 dark:bg-slate-950/60 rounded-xl px-2.5 text-[9px] font-semibold border border-slate-200 dark:border-slate-800">
@@ -1338,7 +1349,7 @@ function RouteTooltipContent({ route }: { route: Route }) {
 
           const priorityTubeIds = Array.from(new Set(
             ownerCores
-              .filter(c => c.priority === 'High')
+              .filter(c => getTubePriority(route, span?.key || null, Math.floor((c.id - 1) / 12) + 1) === 'High')
               .map(c => Math.floor((c.id - 1) / 12) + 1)
           )).sort((a, b) => a - b);
 
@@ -1358,7 +1369,7 @@ function RouteTooltipContent({ route }: { route: Route }) {
         }).filter(b => b.assignedCount > 0);
 
         const totalPriorityTubesCount = Array.from(new Set(
-          cores.filter(c => c.priority === 'High').map(c => Math.floor((c.id - 1) / 12) + 1)
+          cores.filter(c => getTubePriority(route, span?.key || null, Math.floor((c.id - 1) / 12) + 1) === 'High').map(c => Math.floor((c.id - 1) / 12) + 1)
         )).length;
 
         return (
@@ -1890,7 +1901,21 @@ export default function FiberMap({
               </div>
             ) : (
               <div className="max-h-[55vh] overflow-y-auto" style={{ width: 'min(460px, calc(100vw - 96px))' }}>
-                <RouteTooltipContent route={popupData.data} />
+                <RouteTooltipContent
+                  route={popupData.data}
+                  span={getSpanAtPoint(popupData.data, enclosures, { lat: popupData.position[0], lng: popupData.position[1] })}
+                  hasSpans={getRouteEnclosureSpans(popupData.data, enclosures).length > 0}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenRouteDetail?.(popupData.data, { lat: popupData.position[0], lng: popupData.position[1] });
+                    setPopupData(null);
+                  }}
+                  className="mt-2 w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600"
+                >
+                  Core details · Set span Priority
+                </button>
               </div>
             )
           ) : (
@@ -1941,7 +1966,7 @@ export default function FiberMap({
               onClick={(e) => {
                 e.stopPropagation();
                 if (popupData.type === 'route') {
-                  onOpenRouteDetail?.(popupData.data);
+                  onOpenRouteDetail?.(popupData.data, { lat: popupData.position[0], lng: popupData.position[1] });
                 } else {
                   onOpenEnclosureDetail?.(popupData.data);
                 }

@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Route, Core, CoreStatus, CoreOwner, CorePriority, User as AppUser } from '../types';
+import { Route, Core, CoreStatus, CoreOwner, CorePriority, FiberEnclosure, Point, SegmentTubePriorityUpdate, User as AppUser } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
 import { canChangeTubeOwner, getTubeOwner, tubeIdForCore } from '../utils/tubeOwnership';
+import { getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { X, Activity, User, ShieldAlert, Box, CheckCircle2, Eye, History, Clock, Maximize2, Minimize2, ChevronRight, ChevronDown, Filter, Lock, Pencil, AlertCircle, Save, RotateCcw } from 'lucide-react';
 
 interface CoreManagerProps {
   route: Route;
   appUser: AppUser | null;
+  enclosures: FiberEnclosure[];
+  selectedPoint?: Point;
   onClose: () => void;
   onUpdateCore: (routeId: string, coreId: number, data: Partial<Core>) => Promise<boolean>;
-  onUpdateCores: (routeId: string, updates: { coreId: number, data: Partial<Core> }[]) => Promise<boolean>;
+  onUpdateCores: (routeId: string, updates: { coreId: number, data: Partial<Core> }[], segmentUpdates?: SegmentTubePriorityUpdate[]) => Promise<boolean>;
 }
 
-export default function CoreManager({ route, appUser, onClose, onUpdateCore, onUpdateCores }: CoreManagerProps) {
+export default function CoreManager({ route, appUser, enclosures, selectedPoint, onClose, onUpdateCore, onUpdateCores }: CoreManagerProps) {
   const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
   const [filterOwner, setFilterOwner] = useState<'All' | CoreOwner>('All');
   const [filterPriority, setFilterPriority] = useState<'All' | CorePriority>('All');
@@ -26,7 +29,13 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Core>>({});
   const [pendingUpdates, setPendingUpdates] = useState<Record<number, CoreOwner>>({});
-  const [pendingPriorityUpdates, setPendingPriorityUpdates] = useState<Record<number, CorePriority>>({});
+  const spans = getRouteEnclosureSpans(route, enclosures);
+  const [selectedSpanKey, setSelectedSpanKey] = useState<string>(() => selectedPoint ? getSpanAtPoint(route, enclosures, selectedPoint)?.key || '' : '');
+  const selectedSpan = spans.find(span => span.key === selectedSpanKey);
+  const hasSpans = spans.length > 0;
+  const [pendingPriorityUpdates, setPendingPriorityUpdates] = useState<Record<string, Record<number, CorePriority>>>({});
+  const pendingPriorityForSpan = pendingPriorityUpdates[selectedSpanKey] || {};
+  const pendingPriorityCount = Object.values(pendingPriorityUpdates).reduce((count, priorities) => count + Object.keys(priorities).length, 0);
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
   const [isSavingBulk, setIsSavingBulk] = useState(false);
   const [isSavingCore, setIsSavingCore] = useState(false);
@@ -40,7 +49,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     setEditData({
       status: selectedCore.status,
       owner: selectedCore.owner,
-      priority: selectedCore.priority,
+      priority: hasSpans && selectedSpan ? getTubePriority(route, selectedSpan.key, tubeIdForCore(selectedCore.id)) : selectedCore.priority,
       details: selectedCore.details || ''
     });
     setIsEditing(true);
@@ -53,7 +62,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     const newHistoryEntry = {
       id: Date.now().toString(),
       action: 'Updated Core',
-      description: `Status: ${editData.status}, Owner: ${editData.owner}, Priority: ${editData.priority}`,
+      description: `Status: ${editData.status}, Owner: ${editData.owner}${hasSpans ? '' : `, Priority: ${editData.priority}`}`,
       user: appUser?.email || 'Unknown',
       date: new Date().toISOString()
     };
@@ -62,10 +71,12 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
     
     setIsSavingCore(true);
     try {
-      const saved = await onUpdateCore(route.id, selectedCore.id, { ...editData, history: updatedHistory });
+      const coreEdit = { ...editData };
+      if (hasSpans) delete coreEdit.priority;
+      const saved = await onUpdateCore(route.id, selectedCore.id, { ...coreEdit, history: updatedHistory });
       if (saved) {
         setIsEditing(false);
-        setSelectedCore({ ...selectedCore, ...editData, history: updatedHistory });
+        setSelectedCore({ ...selectedCore, ...coreEdit, history: updatedHistory });
       }
     } finally {
       setIsSavingCore(false);
@@ -74,14 +85,13 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
   const handleBulkSave = async () => {
     const allUpdates: { coreId: number, data: Partial<Core> }[] = [];
-    const modifiedTubeIds = Array.from(new Set([
-      ...Object.keys(pendingUpdates).map(Number),
-      ...Object.keys(pendingPriorityUpdates).map(Number)
-    ]));
+    const modifiedTubeIds = Object.keys(pendingUpdates).map(Number);
+    const segmentUpdates: SegmentTubePriorityUpdate[] = Object.entries(pendingPriorityUpdates).flatMap(([spanKey, priorities]) =>
+      Object.entries(priorities).map(([tubeId, priority]) => ({ spanKey, tubeId: Number(tubeId), priority }))
+    );
     
     modifiedTubeIds.forEach(tubeId => {
       const nextOwner = pendingUpdates[tubeId];
-      const nextPriority = pendingPriorityUpdates[tubeId];
       const tubeCores = route.cores.filter(c => tubeIdForCore(c.id) === tubeId);
       
       tubeCores.forEach(core => {
@@ -91,10 +101,6 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
         if (nextOwner !== undefined) {
           dataToUpdate.owner = nextOwner;
           historyDescriptions.push(`Owner: ${nextOwner}`);
-        }
-        if (nextPriority !== undefined) {
-          dataToUpdate.priority = nextPriority;
-          historyDescriptions.push(`Priority: ${nextPriority}`);
         }
 
         if (Object.keys(dataToUpdate).length > 0) {
@@ -120,7 +126,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
     setIsSavingBulk(true);
     try {
-      const saved = await onUpdateCores(route.id, allUpdates);
+      const saved = await onUpdateCores(route.id, allUpdates, segmentUpdates);
       if (saved) {
         setPendingUpdates({});
         setPendingPriorityUpdates({});
@@ -158,7 +164,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
   const filteredCores = route.cores.filter(c => 
     (filterOwner === 'All' || c.owner === filterOwner) &&
-    (filterPriority === 'All' || c.priority === filterPriority)
+    (filterPriority === 'All' || (hasSpans && selectedSpan
+      ? (pendingPriorityForSpan[tubeIdForCore(c.id)] || getTubePriority(route, selectedSpan.key, tubeIdForCore(c.id))) === filterPriority
+      : !hasSpans && c.priority === filterPriority))
   );
   const hasTubes = route.cores.some(c => c.label.startsWith('T'));
 
@@ -246,6 +254,20 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
       {/* Filter Bar */}
       <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm space-y-2">
         <div>
+          <label htmlFor="enclosure-span" className="block text-[11px] font-bold text-slate-100 mb-1">Enclosure span for Tube Priority</label>
+          <select
+            id="enclosure-span"
+            value={selectedSpanKey}
+            onChange={event => setSelectedSpanKey(event.target.value)}
+            disabled={!hasSpans}
+            className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 disabled:opacity-60"
+          >
+            <option value="">{hasSpans ? 'Select a span between Enclosures' : 'No adjacent Enclosure span on this Fiber'}</option>
+            {spans.map(span => <option key={span.key} value={span.key}>{span.from.name || span.from.id} → {span.to.name || span.to.id}</option>)}
+          </select>
+          {selectedSpan && <p className="mt-1 text-[11px] text-sky-200">Priority changes apply only to this span. Tube Owner applies to the whole Fiber.</p>}
+        </div>
+        <div>
           <div className="flex items-center gap-1 mb-1">
             <Filter className="w-2.5 h-2.5 text-slate-500" />
             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Filter by Owner</span>
@@ -319,8 +341,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                   const tubeOwner = getTubeOwner(fullTubeCores);
                   const effectiveOwner = pendingUpdates[tubeId] || tubeOwner;
 
-                  const isAllSamePriority = fullTubeCores.every(c => c.priority === fullTubeCores[0].priority);
-                  const effectivePriority = pendingPriorityUpdates[tubeId] || (isAllSamePriority ? fullTubeCores[0].priority : (fullTubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'));
+                  const effectivePriority = selectedSpan
+                    ? pendingPriorityForSpan[tubeId] || getTubePriority(route, selectedSpan.key, tubeId)
+                    : getTubePriority(route, null, tubeId);
                   
                   const userCompany = appUser?.owner && appUser.owner !== 'None' ? appUser.owner : null;
                   const isGlobalAdmin = appUser?.role === 'Admin';
@@ -340,7 +363,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                   // ONLY the company that owns the tube can set/change its priority!
                   // Company user CANNOT change priority of other companies' tubes or unassigned tubes.
                   const canEditTubePriority = 
-                    permissions.editRoutes && 
+                    permissions.editRoutes && !!selectedSpan &&
                     effectiveOwner !== 'None' && 
                     effectiveOwner !== 'Mixed' && (
                       isGlobalAdmin ||
@@ -416,19 +439,22 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
                                     : 'bg-slate-800/60 border-slate-700 text-slate-400'
                               } ${!canEditTubePriority ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-500'}`}
-                              value={pendingPriorityUpdates[tubeId] || (isAllSamePriority ? fullTubeCores[0].priority : (fullTubeCores.some(c => c.priority === 'High') ? 'High' : 'Low'))}
+                              value={effectivePriority}
                               onChange={(e) => {
                                 const nextPriority = e.target.value as CorePriority;
-                                setPendingPriorityUpdates(prev => ({ ...prev, [tubeId]: nextPriority }));
+                                if (!selectedSpan) return;
+                                setPendingPriorityUpdates(prev => ({ ...prev, [selectedSpan.key]: { ...prev[selectedSpan.key], [tubeId]: nextPriority } }));
                               }}
                               title={
                                 !permissions.editRoutes
                                   ? 'No permission to edit routes'
+                                  : !selectedSpan
+                                    ? 'Select the clicked Enclosure span first'
                                   : effectiveOwner === 'None'
                                     ? 'Assign an Owner first to enable Priority selection'
                                     : !canEditTubePriority
                                       ? `Locked: Owned by ${effectiveOwner} (Cannot modify other company's tube priority)`
-                                      : `Set Priority for all 12 cores in Tube ${tubeId}`
+                                      : `Set Priority for Tube ${tubeId} only between ${selectedSpan.from.name || selectedSpan.from.id} and ${selectedSpan.to.name || selectedSpan.to.id}`
                               }
                             >
                               <option value="Low">Low</option>
@@ -478,9 +504,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                               {tubeCores.map(core => (
                                 <CoreCard 
                                   key={core.id} 
-                                  core={core} 
+                                  core={selectedSpan ? { ...core, priority: pendingPriorityForSpan[tubeId] || getTubePriority(route, selectedSpan.key, tubeId) } : core} 
                                   onClick={() => {
-                                    setSelectedCore(core);
+                                    setSelectedCore(selectedSpan ? { ...core, priority: pendingPriorityForSpan[tubeId] || getTubePriority(route, selectedSpan.key, tubeId) } : core);
                                   }}
                                   statusColors={statusColors}
                                   ownerColors={ownerColors}
@@ -499,9 +525,9 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                   {filteredCores.map(core => (
                     <CoreCard 
                       key={core.id} 
-                      core={core} 
+                      core={selectedSpan ? { ...core, priority: pendingPriorityForSpan[tubeIdForCore(core.id)] || getTubePriority(route, selectedSpan.key, tubeIdForCore(core.id)) } : core} 
                       onClick={() => {
-                        setSelectedCore(core);
+                        setSelectedCore(selectedSpan ? { ...core, priority: pendingPriorityForSpan[tubeIdForCore(core.id)] || getTubePriority(route, selectedSpan.key, tubeIdForCore(core.id)) } : core);
                       }}
                       statusColors={statusColors}
                       ownerColors={ownerColors}
@@ -517,7 +543,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
 
       {/* Bulk Save Floating Bar */}
       <AnimatePresence>
-        {(Object.keys(pendingUpdates).length > 0 || Object.keys(pendingPriorityUpdates).length > 0) && (
+        {(Object.keys(pendingUpdates).length > 0 || pendingPriorityCount > 0) && (
           <motion.div 
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -531,8 +557,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
               <div>
                 <p className="text-[9px] font-black uppercase tracking-widest">Unsaved Changes</p>
                 <p className="text-[8px] text-slate-400 font-bold">
-                  {Array.from(new Set([...Object.keys(pendingUpdates), ...Object.keys(pendingPriorityUpdates)])).length} tubes modified
-                  {Object.keys(pendingPriorityUpdates).length > 0 && ` (${Object.keys(pendingPriorityUpdates).length} priority)`}
+                  {Object.keys(pendingUpdates).length} Owner changes · {pendingPriorityCount} span priorities
                 </p>
               </div>
             </div>
@@ -573,7 +598,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                 </div>
                 <h3 className="text-base font-black text-slate-100 mb-1.5 tracking-tight font-display">Confirm Changes?</h3>
                 <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                  Are you sure you want to update the settings for {Array.from(new Set([...Object.keys(pendingUpdates), ...Object.keys(pendingPriorityUpdates)])).length} tube(s)? All 12 cores in each selected tube will be updated.
+                  Save {Object.keys(pendingUpdates).length} Tube Owner changes and {pendingPriorityCount} span Priority changes? Each Priority applies only to its selected Enclosure span.
                 </p>
               </div>
               <div className="p-4 bg-slate-950 flex gap-2">
@@ -678,7 +703,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                 <option value="bad">Bad</option>
                               </select>
                             </div>
-                            <div>
+                            {!hasSpans && <div>
                               <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Priority</label>
                               <select 
                                 className="w-full bg-slate-800 border border-slate-700 p-1.5 rounded-lg text-[10px] font-bold text-slate-100 outline-none focus:ring-2 focus:ring-brand-500"
@@ -689,7 +714,7 @@ export default function CoreManager({ route, appUser, onClose, onUpdateCore, onU
                                 <option value="Medium">Medium</option>
                                 <option value="High">High</option>
                               </select>
-                            </div>
+                            </div>}
                           </div>
 
                           <div>
