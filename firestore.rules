@@ -80,6 +80,10 @@ service cloud.firestore {
           (request.auth.token.email == "verayut_p@uih.co.th"));
     }
 
+    function hasAdminRole() {
+      return isAuthenticated() && userExists() && getUserData().role == 'Admin';
+    }
+
     function canAccessProject(projectData) {
       return isAdmin() || 
              (userExists() && 'owners' in projectData && getUserData().owner in projectData.owners) || 
@@ -99,6 +103,28 @@ service cloud.firestore {
     function canDeleteProject(projectData) {
       return isAdmin() || 
              request.auth.uid == projectData.uid;
+    }
+
+    function approvedSignOffRewound(before, after, owner) {
+      return before.get(owner, {}).get('status', '') == 'Approved' &&
+        after.get(owner, {}).get('status', '') != 'Approved';
+    }
+
+    function isApprovalRewind() {
+      return 'designApproval' in resource.data &&
+        (!('designApproval' in request.resource.data) ||
+        (resource.data.designApproval.get('status', '') == 'Approved' &&
+          request.resource.data.designApproval.get('status', '') != 'Approved') ||
+         (resource.data.designApproval.get('approvalStage', '') == 'Completed' &&
+          request.resource.data.designApproval.get('approvalStage', '') != 'Completed') ||
+         (resource.data.designApproval.get('approvalStage', '') == 'OM' &&
+          request.resource.data.designApproval.get('approvalStage', '') == 'Planning') ||
+         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'ITEL') ||
+         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'SYMC') ||
+         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'UIH') ||
+         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'ITEL') ||
+         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'SYMC') ||
+         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'UIH'));
     }
 
     function isOwner(userId) {
@@ -287,7 +313,8 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
       allow create: if isAuthenticated() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
-      allow update: if isAuthenticated() && canEditProject(resource.data) && uidNotModified();
+      allow update: if isAuthenticated() && canEditProject(resource.data) && uidNotModified() &&
+        (!isApprovalRewind() || hasAdminRole());
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
 
       match /enclosures/{enclosureId} {
