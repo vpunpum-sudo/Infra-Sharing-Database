@@ -2,7 +2,7 @@ import { CoreOwner, FiberEnclosure, Route } from '../types';
 
 export const formatNumberRanges = (values: number[]): string => {
   const sorted = [...new Set(values.filter(Number.isFinite))].sort((a, b) => a - b);
-  if (!sorted.length) return 'ยังไม่ได้กำหนด';
+  if (!sorted.length) return '-';
   const ranges: string[] = [];
   let start = sorted[0];
   let last = start;
@@ -30,7 +30,7 @@ export function getApprovalAllocation(
     const assignments = enclosure.trayAssignments || {};
     if (owner === 'None') {
       const configured = Object.values(assignments).some(assignedOwner => assignedOwner && assignedOwner !== 'None');
-      if (!configured) return { enclosure: enclosure.name || enclosure.id, value: 'ยังไม่ได้กำหนด' };
+      if (!configured) return { enclosure: enclosure.name || enclosure.id, value: '-' };
       const count = Math.max(0, trayCountForEnclosure(enclosure));
       const ids = Array.from({ length: count }, (_, index) => index + 1)
         .filter(id => !assignments[id] || assignments[id] === 'None');
@@ -42,7 +42,7 @@ export function getApprovalAllocation(
     return { enclosure: enclosure.name || enclosure.id, value: formatNumberRanges(ids) };
   });
   const distinct = [...new Set(trays.map(tray => tray.value))];
-  const trayText = trays.length === 0 ? (owner === 'None' ? '-' : 'ยังไม่ได้กำหนด')
+  const trayText = trays.length === 0 ? '-'
     : distinct.length === 1 ? (distinct[0] === '-' ? '-' : `${distinct[0]} (${trays.length} จุด)`)
       : trays.map(tray => `${tray.enclosure}: ${tray.value}`).join(' | ');
   return {
