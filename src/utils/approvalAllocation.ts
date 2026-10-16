@@ -18,18 +18,32 @@ export const formatNumberRanges = (values: number[]): string => {
 };
 
 /** Only saved core owners and Enclosure tray assignments are shown in approval documents. */
-export function getApprovalAllocation(route: Route | undefined, enclosures: FiberEnclosure[], owner: CoreOwner) {
+export function getApprovalAllocation(
+  route: Route | undefined,
+  enclosures: FiberEnclosure[],
+  owner: CoreOwner,
+  trayCountForEnclosure: (enclosure: FiberEnclosure) => number = () => 7
+) {
   const coreIds = (route?.cores || []).filter(core => core.owner === owner).map(core => core.id);
   const tubeIds = coreIds.map(id => Math.floor((id - 1) / 12) + 1);
   const trays = enclosures.map(enclosure => {
-    const ids = Object.entries(enclosure.trayAssignments || {})
+    const assignments = enclosure.trayAssignments || {};
+    if (owner === 'None') {
+      const configured = Object.values(assignments).some(assignedOwner => assignedOwner && assignedOwner !== 'None');
+      if (!configured) return { enclosure: enclosure.name || enclosure.id, value: 'ยังไม่ได้กำหนด' };
+      const count = Math.max(0, trayCountForEnclosure(enclosure));
+      const ids = Array.from({ length: count }, (_, index) => index + 1)
+        .filter(id => !assignments[id] || assignments[id] === 'None');
+      return { enclosure: enclosure.name || enclosure.id, value: ids.length ? formatNumberRanges(ids) : '-' };
+    }
+    const ids = Object.entries(assignments)
       .filter(([, assignedOwner]) => assignedOwner === owner)
       .map(([id]) => Number(id));
     return { enclosure: enclosure.name || enclosure.id, value: formatNumberRanges(ids) };
   });
   const distinct = [...new Set(trays.map(tray => tray.value))];
-  const trayText = trays.length === 0 ? 'ยังไม่ได้กำหนด'
-    : distinct.length === 1 ? `${distinct[0]} (${trays.length} จุด)`
+  const trayText = trays.length === 0 ? (owner === 'None' ? '-' : 'ยังไม่ได้กำหนด')
+    : distinct.length === 1 ? (distinct[0] === '-' ? '-' : `${distinct[0]} (${trays.length} จุด)`)
       : trays.map(tray => `${tray.enclosure}: ${tray.value}`).join(' | ');
   return {
     coreText: formatNumberRanges(coreIds),
