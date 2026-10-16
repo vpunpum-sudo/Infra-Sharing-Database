@@ -1011,22 +1011,25 @@ export function DesignApprovalModal({
 
   // Show each Enclosure Type used on this route once, using its configured report image.
   const getUsedEnclosureTypes = (routeEncs: FiberEnclosure[]) => {
-    const used = new Map<string, { key: string; name: string; imageUrl: string | null }>();
+    const used = new Map<string, { key: string; name: string; imageUrl: string | null; enclosureNames: string[] }>();
     for (const enc of routeEncs) {
       const locationTypeName = enc.locationType?.trim().toLowerCase();
       const type = enclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
         (locationTypeName ? enclosureTypes.find(t => t.name?.trim().toLowerCase() === locationTypeName) : undefined);
       const key = type?.id || enc.enclosureTypeId || locationTypeName || 'unassigned';
       const imageUrl = type?.imageUrl || enc.imageUrl || null;
+      const enclosureName = enc.name?.trim() || enc.locationName?.trim() || '-';
       const existing = used.get(key);
       if (!existing) {
         used.set(key, {
           key,
           name: type?.name || enc.locationType || 'ไม่ระบุ Type',
-          imageUrl
+          imageUrl,
+          enclosureNames: [enclosureName]
         });
-      } else if (!existing.imageUrl && imageUrl) {
-        used.set(key, { ...existing, imageUrl });
+      } else {
+        if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
+        if (!existing.enclosureNames.includes(enclosureName)) existing.enclosureNames.push(enclosureName);
       }
     }
     return Array.from(used.values());
@@ -1060,21 +1063,15 @@ export function DesignApprovalModal({
 
   const renderRouteEnclosureGallery = (
     routeEncs: FiberEnclosure[],
-    distanceKm: string | number,
-    totalC: number,
     extraClass = ''
   ) => {
     const usedTypes = getUsedEnclosureTypes(routeEncs);
     if (usedTypes.length === 0) return null;
 
-    const firstEnc = parseEnclosureName(routeEncs[0], 0).bjNo;
-    const lastEnc = parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo;
-    const routeBjDisplay = routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
-    const manyTypes = usedTypes.length > 2;
-
     return (
-      <div className={`${extraClass} approval-dark-feature flex ${manyTypes ? 'flex-col' : 'flex-col md:flex-row'} items-start gap-5 p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl`}>
-        <div className={`grid ${usedTypes.length === 1 ? 'grid-cols-1' : manyTypes ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : 'grid-cols-2'} gap-3 ${manyTypes ? 'w-full' : 'w-full md:w-[48%]'}`}>
+      <div className={`${extraClass} approval-dark-feature p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border-2 border-slate-700/90 shadow-2xl`}>
+        <h4 className="approval-dark-title text-base font-black text-white mb-3">ภาพประกอบ Enclosure Type ที่ใช้ในเส้น Fiber</h4>
+        <div className={`grid ${usedTypes.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'} gap-3`}>
           {usedTypes.map(encType => (
             <div key={encType.key} className="min-w-0 rounded-xl bg-white border border-sky-500/30 p-2 shadow-lg">
               <div className="h-36 sm:h-44 flex items-center justify-center overflow-hidden">
@@ -1100,39 +1097,9 @@ export function DesignApprovalModal({
                   </button>
                 )}
               </div>
+              <div className="text-xs text-slate-700 mt-2 break-words">ใช้กับ Enclosure: {encType.enclosureNames.join(', ')}</div>
             </div>
           ))}
-        </div>
-        <div className="space-y-2.5 flex-1 w-full">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="approval-dark-title text-base md:text-lg font-black text-white tracking-wide">Enclosure Types ที่ใช้งานในเส้นทางนี้</h4>
-            <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
-              {usedTypes.length} Type
-            </span>
-            <span className="approval-dark-badge-sky px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10.5px] font-mono font-bold border border-sky-500/40">
-              OFC {totalC} Cores Standard
-            </span>
-            <span className="approval-dark-badge-amber px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-mono font-bold border border-amber-500/40">
-              จุดเชื่อมต่อ {routeBjDisplay} ({routeEncs.length} หัว)
-            </span>
-          </div>
-          <p className="approval-dark-description text-xs text-slate-300 leading-relaxed font-medium">
-            แสดงรูป Enclosure แยกตาม Type ที่ใช้งานในเส้นทางนี้ โดยแสดงแต่ละ Type เพียงครั้งเดียว
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
-            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-              <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
-              <strong className="text-emerald-400 text-xs">{distanceKm} km</strong>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-              <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
-              <strong className="text-sky-300 text-xs">{routeBjDisplay}</strong>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-              <span className="text-slate-400 text-[10px] block">จำนวนจุดตัดต่อ:</span>
-              <strong className="text-amber-400 text-xs">{routeEncs.length} หัว</strong>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -1580,18 +1547,30 @@ export function DesignApprovalModal({
     const contractor = designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.';
 
     const printMapRoutes = effectiveRoutes.map(route => {
+      const routeSummary = fiberRouteSchedule.find(item => item.id === route.id);
+      const connected = getRouteEnclosures(route.id);
       const routePoints = (route.path || []).filter(point =>
         Number.isFinite(point.lat) && Number.isFinite(point.lng)
       );
-      const start = effectiveEnclosures.find(enc => enc.id === route.startEnclosureId)?.position;
-      const end = effectiveEnclosures.find(enc => enc.id === route.endEnclosureId)?.position;
+      const start = (effectiveEnclosures.find(enc => enc.id === route.startEnclosureId) || connected[0])?.position;
+      const end = (effectiveEnclosures.find(enc => enc.id === route.endEnclosureId) || connected[connected.length - 1])?.position;
       return {
         name: route.name || 'Fiber Route',
         color: getRouteColor(route),
+        distanceKm: routeSummary?.distanceKm || (route.totalLength ? (route.totalLength / 1000).toFixed(2) : '-'),
+        fiberType: route.fiberType?.trim() || fiberTypes.find(type => type.cores === route.capacity)?.name || `OFC ${route.capacity} Core`,
         points: routePoints.length >= 2 ? routePoints : (start && end ? [start, end] : routePoints)
       };
     });
-    const printMapEnclosures = [...effectiveEnclosures]
+    const endpointIds = new Set<string>();
+    effectiveRoutes.forEach(route => {
+      const connected = getRouteEnclosures(route.id);
+      const start = effectiveEnclosures.find(enc => enc.id === route.startEnclosureId) || connected[0];
+      const end = effectiveEnclosures.find(enc => enc.id === route.endEnclosureId) || connected[connected.length - 1];
+      if (start) endpointIds.add(start.id);
+      if (end) endpointIds.add(end.id);
+    });
+    const printMapEnclosures = effectiveEnclosures.filter(enc => endpointIds.has(enc.id))
       .sort((a, b) => getBjSortKey(a.name || '') - getBjSortKey(b.name || ''))
       .map((enc, index) => {
       const type = getEnclosureType(enc);
@@ -1685,8 +1664,9 @@ export function DesignApprovalModal({
     }
     .pdf-logo-slot img {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: auto;
+      height: 24px;
+      max-width: 100%;
       object-fit: contain;
     }
     .cover-logos {
@@ -1708,6 +1688,10 @@ export function DesignApprovalModal({
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .cover-logos .pdf-logo-slot img {
+      height: 44px;
+      max-width: 100%;
     }
     .pdf-map-page .pdf-map {
       margin-top: 0 !important;
@@ -1945,25 +1929,18 @@ export function DesignApprovalModal({
 
           <!-- Enclosure illustration -->
           ${(() => {
-            const firstEnc = routeEncs[0];
-            const firstEncType = enclosureTypes.find(t => t.id === firstEnc?.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === firstEnc?.locationType?.toLowerCase());
-            const encImgUrl = firstEncType?.imageUrl || firstEnc?.imageUrl;
-            return encImgUrl ? `
-              <div style="padding: 12px 14px; background: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 16px;">
-                <img src="${encImgUrl}" alt="Enclosure" style="width: 140px; height: 140px; object-fit: contain; border-radius: 8px; background: white; padding: 6px; border: 1px solid #cbd5e1; flex-shrink: 0;" />
-                <div>
-                  <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
-                    ตำแหน่ง Enclosure: ${firstEnc?.name || '-'}
-                  </div>
-                  <div style="font-size: 11px; color: #475569; line-height: 1.5; margin-bottom: 6px;">
-                    โครงสร้างสายเคเบิลใยแก้วนำแสงมาตรฐานสำหรับโครงการ ${projectTierName} (${participatingOwners.join('+')}) รายละเอียดโครงสร้างท่อ Loose Tube และสีของ Core ชัดเจนตามมาตรฐานสากล
-                  </div>
-                  <div style="font-size: 11px; color: #0369a1; font-weight: 700;">
-                    จุดเชื่อมต่อ Enclosure ประจำเส้นทาง: <strong>${routeEncs.length > 0 ? `${parseEnclosureName(routeEncs[0], 0).bjNo} - ${parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo}` : '-'}</strong> (${routeEncs.length} หัว)
-                  </div>
+            const types = getUsedEnclosureTypes(routeEncs);
+            return types.length ? `
+              <div style="padding: 10px 14px; background: #ffffff; border-bottom: 1px solid #e2e8f0;">
+                <strong style="display:block; margin-bottom:8px; font-size:12px; color:#0f172a;">ภาพประกอบ Enclosure Type ที่ใช้ในเส้น Fiber</strong>
+                <div style="display:grid; grid-template-columns:repeat(${Math.min(types.length, 3)}, minmax(0, 1fr)); gap:8px;">
+                  ${types.map(type => `<div style="min-width:0; padding:7px; border:1px solid #cbd5e1; border-radius:7px; font-size:10px; color:#334155;">
+                    ${type.imageUrl ? `<img src="${escapePrintText(type.imageUrl)}" alt="${escapePrintText(type.name)}" style="display:block; max-width:100%; width:100%; height:90px; object-fit:contain; background:white;" />` : `<div style="height:90px; display:flex; align-items:center; justify-content:center; color:#64748b;">ไม่มีรูป Enclosure</div>`}
+                    <strong style="display:block; margin-top:4px; color:#0f172a;">${escapePrintText(type.name)}</strong>
+                    <span>ใช้กับ Enclosure: ${escapePrintText(type.enclosureNames.join(', '))}</span>
+                  </div>`).join('')}
                 </div>
-              </div>
-            ` : '';
+              </div>` : '';
           })()}
           </div>
 
@@ -1973,21 +1950,20 @@ export function DesignApprovalModal({
               <tr>
                 <th style="width: 40px;">No.</th>
                 <th style="width: 48px;">Image</th>
-                <th style="width: 80px;">BJ#No</th>
-                <th>BJ#Name</th>
+                <th>Enclosure Name</th>
+                <th>Location Name</th>
+                <th style="width: 80px;">Location Type</th>
                 <th style="width: 90px;">Lat.</th>
                 <th style="width: 90px;">Long.</th>
                 <th style="width: 100px;">ขนาด Enclosure</th>
                 ${participatingOwners.map(owner => `
-                  <th style="background: ${owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb'}; color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; min-width: 90px;">${owner}_Tray No.</th>
+                  <th style="background: ${owner === 'SYMC' ? '#fdf2f8' : owner === 'UIH' ? '#f0f9ff' : '#fffbeb'}; color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; min-width: 90px; text-align: center;">${owner}_Tray No.</th>
                 `).join('')}
                 <th style="width: 80px;">Spare_Tray</th>
-                <th style="width: 80px;">ตำแหน่ง</th>
               </tr>
             </thead>
             <tbody>
               ${routeEncs.map((enc, idx) => {
-                const { bjNo, bjName } = parseEnclosureName(enc, idx);
                 const trayAssignments = enc.trayAssignments || {};
                 const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
                 const encCapText = getEnclosureCapacityText(enc);
@@ -2003,8 +1979,9 @@ export function DesignApprovalModal({
                         : `<div style="width: 24px; height: 24px; margin: auto; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center;"><span style="width: 8px; height: 8px; border-radius: 50%; background: ${encType?.color || '#ef4444'}; border: 1px solid #1e293b;"></span></div>`
                       }
                     </td>
-                    <td><strong>${bjNo}</strong></td>
-                    <td style="text-align: left; font-weight: 600;">${bjName}</td>
+                    <td style="text-align: left; font-weight: 600;">${escapePrintText(enc.name?.trim() || '-')}</td>
+                    <td style="text-align: left;">${escapePrintText(enc.locationName?.trim() || '-')}</td>
+                    <td>${escapePrintText(enc.locationType?.trim() || '-')}</td>
                     <td>${enc.position?.lat?.toFixed(6) || '-'}</td>
                     <td>${enc.position?.lng?.toFixed(6) || '-'}</td>
                     <td style="font-weight: 700; color: #334155;">${encCapText}</td>
@@ -2014,8 +1991,8 @@ export function DesignApprovalModal({
                         .map(([tId]) => Number(tId))
                         .sort((a, b) => a - b);
                       let trayStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
-                      if (!trayStr) trayStr = 'ยังไม่ได้กำหนด';
-                      return `<td style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; font-weight: 700;">${trayStr}</td>`;
+                      if (!trayStr) trayStr = '-';
+                      return `<td style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; font-weight: 700; text-align: center;">${trayStr}</td>`;
                     }).join('')}
                     <td style="color: #64748b; font-weight: 700;">
                       ${(() => {
@@ -2027,10 +2004,9 @@ export function DesignApprovalModal({
                           }
                           return spare || '-';
                         }
-                        return 'ยังไม่ได้กำหนด';
+                        return '-';
                       })()}
                     </td>
-                    <td>${enc.locationType || 'PB'}</td>
                   </tr>
                 `;
               }).join('')}
@@ -2116,7 +2092,7 @@ export function DesignApprovalModal({
               </tr>
               <tr>
                 <th>BJ# No.</th>
-                <th>Tray</th>
+                <th style="text-align: center;">Tray</th>
                 <th>Tube</th>
                 <th>Core</th>
               </tr>
@@ -2127,7 +2103,7 @@ export function DesignApprovalModal({
                   ${idx === 0 ? `<td rowspan="${ownerRows.length + 1}" style="font-weight: 800;">${routeSched.tier}</td>` : ''}
                   <td style="font-weight: 800; color: ${row.colorHex};">${row.owner}</td>
                   <td><strong>${routeBjDisplay}</strong> <span style="font-size: 10px; color: #64748b;">(${routeEncs.length} หัว)</span></td>
-                  <td style="color: ${row.colorHex}; font-weight: 700; text-align: left; overflow-wrap: anywhere;">${escapePrintText(row.trayStr)}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700; text-align: center; overflow-wrap: anywhere;">${escapePrintText(row.trayStr)}</td>
                   <td style="color: ${row.colorHex}; font-weight: 700;">${escapePrintText(row.tubeStr)}</td>
                   <td style="color: ${row.colorHex}; font-weight: 700;">${escapePrintText(row.coreStr)}</td>
                 </tr>
@@ -2135,7 +2111,7 @@ export function DesignApprovalModal({
               <tr>
                 <td style="font-weight: 700; color: #64748b;">Spare</td>
                 <td>${routeBjDisplay}</td>
-                <td>${escapePrintText(spareAllocation.trayText)}</td>
+                <td style="text-align: center;">${escapePrintText(spareAllocation.trayText)}</td>
                 <td>${escapePrintText(spareAllocation.tubeText)}</td>
                 <td>${escapePrintText(spareAllocation.coreText)}</td>
               </tr>
@@ -3034,7 +3010,7 @@ export function DesignApprovalModal({
                                   </div>
                                 )}
 
-                                {renderRouteEnclosureGallery(routeEncs, routeSched.distanceKm, totalC, 'm-3')}
+                                {renderRouteEnclosureGallery(routeEncs, 'm-3')}
 
                                 {/* Enclosure Sharing Table */}
                                 <div className="overflow-x-auto">
@@ -3043,13 +3019,14 @@ export function DesignApprovalModal({
                                       <tr>
                                         <th className="p-2 border-r border-slate-700 w-10">No.</th>
                                         <th className="p-2 border-r border-slate-700 w-14">Image</th>
-                                        <th className="p-2 border-r border-slate-700 w-20">BJ#No</th>
-                                        <th className="p-2 border-r border-slate-700 text-left">BJ#Name</th>
+                                        <th className="p-2 border-r border-slate-700 text-left">Enclosure Name</th>
+                                        <th className="p-2 border-r border-slate-700 text-left">Location Name</th>
+                                        <th className="p-2 border-r border-slate-700 w-24">Location Type</th>
                                         <th className="p-2 border-r border-slate-700 w-24">Lat.</th>
                                         <th className="p-2 border-r border-slate-700 w-24">Long.</th>
                                         <th className="p-2 border-r border-slate-700 w-28">ขนาด Enclosure</th>
                                         {participatingOwners.map(owner => (
-                                          <th key={owner} className="p-2 border-r border-slate-700 min-w-[110px]" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
+                                          <th key={owner} className="p-2 border-r border-slate-700 min-w-[110px] text-center" style={{ backgroundColor: owner === 'SYMC' ? 'rgba(236,72,153,0.1)' : owner === 'UIH' ? 'rgba(14,165,233,0.1)' : 'rgba(245,158,11,0.1)' }}>
                                             <div className="flex items-center justify-center gap-1">
                                               <OwnerLogo owner={owner} size="xs" />
                                               <span className="text-[10px]" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>Tray No.</span>
@@ -3057,12 +3034,10 @@ export function DesignApprovalModal({
                                           </th>
                                         ))}
                                         <th className="p-2 border-r border-slate-700 w-20">Spare_Tray</th>
-                                        <th className="p-2 w-20">ตำแหน่ง</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/80 font-medium">
                                       {routeEncs.map((enc, idx) => {
-                                        const { bjNo, bjName } = parseEnclosureName(enc, idx);
                                         const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
                                         const trayAssignments = enc.trayAssignments || {};
                                         const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
@@ -3074,17 +3049,18 @@ export function DesignApprovalModal({
                                             <td className="p-2 border-r border-slate-800 text-slate-400">{idx + 1}</td>
                                             <td className="p-1 border-r border-slate-800">
                                               {encType?.icon ? (
-                                                <img src={encType.icon} alt={bjName} className="w-6 h-6 object-contain rounded border border-slate-700 mx-auto" />
+                                                <img src={encType.icon} alt={enc.name || 'Enclosure'} className="w-6 h-6 object-contain rounded border border-slate-700 mx-auto" />
                                               ) : (
                                                 <div className="w-6 h-6 bg-slate-800 rounded border border-slate-700 flex items-center justify-center mx-auto">
                                                   <span className="w-2 h-2 rounded-full border border-slate-900" style={{ backgroundColor: encType?.color || '#ef4444' }} />
                                                 </div>
                                               )}
                                             </td>
-                                            <td className="p-2 border-r border-slate-800 font-black text-sky-400">{bjNo}</td>
-                                            <td className="p-2 border-r border-slate-800 text-left font-bold text-slate-200">{bjName}</td>
-                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '13.748000'}</td>
-                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lng?.toFixed(6) || '100.548000'}</td>
+                                            <td className="p-2 border-r border-slate-800 text-left font-bold text-slate-200">{enc.name?.trim() || '-'}</td>
+                                            <td className="p-2 border-r border-slate-800 text-left text-slate-300">{enc.locationName?.trim() || '-'}</td>
+                                            <td className="p-2 border-r border-slate-800 text-slate-300">{enc.locationType?.trim() || '-'}</td>
+                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lat?.toFixed(6) || '-'}</td>
+                                            <td className="p-2 border-r border-slate-800 font-mono text-[11px] text-slate-400">{enc.position?.lng?.toFixed(6) || '-'}</td>
                                             <td className="p-2 border-r border-slate-800 font-bold text-slate-300">{encCapText}</td>
                                             {participatingOwners.map(owner => {
                                               const assignedTrays = Object.entries(trayAssignments)
@@ -3092,15 +3068,15 @@ export function DesignApprovalModal({
                                                 .map(([tId]) => Number(tId))
                                                 .sort((a, b) => a - b);
                                               let trayRangeStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
-                                              if (!trayRangeStr) trayRangeStr = 'ยังไม่ได้กำหนด';
+                                              if (!trayRangeStr) trayRangeStr = '-';
 
                                               return (
-                                                <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-black" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
+                                                <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-black text-center" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
                                                   {trayRangeStr}
                                                 </td>
                                               );
                                             })}
-                                            <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
+                                            <td className="p-2 border-r border-slate-800 font-bold text-slate-400 text-center">
                                               {(() => {
                                                 if (hasExplicitAssignments) {
                                                   let spare = 0;
@@ -3110,10 +3086,9 @@ export function DesignApprovalModal({
                                                   }
                                                   return spare || '-';
                                                 }
-                                                return 'ยังไม่ได้กำหนด';
+                                                return '-';
                                               })()}
                                             </td>
-                                            <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB'}</td>
                                           </tr>
                                         );
                                       })}
@@ -3243,7 +3218,7 @@ export function DesignApprovalModal({
                                       </tr>
                                       <tr className="bg-slate-800/60 border-b border-slate-700 text-[11px] text-slate-300 font-bold">
                                         <th className="p-1.5 border-r border-slate-700">BJ# No.</th>
-                                        <th className="p-1.5 border-r border-slate-700">Tray</th>
+                                        <th className="p-1.5 border-r border-slate-700 text-center">Tray</th>
                                         <th className="p-1.5 border-r border-slate-700">Tube</th>
                                         <th className="p-1.5">Core</th>
                                       </tr>
@@ -3266,7 +3241,7 @@ export function DesignApprovalModal({
                                             <td className="p-2 border-r border-slate-800 font-bold text-sky-300">
                                               {routeBjDisplay} <span className="text-[10px] text-slate-400 font-normal">({routeEncs.length} หัว)</span>
                                             </td>
-                                            <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.trayStr}</td>
+                                            <td className={`p-2 border-r border-slate-800 text-center ${row.colorStyle.split(' ')[0]}`}>{row.trayStr}</td>
                                             <td className={`p-2 border-r border-slate-800 ${row.colorStyle.split(' ')[0]}`}>{row.tubeStr}</td>
                                             <td className={`p-2 ${row.colorStyle.split(' ')[0]}`}>{row.coreStr}</td>
                                           </tr>
@@ -3277,7 +3252,7 @@ export function DesignApprovalModal({
                                         <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
                                           {routeBjDisplay}
                                         </td>
-                                        <td className="p-2 border-r border-slate-800 text-slate-400">{spareAllocation.trayText}</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-400 text-center">{spareAllocation.trayText}</td>
                                         <td className="p-2 border-r border-slate-800 text-slate-500">{spareAllocation.tubeText}</td>
                                         <td className="p-2 text-slate-500">{spareAllocation.coreText}</td>
                                       </tr>

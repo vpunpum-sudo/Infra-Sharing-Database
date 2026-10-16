@@ -3,6 +3,8 @@ export type PrintMapPoint = { lat: number; lng: number };
 export type PrintMapRoute = {
   name: string;
   color: string;
+  distanceKm: string;
+  fiberType: string;
   points: PrintMapPoint[];
 };
 
@@ -82,7 +84,8 @@ export function renderPrintableProjectMap(
     }
   }
 
-  const routeLines = visibleRoutes.filter(route => route.points.length >= 2).map(route => {
+  const drawableRoutes = visibleRoutes.filter(route => route.points.length >= 2);
+  const routeLines = drawableRoutes.map(route => {
     const points = route.points.map(point => {
       const screen = toScreen(point);
       return `${screen.x.toFixed(1)},${screen.y.toFixed(1)}`;
@@ -91,30 +94,71 @@ export function renderPrintableProjectMap(
     return `<polyline points="${points}" fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" opacity="0.95" /><polyline points="${points}" fill="none" stroke="${color}" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />`;
   }).join('');
 
-  const markers = visibleEnclosures.map(enclosure => {
+  // Place a compact route description near its line, avoiding other descriptions
+  // and the map legend. The leader makes the associated Fiber unambiguous.
+  const labelBoxes: { x: number; y: number; width: number; height: number }[] = [
+    { x: MAP_WIDTH - 270, y: 0, width: 270, height: Math.min(160, 26 + drawableRoutes.length * 27) }
+  ];
+  const calloutLines: string[] = [];
+  const routeLabels = drawableRoutes.map((route, routeIndex) => {
+    const width = 260;
+    const height = 94;
+    const anchors = [0.5, 0.3, 0.7, 0.15, 0.85].map(fraction =>
+      toScreen(route.points[Math.round((route.points.length - 1) * fraction)]));
+    let chosen: { x: number; y: number; width: number; height: number } | undefined;
+    let anchor = anchors[0];
+    for (const point of anchors) {
+      for (const [dx, dy] of [[-width / 2, -height - 28], [-width / 2, 28], [24, -height / 2], [-width - 24, -height / 2]]) {
+        const candidate = {
+          x: Math.max(6, Math.min(MAP_WIDTH - width - 6, point.x + dx)),
+          y: Math.max(6, Math.min(MAP_HEIGHT - height - 6, point.y + dy)),
+          width, height
+        };
+        if (labelBoxes.some(box => candidate.x < box.x + box.width + 8 && candidate.x + width + 8 > box.x && candidate.y < box.y + box.height + 8 && candidate.y + height + 8 > box.y)) continue;
+        chosen = candidate;
+        anchor = point;
+        break;
+      }
+      if (chosen) break;
+    }
+    if (!chosen) {
+      anchor = anchors[0];
+      chosen = { x: Math.max(6, Math.min(MAP_WIDTH - width - 6, anchor.x - width / 2)), y: Math.min(MAP_HEIGHT - height - 6, 8 + routeIndex * (height + 8)), width, height };
+    }
+    labelBoxes.push(chosen);
+    const lineEndX = Math.max(chosen.x, Math.min(chosen.x + width, anchor.x));
+    const lineEndY = Math.max(chosen.y, Math.min(chosen.y + height, anchor.y));
+    calloutLines.push(`<line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineEndY.toFixed(1)}" stroke="${safeColor(route.color, '#0284c7')}" stroke-width="2" />`);
+    return `<div style="position: absolute; left: ${(chosen.x / MAP_WIDTH * 100).toFixed(3)}%; top: ${(chosen.y / MAP_HEIGHT * 100).toFixed(3)}%; width: ${(width / MAP_WIDTH * 100).toFixed(3)}%; min-height: ${(height / MAP_HEIGHT * 100).toFixed(3)}%; box-sizing: border-box; background: rgba(255,255,255,.97); border: 2px solid ${safeColor(route.color, '#0284c7')}; border-radius: 6px; padding: 5px 7px; box-shadow: 0 2px 5px rgba(15,23,42,.15); color: #0f172a; font-size: 10px; line-height: 1.2; z-index: 5; overflow-wrap: anywhere;"><strong style="display:block;">${escapeHtml(route.name)}</strong><span style="display:block; margin-top: 3px; color:#334155;">${escapeHtml(route.distanceKm)} km · ${escapeHtml(route.fiberType)}</span></div>`;
+  }).join('');
+
+  const markers = visibleEnclosures.map((enclosure, index) => {
     const screen = toScreen(enclosure.position);
     const x = (screen.x / MAP_WIDTH * 100).toFixed(3);
     const y = (screen.y / MAP_HEIGHT * 100).toFixed(3);
     const icon = enclosure.iconUrl
       ? `<img src="${escapeHtml(enclosure.iconUrl)}" alt="" style="width: 16px; height: 16px; object-fit: contain; background: white; border: 1px solid #0f172a; border-radius: 3px;" />`
       : `<span style="display: block; width: 12px; height: 12px; background: ${safeColor(enclosure.color, '#3b82f6')}; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px #0f172a;"></span>`;
-    return `<div style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, -50%); z-index: 4;">${icon}</div>`;
+    const labelOffset = index % 2 === 0 ? 'translate(-50%, -100%)' : 'translate(-50%, 0)';
+    const labelTop = index % 2 === 0 ? '-10px' : '10px';
+    return `<div style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, -50%); z-index: 6;">${icon}<span style="position: absolute; left: 50%; top: ${labelTop}; transform: ${labelOffset}; white-space: nowrap; max-width: 165px; overflow: hidden; text-overflow: ellipsis; background: rgba(255,255,255,.95); border: 1px solid #94a3b8; border-radius: 4px; padding: 2px 4px; color: #0f172a; font-size: 9px; font-weight: 700;">${escapeHtml(enclosure.label)}</span></div>`;
   }).join('');
 
-  const legend = visibleRoutes.filter(route => route.points.length >= 2).map(route =>
-    `<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 18px; border-top: 4px solid ${safeColor(route.color, '#0284c7')};"></span>${escapeHtml(route.name)}</span>`
+  const legend = drawableRoutes.map((route, index) =>
+    `<div style="display: flex; align-items: center; gap: 6px; white-space: nowrap;"><span style="display: inline-block; width: 20px; flex: none; border-top: 4px solid ${safeColor(route.color, '#0284c7')};"></span><span style="overflow: hidden; text-overflow: ellipsis;">เส้นที่ ${index + 1}: ${escapeHtml(route.fiberType)}</span></div>`
   ).join('');
 
   return `<section class="pdf-map pdf-keep-together" style="margin-top: 14px; break-inside: avoid; page-break-inside: avoid;">
     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 11px; color: #334155;">
       <strong style="font-size: 13px; color: #0369a1;">แผนที่เส้นทางโครงการ (Project Map)</strong>
-      <span>${visibleRoutes.filter(route => route.points.length >= 2).length} เส้นทาง · ${visibleEnclosures.length} จุด Enclosure</span>
+      <span>${drawableRoutes.length} เส้นทาง · ${visibleEnclosures.length} จุด Enclosure ต้นทาง/ปลายทาง</span>
     </div>
     <div style="position: relative; width: 100%; height: ${MAP_HEIGHT}px; overflow: hidden; border: 1px solid #94a3b8; border-radius: 8px; background: repeating-linear-gradient(0deg, #e9f1eb, #e9f1eb 31px, #dae6dc 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, #dae6dc 32px);">
       ${tiles.join('')}
-      <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1;">${routeLines}</svg>
+      <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1;">${routeLines}${calloutLines.join('')}</svg>
+      ${routeLabels}
       ${markers}
+      ${legend ? `<div style="position: absolute; right: 8px; top: 8px; z-index: 7; max-width: 250px; box-sizing: border-box; padding: 7px 9px; background: rgba(255,255,255,.96); border: 1px solid #94a3b8; border-radius: 6px; color: #334155; font-size: 10px; font-weight: 600;"><strong style="display:block; margin-bottom:4px; color:#0f172a;">Legend</strong>${legend}</div>` : ''}
     </div>
-    ${legend ? `<div style="display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 10px; color: #475569;">${legend}</div>` : ''}
   </section>`;
 }
