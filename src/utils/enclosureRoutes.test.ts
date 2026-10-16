@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getConnectedEnclosureRoutes } from './enclosureRoutes';
+import { getConnectedEnclosureRoutes, isRoutePassThroughEnclosure } from './enclosureRoutes';
 import { FiberEnclosure, Route } from '../types';
 
 const enclosure = { id: 'E', position: { lat: 13.75, lng: 100.5 } } as FiberEnclosure;
@@ -16,4 +16,15 @@ test('connected routes include a path through the enclosure and exclude a nearby
 test('an explicit route endpoint remains connected even if its geometry is offset', () => {
   const endpointRoute = { ...route('endpoint', 0.0001), startEnclosureId: 'E' };
   assert.deepEqual(getConnectedEnclosureRoutes(enclosure, [endpointRoute]).map(r => r.id), ['endpoint']);
+});
+
+test('one endpoint route and one through route produce three physical Fiber legs', () => {
+  const endpointRoute = {
+    ...route('drop', 0), startEnclosureId: 'E',
+    path: [enclosure.position, { lat: 13.75, lng: 100.501 }]
+  };
+  const throughRoute = route('main', 0);
+  const connected = getConnectedEnclosureRoutes(enclosure, [endpointRoute, throughRoute]);
+  assert.equal(connected.length, 2);
+  assert.equal(connected.reduce((legs, item) => legs + (isRoutePassThroughEnclosure(enclosure, item) ? 2 : 1), 0), 3);
 });

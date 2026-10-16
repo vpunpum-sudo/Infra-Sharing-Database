@@ -6,8 +6,8 @@ import { DEFAULT_PERMISSIONS } from '../constants';
 import { X, GitMerge, Unlink, AlertCircle, ChevronRight, ChevronDown, List, Wrench, Network, Maximize2, Minimize2, ArrowLeftRight, Layers, Box, Zap, Activity, Plus, Minus, Edit2, MapPin, ShieldAlert, Pencil, Lock, Download } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
-import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
-import { getClosestPointOnRoute, getDistance } from '../utils/geo';
+import { getConnectedEnclosureRoutes, isRoutePassThroughEnclosure } from '../utils/enclosureRoutes';
+import { getClosestPointOnRoute } from '../utils/geo';
 
 export const ownerColors: Record<CoreOwner, string> = {
   None: 'bg-slate-800/80 text-slate-300 border-slate-700/80',
@@ -23,10 +23,9 @@ export const ownerHexColors: Record<CoreOwner, string> = {
   UIH: '#0ea5e9'
 };
 
-const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColorConfigs, onUpdate, side, isDetailView, appUser }: { id: number, type: 'main' | 'drop', enclosure: FiberEnclosure, connectedRoutes: Route[], fiberTypes: FiberType[], fiberColorConfigs: FiberColorConfig[], onUpdate: (enclosureId: string, portId: number, data: { owner?: CoreOwner, routeId?: string }) => void, side: 'left' | 'right', isDetailView?: boolean, appUser: AppUser | null }) => {
+const PortNode = ({ id, enclosure, connectedRoutes, fiberTypes, fiberColorConfigs, onUpdate, side, appUser }: { id: number, enclosure: FiberEnclosure, connectedRoutes: Route[], fiberTypes: FiberType[], fiberColorConfigs: FiberColorConfig[], onUpdate: (enclosureId: string, portId: number, data: { owner?: CoreOwner, routeId?: string }) => void, side: 'left' | 'right', appUser: AppUser | null }) => {
   const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
   const assignment = enclosure.portAssignments?.[id] || {};
-  const isMain = type === 'main';
   const [isOpen, setIsOpen] = useState(false);
 
   const assignedRoute = connectedRoutes.find(r => r.id === assignment.routeId);
@@ -71,12 +70,11 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
             exit={{ opacity: 0, x: side === 'left' ? -10 : 10 }}
             className={`absolute top-1/2 -translate-y-1/2 ${side === 'left' ? 'right-full mr-6' : 'left-full ml-6'} w-64 bg-slate-900 p-5 rounded-3xl shadow-2xl border border-slate-800 z-50 backdrop-blur-xl`}
           >
-            <div className="text-xs font-black text-slate-200 mb-4 border-b border-slate-800 pb-3 uppercase tracking-widest">{isMain ? 'Fiber Main Port' : 'Drop Cable Port'}</div>
-            
-            {!isMain && (
-              <div className="mb-4">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Owner or connected Fiber Main</label>
-                <select 
+            <div className="text-xs font-black text-slate-200 mb-4 border-b border-slate-800 pb-3 uppercase tracking-widest">Port {id}</div>
+
+            <div className="mb-4">
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Owner or connected Fiber Main</label>
+              <select
                   className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
                   value={assignedRoute ? `route:${assignedRoute.id}` : assignment.owner && assignment.owner !== 'None' ? `owner:${assignment.owner}` : ''}
                   onChange={e => {
@@ -97,30 +95,9 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
                   <optgroup label="Fiber Main connected to this Enclosure">
                     {connectedRoutes.map(route => <option key={route.id} value={`route:${route.id}`}>{route.name}</option>)}
                   </optgroup>
-                </select>
-              </div>
-            )}
+              </select>
+            </div>
 
-            {isMain && (
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Connected Route</label>
-                <select 
-                  className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
-                  value={assignment.routeId || ''}
-                  onChange={e => {
-                    onUpdate(enclosure.id, id, { owner: 'None', routeId: e.target.value });
-                    setIsOpen(false);
-                  }}
-                  disabled={!permissions.editEnclosures}
-                >
-                  <option value="">Select Route...</option>
-                  {connectedRoutes.map(r => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
             {!permissions.editEnclosures && (
               <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-amber-400 bg-amber-900/20 p-3 rounded-xl border border-amber-800/50 uppercase tracking-widest">
                 <ShieldAlert size={14} />
@@ -132,15 +109,15 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
       </AnimatePresence>
 
       {/* Visual Line if route assigned or owner assigned for drop ports */}
-      {(assignedRoute || (!isMain && assignment.owner && assignment.owner !== 'None')) && (
+      {(assignedRoute || (assignment.owner && assignment.owner !== 'None')) && (
         <div 
           className={`absolute top-1/2 -translate-y-1/2 ${side === 'left' ? 'right-12 w-12' : 'left-12 w-12'} h-2.5 rounded-full z-0 flex items-center ${side === 'left' ? 'justify-start' : 'justify-end'}`}
           style={{ backgroundColor: assignedRoute ? routeColor : (assignment.owner && assignment.owner !== 'None' ? ownerHexColors[assignment.owner] : '#334155') }}
         >
-          {isMain && <div className="w-full h-full rounded-full opacity-20 absolute inset-0" style={{ backgroundColor: 'var(--color-slate-100)' }}></div>}
+          {assignedRoute && <div className="w-full h-full rounded-full opacity-20 absolute inset-0" style={{ backgroundColor: 'var(--color-slate-100)' }}></div>}
           
           {/* Add owner label for drop ports */}
-          {!assignedRoute && !isMain && assignment.owner && assignment.owner !== 'None' && (
+          {!assignedRoute && assignment.owner && assignment.owner !== 'None' && (
             <div className={`absolute ${side === 'left' ? 'right-full mr-3' : 'left-full ml-3'} flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl shadow-xl border border-slate-700 whitespace-nowrap z-10`}>
               <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: ownerHexColors[assignment.owner] }}></div>
               <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">{assignment.owner}</span>
@@ -150,9 +127,7 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
           {/* Add route label for main ports */}
           {assignedRoute && (
             <div className={`absolute ${side === 'left' ? 'right-full mr-3' : 'left-full ml-3'} flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl shadow-xl border border-slate-700 whitespace-nowrap z-10`}>
-              <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">
-                {isDetailView && [1, 2, 6].includes(id) ? 'Fiber Main' : `${assignedRoute.name} (${assignedRoute.capacity}F)`}
-              </span>
+              <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest" title={`${assignedRoute.name} (${assignedRoute.capacity}F)`}>Main</span>
             </div>
           )}
         </div>
@@ -910,49 +885,10 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       return 'bottom';
     };
 
-    const isRoutePassThrough = (route: Route): boolean => {
-      // 1. Explicit enclosure IDs
-      if (route.startEnclosureId && route.endEnclosureId) {
-        if (route.startEnclosureId === enclosure.id && route.endEnclosureId === enclosure.id) {
-          return true; // Loop cable
-        }
-        if (route.startEnclosureId === enclosure.id || route.endEnclosureId === enclosure.id) {
-          return false; // Endpoint terminal
-        }
-        return true; // Mid-span pass-through
-      }
-
-      // 2. Check path geometry
-      if (route.path && route.path.length > 1) {
-        const closest = getClosestPointOnRoute(enclosure.position, route.path);
-        if (closest.distance <= 3) {
-          const nearStart = getDistance(enclosure.position, route.path[0]) <= 3;
-          const last = route.path[route.path.length - 1];
-          const nearEnd = getDistance(enclosure.position, last) <= 3;
-          if (nearStart || nearEnd) {
-            return false;
-          }
-          // If in the middle of path with points before and after -> Pass-through (2 sides)
-          return true;
-        }
-      }
-
-      // 3. Name check "Start - End"
-      if (route.name && route.name.includes(' - ')) {
-        const parts = route.name.split(' - ').map(s => s.trim().toLowerCase());
-        const encName = enclosure.name.toLowerCase();
-        if (parts.length === 2) {
-          const isStart = encName.includes(parts[0]) || parts[0].includes(encName);
-          const isEnd = encName.includes(parts[1]) || parts[1].includes(encName);
-          if (isStart && isEnd) return true;
-          if (isStart || isEnd) return false;
-        }
-      }
-
-      return false;
-    };
-
-    const isSingleRouteTwoSided = connectedRoutes.length === 1 && isRoutePassThrough(connectedRoutes[0]);
+    const passThroughRouteIds = new Set(
+      connectedRoutes.filter(route => isRoutePassThroughEnclosure(enclosure, route)).map(route => route.id)
+    );
+    const isSingleRouteTwoSided = connectedRoutes.length === 1 && passThroughRouteIds.has(connectedRoutes[0].id);
 
     interface VisualRoute {
       id: string;
@@ -964,37 +900,19 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
     }
 
     const visualRoutes: VisualRoute[] = [];
-    if (isSingleRouteTwoSided) {
-      const r = connectedRoutes[0];
-      const firstSide = getRouteSide(r);
-      const oppositeSide = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const;
-      visualRoutes.push({
-        id: `${r.id}-sideA`,
-        originalRoute: r,
-        side: firstSide,
-        label: r.name,
-        subBadge: 'Side A (Inbound / ขาเข้า)',
-        sideKey: 'sideA'
-      });
-      visualRoutes.push({
-        id: `${r.id}-sideB`,
-        originalRoute: r,
-        side: oppositeSide[firstSide],
-        label: r.name,
-        subBadge: 'Side B (Outbound / ขาออก)',
-        sideKey: 'sideB'
-      });
-    } else {
-      connectedRoutes.forEach(route => {
-        visualRoutes.push({
-          id: route.id,
-          originalRoute: route,
-          side: getRouteSide(route),
-          label: route.name,
-          subBadge: '',
-        });
-      });
-    }
+    const oppositeSide = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const;
+    connectedRoutes.forEach(route => {
+      const side = getRouteSide(route);
+      if (passThroughRouteIds.has(route.id)) {
+        visualRoutes.push({ id: `${route.id}-sideA`, originalRoute: route, side,
+          label: route.name, subBadge: 'Side A (Inbound / ขาเข้า)', sideKey: 'sideA' });
+        visualRoutes.push({ id: `${route.id}-sideB`, originalRoute: route, side: oppositeSide[side],
+          label: route.name, subBadge: 'Side B (Outbound / ขาออก)', sideKey: 'sideB' });
+      } else {
+        visualRoutes.push({ id: route.id, originalRoute: route, side,
+          label: route.name, subBadge: '' });
+      }
+    });
 
     const visualRouteSides = new Map<string, 'left' | 'right' | 'top' | 'bottom'>();
     visualRoutes.forEach(vr => visualRouteSides.set(vr.id, vr.side));
@@ -1059,85 +977,43 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
 
     const allSplices: any[] = [];
     const processedSplices = new Set<string>();
+    const explicitlySplicedCores = new Set<string>();
 
-    if (isSingleRouteTwoSided) {
-      const route = connectedRoutes[0];
-      const sideAId = `${route.id}-sideA`;
-      const sideBId = `${route.id}-sideB`;
-
-      const explicitSplicedCores = new Set<number>();
-
-      // 1. Explicit splices (e.g. loops between coreA and coreB on the same route)
-      route.cores.forEach(coreA => {
+    // Saved splices take precedence over an uninterrupted cable at this node.
+    connectedRoutes.forEach(routeA => {
+      routeA.cores.forEach(coreA => {
         const splice = coreA.splices?.[enclosure.id];
-        if (splice && splice.routeId === route.id) {
-          explicitSplicedCores.add(coreA.id);
-          explicitSplicedCores.add(splice.coreId);
-          const minCore = Math.min(coreA.id, splice.coreId);
-          const maxCore = Math.max(coreA.id, splice.coreId);
-          const key = `${minCore}-${maxCore}`;
-          if (!processedSplices.has(key)) {
-            processedSplices.add(key);
-            allSplices.push({
-              routeAId: sideAId,
-              coreAId: coreA.id,
-              routeBId: sideBId,
-              coreBId: splice.coreId,
-              isPassThrough: false
-            });
-          }
-        }
-      });
-
-      // 2. All remaining continuous pass-through cores of the same cable connect straight across!
-      route.cores.forEach(core => {
-        if (!explicitSplicedCores.has(core.id)) {
-          const key = `pt-${core.id}`;
-          if (!processedSplices.has(key)) {
-            processedSplices.add(key);
-            allSplices.push({
-              routeAId: sideAId,
-              coreAId: core.id,
-              routeBId: sideBId,
-              coreBId: core.id,
-              isPassThrough: true
-            });
-          }
-        }
-      });
-    } else {
-      connectedRoutes.forEach((routeA, aIdx) => {
-        routeA.cores.forEach(coreA => {
-          const splice = coreA.splices?.[enclosure.id];
-          if (splice) {
-            const routeBIdx = connectedRoutes.findIndex(r => r.id === splice.routeId);
-            if (routeBIdx !== -1) {
-              const minIdx = Math.min(aIdx, routeBIdx);
-              const maxIdx = Math.max(aIdx, routeBIdx);
-              let minCore: number;
-              let maxCore: number;
-              if (minIdx === maxIdx) {
-                minCore = Math.min(coreA.id, splice.coreId);
-                maxCore = Math.max(coreA.id, splice.coreId);
-              } else {
-                minCore = minIdx === aIdx ? coreA.id : splice.coreId;
-                maxCore = minIdx === aIdx ? splice.coreId : coreA.id;
-              }
-              const key = `${minIdx}-${minCore}-${maxIdx}-${maxCore}`;
-              if (!processedSplices.has(key)) {
-                processedSplices.add(key);
-                allSplices.push({
-                  routeAId: connectedRoutes[minIdx].id,
-                  coreAId: minCore,
-                  routeBId: connectedRoutes[maxIdx].id,
-                  coreBId: maxCore
-                });
-              }
-            }
-          }
+        const routeB = splice && connectedRoutes.find(route => route.id === splice.routeId);
+        if (!splice || !routeB) return;
+        const firstKey = `${routeA.id}:${coreA.id}`;
+        const secondKey = `${routeB.id}:${splice.coreId}`;
+        explicitlySplicedCores.add(firstKey);
+        explicitlySplicedCores.add(secondKey);
+        const key = [firstKey, secondKey].sort().join('|');
+        if (processedSplices.has(key)) return;
+        processedSplices.add(key);
+        allSplices.push({
+          routeAId: passThroughRouteIds.has(routeA.id) ? `${routeA.id}-sideA` : routeA.id,
+          coreAId: coreA.id,
+          routeBId: passThroughRouteIds.has(routeB.id) ? `${routeB.id}-sideB` : routeB.id,
+          coreBId: splice.coreId,
+          isPassThrough: false
         });
       });
-    }
+    });
+
+    // Each cable that passes through this Enclosure continues to its other side.
+    connectedRoutes.forEach(route => {
+      if (!passThroughRouteIds.has(route.id)) return;
+      route.cores.forEach(core => {
+        if (explicitlySplicedCores.has(`${route.id}:${core.id}`)) return;
+        allSplices.push({
+          routeAId: `${route.id}-sideA`, coreAId: core.id,
+          routeBId: `${route.id}-sideB`, coreBId: core.id,
+          isPassThrough: true
+        });
+      });
+    });
 
     const SPACING = 48;
     const PADDING = 60;
@@ -1519,16 +1395,16 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
 
                   {/* Ports Left */}
                   <div className="absolute -left-8 top-0 bottom-0 flex flex-col justify-evenly py-6">
-                    <PortNode id={1} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
-                    <PortNode id={3} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
-                    <PortNode id={5} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
+                    <PortNode id={1} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
+                    <PortNode id={3} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
+                    <PortNode id={5} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="left" appUser={appUser} />
                   </div>
 
                   {/* Ports Right */}
                   <div className="absolute -right-8 top-0 bottom-0 flex flex-col justify-evenly py-6">
-                    <PortNode id={2} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
-                    <PortNode id={4} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
-                    <PortNode id={6} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
+                    <PortNode id={2} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
+                    <PortNode id={4} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
+                    <PortNode id={6} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={onUpdatePortAssignment!} side="right" appUser={appUser} />
                   </div>
                 </div>
               </div>
@@ -2263,7 +2139,11 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       <div className="p-5 border-b border-slate-800 flex justify-between items-start bg-slate-900/50">
         <div>
           <h2 className="text-2xl font-bold text-slate-100 font-display">Enclosure: {enclosure.name}</h2>
-          <p className="text-base text-slate-400 font-medium mt-1">{connectedRoutes.length} Connected Routes</p>
+          <p className="text-base text-slate-400 font-medium mt-1">
+            {activeTab === 'diagram'
+              ? `${diagramData?.visualRoutes.length || 0} Fiber Connections`
+              : `${connectedRoutes.length} Connected Routes`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-2 hover:bg-slate-800 rounded-full transition-colors" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
@@ -2946,16 +2826,16 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
 
                             {/* Ports Left */}
                             <div className="absolute -left-8 top-0 bottom-0 flex flex-col justify-evenly py-6">
-                              <PortNode id={1} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" isDetailView appUser={appUser} />
-                              <PortNode id={3} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" isDetailView appUser={appUser} />
-                              <PortNode id={5} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" isDetailView appUser={appUser} />
+                              <PortNode id={1} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" appUser={appUser} />
+                              <PortNode id={3} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" appUser={appUser} />
+                              <PortNode id={5} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="left" appUser={appUser} />
                             </div>
 
                             {/* Ports Right */}
                             <div className="absolute -right-8 top-0 bottom-0 flex flex-col justify-evenly py-6">
-                              <PortNode id={2} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" isDetailView appUser={appUser} />
-                              <PortNode id={4} type="drop" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" isDetailView appUser={appUser} />
-                              <PortNode id={6} type="main" enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" isDetailView appUser={appUser} />
+                              <PortNode id={2} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" appUser={appUser} />
+                              <PortNode id={4} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" appUser={appUser} />
+                              <PortNode id={6} enclosure={enclosure} connectedRoutes={connectedRoutes} fiberTypes={fiberTypes} fiberColorConfigs={fiberColorConfigs} onUpdate={() => {}} side="right" appUser={appUser} />
                             </div>
                           </div>
                         </div>

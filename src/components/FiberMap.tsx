@@ -163,8 +163,8 @@ function EnclosureTooltipContent({
   };
 
   const getPortRoute = (pId: number) => connectedRoutes.find(route => route.id === portAssignments[pId]?.routeId);
-  const getDropOwner = (pId: number): CoreOwner =>
-    ![3, 4, 5].includes(pId) || getPortRoute(pId) ? 'None' : (portAssignments[pId]?.owner || 'None');
+  const getPortOwner = (pId: number): CoreOwner =>
+    getPortRoute(pId) ? 'None' : (portAssignments[pId]?.owner || 'None');
 
   // Helper to extract clean remote destination from route name relative to current enclosure
   const getRemoteTargetName = (route: Route) => {
@@ -176,12 +176,6 @@ function EnclosureTooltipContent({
       return parts[0].trim();
     }
     return route.name;
-  };
-
-  const getShortCode = (name: string) => {
-    const match = name.match(/(BJ#[\w/]+|[A-Za-z0-9#-]+)/);
-    if (match) return match[1];
-    return name.slice(0, 10);
   };
 
   // Show only assignments saved in Physical View.
@@ -196,9 +190,9 @@ function EnclosureTooltipContent({
     }));
   const renderPort = (pId: number, side: 'left' | 'right') => {
     const route = getPortRoute(pId);
-    const owner = getDropOwner(pId);
+    const owner = getPortOwner(pId);
     const hasOwner = owner !== 'None';
-    const label = route ? getShortCode(getRemoteTargetName(route)) : hasOwner ? owner : '';
+    const label = route ? 'Main' : hasOwner ? owner : '';
     const theme = route ? portThemes[pId] : hasOwner ? ownerColorMap[owner] : null;
     const badgeClass = route ? `${portThemes[pId].bg} ${portThemes[pId].border} text-white` :
       hasOwner ? `${ownerColorMap[owner].bar} border-transparent text-slate-950` : 'bg-slate-800 border-slate-700 text-slate-500';
@@ -361,28 +355,6 @@ function EnclosureTooltipContent({
           </div>
         )}
 
-        {/* Drop Ports Summary */}
-        <div className="border-t border-slate-800/60 pt-1.5">
-          <span className="text-[7px] font-black uppercase tracking-wider text-slate-500 block mb-1">
-            Drop Ports by Owner
-          </span>
-          <div className="grid grid-cols-3 gap-1.5">
-            {[3, 4, 5].map(pId => {
-              const owner = getDropOwner(pId);
-              const theme = ownerColorMap[owner] || ownerColorMap.None;
-              return (
-                <div key={pId} className={`flex items-center gap-1.5 p-1 rounded-lg border ${theme.bg} ${theme.border}`}>
-                  <span className={`w-4 h-3.5 rounded flex items-center justify-center font-mono text-[7px] font-black ${theme.bar} text-slate-950 shrink-0`}>
-                    P{pId}
-                  </span>
-                  <span className={`text-[7.5px] font-black uppercase truncate ${theme.text}`}>
-                    {owner} Drop
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );
