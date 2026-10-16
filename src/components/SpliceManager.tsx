@@ -6,6 +6,8 @@ import { DEFAULT_PERMISSIONS } from '../constants';
 import { X, GitMerge, Unlink, AlertCircle, ChevronRight, ChevronDown, List, Wrench, Network, Maximize2, Minimize2, ArrowLeftRight, Layers, Box, Zap, Activity, Plus, Minus, Edit2, MapPin, ShieldAlert, Pencil, Lock, Download } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
+import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
+import { getClosestPointOnRoute, getDistance } from '../utils/geo';
 
 export const ownerColors: Record<CoreOwner, string> = {
   None: 'bg-slate-800/80 text-slate-300 border-slate-700/80',
@@ -26,14 +28,6 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
   const assignment = enclosure.portAssignments?.[id] || {};
   const isMain = type === 'main';
   const [isOpen, setIsOpen] = useState(false);
-
-  const mainAssignedRouteIds = Object.entries(enclosure.portAssignments || {})
-    .filter(([portId, data]) => ['1', '2', '6'].includes(portId) && data.routeId)
-    .map(([_, data]) => data.routeId);
-
-  const availableRoutes = isMain 
-    ? connectedRoutes 
-    : connectedRoutes.filter(r => !mainAssignedRouteIds.includes(r.id) || r.id === assignment.routeId);
 
   const assignedRoute = connectedRoutes.find(r => r.id === assignment.routeId);
   
@@ -81,20 +75,28 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
             
             {!isMain && (
               <div className="mb-4">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Assigned Owner</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Owner or connected Fiber Main</label>
                 <select 
                   className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
-                  value={assignment.owner || 'None'}
+                  value={assignedRoute ? `route:${assignedRoute.id}` : assignment.owner && assignment.owner !== 'None' ? `owner:${assignment.owner}` : ''}
                   onChange={e => {
-                    onUpdate(enclosure.id, id, { owner: e.target.value as CoreOwner });
+                    const value = e.target.value;
+                    onUpdate(enclosure.id, id, value.startsWith('route:')
+                      ? { owner: 'None', routeId: value.slice(6) }
+                      : { owner: value.startsWith('owner:') ? value.slice(6) as CoreOwner : 'None', routeId: '' });
                     setIsOpen(false);
                   }}
                   disabled={!permissions.editEnclosures}
                 >
-                  <option value="None">None</option>
-                  <option value="ITEL">ITEL</option>
-                  <option value="SYMC">SYMC</option>
-                  <option value="UIH">UIH</option>
+                  <option value="">Unassigned</option>
+                  <optgroup label="Owner">
+                    <option value="owner:ITEL">ITEL</option>
+                    <option value="owner:SYMC">SYMC</option>
+                    <option value="owner:UIH">UIH</option>
+                  </optgroup>
+                  <optgroup label="Fiber Main connected to this Enclosure">
+                    {connectedRoutes.map(route => <option key={route.id} value={`route:${route.id}`}>{route.name}</option>)}
+                  </optgroup>
                 </select>
               </div>
             )}
@@ -106,13 +108,13 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
                   className="w-full text-xs p-3 bg-slate-800 border border-slate-700 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-black text-slate-200 disabled:opacity-50 transition-all"
                   value={assignment.routeId || ''}
                   onChange={e => {
-                    onUpdate(enclosure.id, id, { routeId: e.target.value });
+                    onUpdate(enclosure.id, id, { owner: 'None', routeId: e.target.value });
                     setIsOpen(false);
                   }}
                   disabled={!permissions.editEnclosures}
                 >
                   <option value="">Select Route...</option>
-                  {availableRoutes.map(r => (
+                  {connectedRoutes.map(r => (
                     <option key={r.id} value={r.id}>{r.name}</option>
                   ))}
                 </select>
@@ -130,15 +132,15 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
       </AnimatePresence>
 
       {/* Visual Line if route assigned or owner assigned for drop ports */}
-      {((isMain && assignment.routeId) || (!isMain && assignment.owner && assignment.owner !== 'None')) && (
+      {(assignedRoute || (!isMain && assignment.owner && assignment.owner !== 'None')) && (
         <div 
           className={`absolute top-1/2 -translate-y-1/2 ${side === 'left' ? 'right-12 w-12' : 'left-12 w-12'} h-2.5 rounded-full z-0 flex items-center ${side === 'left' ? 'justify-start' : 'justify-end'}`}
-          style={{ backgroundColor: isMain ? routeColor : (assignment.owner && assignment.owner !== 'None' ? ownerHexColors[assignment.owner] : '#334155') }}
+          style={{ backgroundColor: assignedRoute ? routeColor : (assignment.owner && assignment.owner !== 'None' ? ownerHexColors[assignment.owner] : '#334155') }}
         >
           {isMain && <div className="w-full h-full rounded-full opacity-20 absolute inset-0" style={{ backgroundColor: 'var(--color-slate-100)' }}></div>}
           
           {/* Add owner label for drop ports */}
-          {!isMain && assignment.owner && assignment.owner !== 'None' && (
+          {!assignedRoute && !isMain && assignment.owner && assignment.owner !== 'None' && (
             <div className={`absolute ${side === 'left' ? 'right-full mr-3' : 'left-full ml-3'} flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl shadow-xl border border-slate-700 whitespace-nowrap z-10`}>
               <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: ownerHexColors[assignment.owner] }}></div>
               <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">{assignment.owner}</span>
@@ -146,7 +148,7 @@ const PortNode = ({ id, type, enclosure, connectedRoutes, fiberTypes, fiberColor
           )}
 
           {/* Add route label for main ports */}
-          {isMain && assignedRoute && (
+          {assignedRoute && (
             <div className={`absolute ${side === 'left' ? 'right-full mr-3' : 'left-full ml-3'} flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl shadow-xl border border-slate-700 whitespace-nowrap z-10`}>
               <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">
                 {isDetailView && [1, 2, 6].includes(id) ? 'Fiber Main' : `${assignedRoute.name} (${assignedRoute.capacity}F)`}
@@ -576,14 +578,7 @@ const CoreList = memo(({
 export default function SpliceManager({ enclosure, routes, enclosureTypes, fiberTypes, fiberColorConfigs, appUser, onClose, onSplice, onUnsplice, onUnspliceAll, onUnspliceTube, onSpliceTube, onUpdateTrayOwner, onUpdateRouteSide, onUpdatePortAssignment, onUpdateCore, onUpdateEnclosure, onEditEnclosure, quotaExceeded = false }: SpliceManagerProps) {
   // Find routes that start or end at this enclosure, or pass through it
   const connectedRoutes = useMemo(() => {
-    return routes
-      .filter(r => {
-        if (r.startEnclosureId === enclosure.id || r.endEnclosureId === enclosure.id) return true;
-        if (r.path && r.path.length > 0) {
-          return r.path.some(p => Math.hypot(p.lat - enclosure.position.lat, p.lng - enclosure.position.lng) < 0.00025);
-        }
-        return false;
-      })
+    return getConnectedEnclosureRoutes(enclosure, routes)
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   }, [routes, enclosure.id, enclosure.position.lat, enclosure.position.lng]);
 
@@ -894,7 +889,8 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       } else if (route.endEnclosureId === enclosure.id) {
         p2 = route.path[route.path.length - 2];
       } else {
-        const idx = route.path.findIndex(p => Math.hypot(p.lat - enclosure.position.lat, p.lng - enclosure.position.lng) < 0.0003);
+        const closest = route.path.length > 1 ? getClosestPointOnRoute(enclosure.position, route.path) : null;
+        const idx = closest && closest.distance <= 3 ? closest.segmentIndex : -1;
         if (idx > 0) {
           p2 = route.path[idx - 1];
         } else if (idx === 0 && route.path.length > 1) {
@@ -928,19 +924,12 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
 
       // 2. Check path geometry
       if (route.path && route.path.length > 1) {
-        let closestIdx = -1;
-        let minDistance = Infinity;
-        route.path.forEach((p, idx) => {
-          const dist = Math.hypot(p.lat - enclosure.position.lat, p.lng - enclosure.position.lng);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestIdx = idx;
-          }
-        });
-
-        if (minDistance < 0.0005 && closestIdx !== -1) {
-          // If strictly at first point or last point of path -> Endpoint (1 side)
-          if (closestIdx === 0 || closestIdx === route.path.length - 1) {
+        const closest = getClosestPointOnRoute(enclosure.position, route.path);
+        if (closest.distance <= 3) {
+          const nearStart = getDistance(enclosure.position, route.path[0]) <= 3;
+          const last = route.path[route.path.length - 1];
+          const nearEnd = getDistance(enclosure.position, last) <= 3;
+          if (nearStart || nearEnd) {
             return false;
           }
           // If in the middle of path with points before and after -> Pass-through (2 sides)
@@ -977,10 +966,12 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
     const visualRoutes: VisualRoute[] = [];
     if (isSingleRouteTwoSided) {
       const r = connectedRoutes[0];
+      const firstSide = getRouteSide(r);
+      const oppositeSide = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const;
       visualRoutes.push({
         id: `${r.id}-sideA`,
         originalRoute: r,
-        side: 'left',
+        side: firstSide,
         label: r.name,
         subBadge: 'Side A (Inbound / ขาเข้า)',
         sideKey: 'sideA'
@@ -988,7 +979,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       visualRoutes.push({
         id: `${r.id}-sideB`,
         originalRoute: r,
-        side: 'right',
+        side: oppositeSide[firstSide],
         label: r.name,
         subBadge: 'Side B (Outbound / ขาออก)',
         sideKey: 'sideB'
