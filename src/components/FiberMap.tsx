@@ -1573,19 +1573,68 @@ export default function FiberMap({
 
         <LayersControl.Overlay checked name="Loops">
           <LayerGroup>
-            {loops.map(loop => (
-              <Marker
-                key={loop.id}
-                position={[loop.position.lat, loop.position.lng]}
-                icon={createFiberLoopIcon()}
-                bubblingMouseEvents={false}
-              >
-                <Popup className="fiber-detail-popup light-theme">
-                  <div className="text-slate-900 text-xs font-bold">{loop.name}</div>
-                  <div className="text-slate-600 text-[10px]">{loop.length} m</div>
-                </Popup>
-              </Marker>
-            ))}
+            {loops.map(loop => {
+              const route = routes.find(candidate => candidate.id === loop.routeId);
+              const routeColor = route ? getRouteColor(route) : undefined;
+
+              return (
+                <Marker
+                  key={loop.id}
+                  position={[loop.position.lat, loop.position.lng]}
+                  icon={createFiberLoopIcon(routeColor)}
+                  bubblingMouseEvents={false}
+                >
+                  <Popup className="fiber-detail-popup light-theme" minWidth={280} maxWidth={360}>
+                    <div className="p-1 space-y-2 text-slate-800" style={{ width: 'min(320px, calc(100vw - 96px))' }}>
+                      <div className="border-b border-slate-200 pb-1.5 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="text-[8px] font-black uppercase tracking-wider text-slate-500 block">Fiber Loop</span>
+                          <span className="text-[12px] font-bold leading-snug text-slate-900 break-words block">{loop.name}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded border border-slate-200 bg-slate-100 text-[9px] font-black shrink-0">LOOP</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1.5">
+                        <div>
+                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">Loop Length</span>
+                          <span className="text-[11px] font-bold text-blue-600">{loop.length.toLocaleString()} m</span>
+                        </div>
+                        <div>
+                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block">Position</span>
+                          <span className="text-[9px] font-mono font-bold text-slate-700">{loop.position.lat.toFixed(6)}, {loop.position.lng.toFixed(6)}</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-200 px-2.5 py-2">
+                        <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-500 block mb-1">Connected Fiber Optic</span>
+                        {route ? (
+                          <div className="flex items-start gap-2">
+                            <span className="h-1 w-5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: routeColor }} />
+                            <div className="min-w-0">
+                              <span className="text-[10px] font-bold text-slate-900 break-words block">{route.name}</span>
+                              <span className="text-[8.5px] text-slate-500 block mt-0.5">
+                                {[route.tierSharing || route.tier, route.fiberType, `${route.capacity}F`].filter(Boolean).join(' • ')}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[9px] text-slate-500">ไม่พบเส้น Fiber ที่เชื่อมต่อ</span>
+                        )}
+                      </div>
+                      {route && onOpenRouteDetail && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenRouteDetail(route, loop.position)}
+                          className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600"
+                        >
+                          Core details
+                        </button>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </LayerGroup>
         </LayersControl.Overlay>
       </LayersControl>

@@ -2692,7 +2692,12 @@ export function DesignApprovalModal({
                               <Marker
                                 key={loop.id || i}
                                 position={[loop.position.lat, loop.position.lng]}
-                                icon={createFiberLoopIcon(16)}
+                                icon={createFiberLoopIcon(
+                                  effectiveRoutes.find(route => route.id === loop.routeId)
+                                    ? getRouteColor(effectiveRoutes.find(route => route.id === loop.routeId)!)
+                                    : undefined,
+                                  16
+                                )}
                               >
                                 <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
                                   <div className="text-xs font-sans">
