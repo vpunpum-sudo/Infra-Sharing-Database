@@ -43,8 +43,9 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [draftRoute, setDraftRoute] = useState<Point[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
   const [selectedEnclosureId, setSelectedEnclosureId] = useState<string | undefined>();
+  const [selectedLoopId, setSelectedLoopId] = useState<string | undefined>();
   const [detailPanel, setDetailPanel] = useState<{ type: 'route' | 'enclosure'; id: string; point?: Point } | null>(null);
-  const [sidebarFocusTarget, setSidebarFocusTarget] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
+  const [sidebarFocusTarget, setSidebarFocusTarget] = useState<{ type: 'route' | 'enclosure' | 'loop'; id: string } | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
   const [fiberTypes, setFiberTypes] = useState<FiberType[]>([]);
@@ -125,6 +126,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (!sidebarFocusTarget || sidebarCollapsed) return;
     if (sidebarFocusTarget.type === 'route' && !routesExpanded) return;
     if (sidebarFocusTarget.type === 'enclosure' && !enclosuresExpanded) return;
+    if (sidebarFocusTarget.type === 'loop' && !loopsExpanded) return;
     // Wait for the sidebar section to expand before scrolling its selected row into view.
     const timer = window.setTimeout(() => {
       document.getElementById(`sidebar-${sidebarFocusTarget.type}-${sidebarFocusTarget.id}`)
@@ -132,7 +134,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       setSidebarFocusTarget(null);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [sidebarFocusTarget, sidebarCollapsed, routesExpanded, enclosuresExpanded]);
+  }, [sidebarFocusTarget, sidebarCollapsed, routesExpanded, enclosuresExpanded, loopsExpanded]);
 
   useEffect(() => {
     if (!user || !activeProjectId) {
@@ -260,6 +262,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     } else {
       setSelectedRouteId(undefined);
       setSelectedEnclosureId(undefined);
+      setSelectedLoopId(undefined);
       setDetailPanel(null);
       setSidebarFocusTarget(null);
     }
@@ -269,6 +272,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (drawingMode === 'none') {
       setSelectedEnclosureId(enclosure.id);
       setSelectedRouteId(undefined);
+      setSelectedLoopId(undefined);
       setDetailPanel(null);
       setEnclosuresExpanded(true);
       setSidebarCollapsed(false);
@@ -280,11 +284,23 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     if (drawingMode === 'none') {
       setSelectedRouteId(route.id);
       setSelectedEnclosureId(undefined);
+      setSelectedLoopId(undefined);
       setDetailPanel(null);
       setRoutesExpanded(true);
       setSidebarCollapsed(false);
       setSidebarFocusTarget({ type: 'route', id: route.id });
     }
+  };
+
+  const handleLoopMapSelection = (loop: FiberLoop) => {
+    if (drawingMode !== 'none') return;
+    setSelectedLoopId(loop.id);
+    setSelectedRouteId(undefined);
+    setSelectedEnclosureId(undefined);
+    setDetailPanel(null);
+    setLoopsExpanded(true);
+    setSidebarCollapsed(false);
+    setSidebarFocusTarget({ type: 'loop', id: loop.id });
   };
 
   const handleMarkerDragEnd = (index: number, point: Point) => {
@@ -1862,7 +1878,9 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                         {loops.map(loop => (
                           <li 
                             key={loop.id} 
-                            className="p-3 rounded-2xl border border-slate-800 bg-slate-900/50 text-sm transition-all cursor-pointer hover:border-amber-500/50 hover:bg-slate-800/50 group"
+                            id={`sidebar-loop-${loop.id}`}
+                            onClick={() => handleLoopMapSelection(loop)}
+                            className={`p-3 rounded-2xl border text-sm transition-all cursor-pointer hover:border-amber-500/50 hover:bg-slate-800/50 group ${selectedLoopId === loop.id ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}
                           >
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
@@ -1934,6 +1952,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             onMapClick={handleMapClick}
             onRouteClick={handleRouteMapSelection}
             onEnclosureClick={handleEnclosureClick}
+            onLoopClick={handleLoopMapSelection}
             onOpenRouteDetail={(route, point) => setDetailPanel({ type: 'route', id: route.id, point })}
             onOpenEnclosureDetail={(enclosure) => setDetailPanel({ type: 'enclosure', id: enclosure.id })}
             onEditRoute={startEditRoute}
