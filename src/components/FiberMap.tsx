@@ -57,6 +57,7 @@ interface FiberMapProps {
   onMapClick: (point: Point) => void;
   onRouteClick: (route: Route) => void;
   onEnclosureClick?: (enclosure: FiberEnclosure) => void;
+  onLoopClick?: (loop: FiberLoop) => void;
   onOpenRouteDetail?: (route: Route, point?: Point) => void;
   onOpenEnclosureDetail?: (enclosure: FiberEnclosure) => void;
   onEditRoute?: (route: Route) => void;
@@ -1286,6 +1287,7 @@ export default function FiberMap({
   onMapClick, 
   onRouteClick, 
   onEnclosureClick,
+  onLoopClick,
   onOpenRouteDetail,
   onOpenEnclosureDetail,
   selectedRouteId,
@@ -1583,6 +1585,12 @@ export default function FiberMap({
                   position={[loop.position.lat, loop.position.lng]}
                   icon={createFiberLoopIcon(routeColor)}
                   bubblingMouseEvents={false}
+                  eventHandlers={{
+                    click: (e) => {
+                      e.originalEvent?.stopPropagation();
+                      if (drawingMode === 'none') onLoopClick?.(loop);
+                    }
+                  }}
                 >
                   <Popup className="fiber-detail-popup light-theme" minWidth={280} maxWidth={360}>
                     <div className="p-1 space-y-2 text-slate-800" style={{ width: 'min(320px, calc(100vw - 96px))' }}>
@@ -1621,15 +1629,6 @@ export default function FiberMap({
                           <span className="text-[9px] text-slate-500">ไม่พบเส้น Fiber ที่เชื่อมต่อ</span>
                         )}
                       </div>
-                      {route && onOpenRouteDetail && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenRouteDetail(route, loop.position)}
-                          className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600"
-                        >
-                          Core details
-                        </button>
-                      )}
                     </div>
                   </Popup>
                 </Marker>
@@ -1777,16 +1776,6 @@ export default function FiberMap({
                   span={getSpanAtPoint(popupData.data, enclosures, { lat: popupData.position[0], lng: popupData.position[1] })}
                   hasSpans={getRouteEnclosureSpans(popupData.data, enclosures).length > 0}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenRouteDetail?.(popupData.data, { lat: popupData.position[0], lng: popupData.position[1] });
-                    setPopupData(null);
-                  }}
-                  className="mt-2 w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600"
-                >
-                  Core details · Set span Priority
-                </button>
               </div>
             )
           ) : (
