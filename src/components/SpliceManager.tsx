@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Route, FiberEnclosure, Point, Core, CoreConnection, EnclosureType, CoreOwner, CoreStatus, CorePriority, User as AppUser, FiberType, FiberColorConfig } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
@@ -2978,9 +2979,9 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       </div>
 
       {/* ENCLOSURE ILLUSTRATION LIGHTBOX PREVIEW */}
-      {previewingEnclosureImg && (
+      {previewingEnclosureImg && createPortal(
         <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => setPreviewingEnclosureImg(null)}
         >
           <div 
@@ -3016,7 +3017,8 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
