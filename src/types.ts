@@ -139,6 +139,12 @@ export type CoreStatus = 'used' | 'bad' | 'reserved';
 export type CoreOwner = 'None' | 'ITEL' | 'SYMC' | 'UIH';
 export type CorePriority = 'Low' | 'Medium' | 'High';
 
+export type SegmentTubePriorityUpdate = {
+  spanKey: string;
+  tubeId: number;
+  priority: CorePriority;
+};
+
 export type OwnerConfig = {
   id: string; // 'SYMC' | 'UIH' | 'ITEL' or custom code
   code: string;
@@ -185,6 +191,8 @@ export type Route = {
   path: Point[];
   capacity: number;
   cores: Core[];
+  /** Tube priorities between consecutive Enclosures, keyed by their ordered IDs. */
+  segmentTubePriorities?: Record<string, Record<number, CorePriority>>;
   startEnclosureId?: string;
   endEnclosureId?: string;
   /** Identifies two adjacent route ends cut without an Enclosure. */
