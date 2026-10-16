@@ -24,7 +24,7 @@ import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdat
 import { getRouteEnclosureSpans } from './utils/routeSegments';
 import { getConnectedEnclosureRoutes } from './utils/enclosureRoutes';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { motion, AnimatePresence } from 'motion/react';
 import { logActivity } from './services/logService';
@@ -660,7 +660,17 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
     const path = `projects/${activeProjectId}/loops/${newLoop.id}`;
     try {
-      await setDoc(doc(db, path), newLoop);
+      const loopRef = doc(db, path);
+      if (editingLoopId) {
+        await updateDoc(loopRef, {
+          name: newLoop.name,
+          position: newLoop.position,
+          routeId: newLoop.routeId,
+          length: newLoop.length
+        });
+      } else {
+        await setDoc(loopRef, newLoop);
+      }
       await logActivity(editingLoopId ? 'edit_loop' : 'create_loop', `${editingLoopId ? 'Edited' : 'Created'} loop ${newLoop.name}`, { loopId: newLoop.id, projectId: activeProjectId });
       setLoopModalOpen(false);
       setPendingLoopPoint(null);
