@@ -799,6 +799,18 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 }
 
 /* Approval totals and notices use tinted light surfaces in light mode. */
+.approval-empty-notice {
+  border: 1px solid #38bdf8;
+  background: #082f49;
+  color: #e0f2fe;
+}
+
+.light-theme #root .approval-empty-notice {
+  border-color: #7dd3fc !important;
+  background: #e0f2fe !important;
+  color: #0c4a6e !important;
+}
+
 .light-theme #root .approval-summary-total-row {
   background: #dbeafe !important;
   color: #0c4a6e !important;

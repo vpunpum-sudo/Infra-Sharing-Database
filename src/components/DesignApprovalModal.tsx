@@ -2377,14 +2377,14 @@ export function DesignApprovalModal({
           {viewMode === 'slides' && (
             <div className="w-full space-y-4">
               {!hasApprovalDesign && !isLoadingData && (
-                <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-xs text-sky-200">
-                  โครงการนี้ยังไม่มีเส้น Fiber และ Enclosure สำหรับจัดทำเอกสารขออนุมัติ
+                <div role="status" className="approval-empty-notice rounded-xl px-4 py-3 text-sm font-medium">
+                  ยังไม่มีข้อมูลเส้น Fiber และ Enclosure ครบสำหรับขออนุมัติ กรุณาเพิ่มข้อมูลโครงการก่อนยื่นคำขอ
                 </div>
               )}
-              {(!designApproval || isRejected) && (
-                <div className="approval-warning flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+              {hasApprovalDesign && !isLoadingData && (!designApproval || isRejected) && (
+                <div className="approval-warning flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
                   <span>{isRejected ? 'คำขอเดิมถูกปฏิเสธ สามารถยื่นคำขอใหม่ได้' : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
-                  <button onClick={() => setViewMode('request')} disabled={!hasApprovalDesign || isLoadingData} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
                     ยื่นขออนุมัติใหม่
                   </button>
                 </div>
