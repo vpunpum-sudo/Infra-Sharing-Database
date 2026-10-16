@@ -16,11 +16,12 @@ import { PendingApproval } from './components/PendingApproval';
 import { ProfileSettings } from './components/ProfileSettings';
 import { ForceChangePassword } from './components/ForceChangePassword';
 import SystemManual from './components/SystemManual';
-import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, User as AppUser } from './types';
+import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, SegmentTubePriorityUpdate, User as AppUser } from './types';
 import { generateCores, DEFAULT_PERMISSIONS } from './constants';
 import { getClosestPointOnRoute, getDistance, insertPointOnRoute, splitRoutePath } from './utils/geo';
 import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './utils/splitRoute';
-import { canChangeTubeOwner, validateTubeOwnerUpdates } from './utils/tubeOwnership';
+import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdates } from './utils/tubeOwnership';
+import { getRouteEnclosureSpans } from './utils/routeSegments';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -41,7 +42,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [draftRoute, setDraftRoute] = useState<Point[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
   const [selectedEnclosureId, setSelectedEnclosureId] = useState<string | undefined>();
-  const [detailPanel, setDetailPanel] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
+  const [detailPanel, setDetailPanel] = useState<{ type: 'route' | 'enclosure'; id: string; point?: Point } | null>(null);
   const [sidebarFocusTarget, setSidebarFocusTarget] = useState<{ type: 'route' | 'enclosure'; id: string } | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
@@ -1003,12 +1004,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     }
   };
 
-  const handleUpdateCores = async (routeId: string, updates: { coreId: number, data: Partial<Core> }[]): Promise<boolean> => {
+  const handleUpdateCores = async (routeId: string, updates: { coreId: number, data: Partial<Core> }[], segmentUpdates: SegmentTubePriorityUpdate[] = []): Promise<boolean> => {
     if (!user || !activeProjectId || !appUser || !DEFAULT_PERMISSIONS[appUser.role].editRoutes) {
       setErrorModalOpen('You do not have permission to edit Fiber routes.');
       return false;
     }
-    if (updates.length === 0) return true;
+    if (updates.length === 0 && segmentUpdates.length === 0) return true;
     const path = `projects/${activeProjectId}/routes/${routeId}`;
     try {
       await runTransaction(db, async transaction => {
@@ -1039,10 +1040,32 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             ...(newestHistory ? { history: [...(core.history || []), newestHistory] } : {})
           };
         });
-        transaction.update(routeRef, { cores: updatedCores });
+        const validSpans = new Set(getRouteEnclosureSpans(latestRoute, enclosures).map(span => span.key));
+        const nextSegmentPriorities = { ...(latestRoute.segmentTubePriorities || {}) };
+        for (const update of segmentUpdates) {
+          if (!validSpans.has(update.spanKey)) {
+            throw new Error('The selected Enclosure segment has changed. Please select it again on the map.');
+          }
+          if (!['Low', 'Medium', 'High'].includes(update.priority)) {
+            throw new Error('Invalid Tube priority.');
+          }
+          const tubeCores = updatedCores.filter(core => tubeIdForCore(core.id) === update.tubeId);
+          const tubeOwner = getTubeOwner(tubeCores);
+          if (tubeOwner === 'None' || tubeOwner === 'Mixed' ||
+              (latestUser.role !== 'Admin' && tubeOwner !== latestUser.owner)) {
+            throw new Error(`Only the current Tube Owner or Admin can set priority for Tube ${update.tubeId}.`);
+          }
+          nextSegmentPriorities[update.spanKey] = {
+            ...(nextSegmentPriorities[update.spanKey] || {}),
+            [update.tubeId]: update.priority
+          };
+        }
+        transaction.update(routeRef, segmentUpdates.length > 0
+          ? { cores: updatedCores, segmentTubePriorities: nextSegmentPriorities }
+          : { cores: updatedCores });
       });
       logActivity('update_cores_bulk', `Bulk updated cores on route ${routeId}`, {
-        routeId, updatesCount: updates.length, projectId: activeProjectId
+        routeId, updatesCount: updates.length, segmentPriorityCount: segmentUpdates.length, projectId: activeProjectId
       }).catch(console.warn);
       return true;
     } catch (error) {
@@ -1898,7 +1921,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             onMapClick={handleMapClick}
             onRouteClick={handleRouteMapSelection}
             onEnclosureClick={handleEnclosureClick}
-            onOpenRouteDetail={(route) => setDetailPanel({ type: 'route', id: route.id })}
+            onOpenRouteDetail={(route, point) => setDetailPanel({ type: 'route', id: route.id, point })}
             onOpenEnclosureDetail={(enclosure) => setDetailPanel({ type: 'enclosure', id: enclosure.id })}
             onEditRoute={startEditRoute}
             onSplitRoute={openSplitRoute}
@@ -1926,6 +1949,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       {panelRoute && drawingMode === 'none' && (
         <CoreManager
           route={panelRoute}
+          enclosures={enclosures}
+          selectedPoint={detailPanel?.type === 'route' ? detailPanel.point : undefined}
           appUser={appUser}
           onClose={() => setDetailPanel(null)}
           onUpdateCore={handleUpdateCore}
