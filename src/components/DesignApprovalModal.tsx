@@ -1592,8 +1592,10 @@ export function DesignApprovalModal({
       .sort((a, b) => getBjSortKey(a.name || '') - getBjSortKey(b.name || ''))
       .map((enc, index) => {
       const type = getEnclosureType(enc);
+      const savedName = enc.name?.trim() || parseEnclosureName(enc, index).bjNo;
+      const location = enc.locationName?.trim();
       return {
-        label: `${parseEnclosureName(enc, index).bjNo} ${parseEnclosureName(enc, index).bjName}`,
+        label: location && !savedName.includes(location) ? `${savedName} · ${location}` : savedName,
         color: getEnclosureColor(enc),
         iconUrl: type?.icon,
         position: enc.position
