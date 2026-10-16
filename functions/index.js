@@ -3,39 +3,43 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { defineSecret, defineString } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
+const nodemailer = require('nodemailer');
 const {
   notificationForTransition, notificationRecipients, deliveryId, emailContent
 } = require('./approvalNotifications');
 
 const DATABASE_ID = 'ai-studio-0f13f204-a764-4677-a292-7476ef7d2ece';
-const resendApiKey = defineSecret('RESEND_API_KEY');
+const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
 const emailFrom = defineString('APPROVAL_EMAIL_FROM');
 const appUrl = defineString('APPROVAL_APP_URL');
 
 initializeApp();
 
-async function sendEmail(apiKey, from, to, content, idempotencyKey) {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': idempotencyKey
-    },
-    body: JSON.stringify({ from, to: [to], ...content })
+async function claimDelivery(db, id, details) {
+  const ref = db.collection('approvalEmailDeliveries').doc(id);
+  const now = Date.now();
+  const result = await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    const current = snapshot.data();
+    if (current?.status === 'sent') return 'sent';
+    if (current?.status === 'sending' && current.leaseUntil > now) return 'busy';
+    transaction.set(ref, {
+      ...details,
+      status: 'sending',
+      attempts: (current?.attempts || 0) + 1,
+      leaseUntil: now + 10 * 60 * 1000,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return 'claimed';
   });
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(`Resend rejected approval notification (${response.status}): ${result.message || 'unknown error'}`);
-  }
-  return result.id;
+  return { ref, result };
 }
 
 exports.sendApprovalNotifications = onDocumentUpdated({
   document: 'projects/{projectId}',
   database: DATABASE_ID,
   retry: true,
-  secrets: [resendApiKey],
+  secrets: [gmailAppPassword],
   timeoutSeconds: 120
 }, async event => {
   if (!event.data) return;
@@ -44,11 +48,11 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   );
   if (!notification) return;
 
-  const from = emailFrom.value().trim();
+  const from = emailFrom.value().trim().toLowerCase();
   const url = appUrl.value().trim();
-  const key = resendApiKey.value();
-  if (!from || !/^https:\/\//.test(url) || !key) {
-    throw new Error('Approval email sender, app URL, or Resend secret is missing');
+  const password = gmailAppPassword.value();
+  if (!/^[^\s@]+@gmail\.com$/.test(from) || !/^https:\/\//.test(url) || !password) {
+    throw new Error('Gmail sender, app URL, or Gmail App Password is missing');
   }
 
   const db = getFirestore(DATABASE_ID);
@@ -56,24 +60,39 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   const recipients = notificationRecipients(users.docs.map(user => user.data()), notification);
   const content = emailContent(notification, url);
   const projectId = event.params.projectId;
+  const transport = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: from, pass: password }
+  });
 
   for (const email of recipients) {
     const id = deliveryId(projectId, notification, email);
-    const delivery = db.collection('approvalEmailDeliveries').doc(id);
-    if ((await delivery.get()).data()?.status === 'sent') continue;
-
-    // One key per project, approval, stage and recipient. Resend also deduplicates
-    // concurrent retries; Firestore keeps the sent state after Resend's 24h window.
-    const messageId = await sendEmail(key, from, email, content, id);
-    await delivery.set({
-      projectId,
-      approvalId: notification.approvalId,
-      kind: notification.kind,
-      email,
-      status: 'sent',
-      providerMessageId: messageId,
-      sentAt: FieldValue.serverTimestamp()
+    const { ref, result } = await claimDelivery(db, id, {
+      projectId, approvalId: notification.approvalId,
+      kind: notification.kind, email
     });
+    if (result === 'sent') continue;
+    // Retry after an in-flight attempt finishes; the lease also recovers a
+    // process that stopped before recording a result.
+    if (result === 'busy') throw new Error('Approval email delivery is in progress');
+    let sent;
+    try {
+      sent = await transport.sendMail({
+        from, to: email, ...content,
+        messageId: `<approval-${id}@gmail.com>`
+      });
+    } catch (error) {
+      await ref.set({
+        status: 'failed', leaseUntil: 0,
+        lastError: String(error?.message || error).slice(0, 300),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      throw error;
+    }
+    await ref.set({
+      status: 'sent', providerMessageId: sent.messageId,
+      sentAt: FieldValue.serverTimestamp(), leaseUntil: 0
+    }, { merge: true });
   }
 
   logger.info('Approval notification processed', {
