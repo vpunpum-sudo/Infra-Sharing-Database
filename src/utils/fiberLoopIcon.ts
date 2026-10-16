@@ -1,15 +1,27 @@
 import L from 'leaflet';
 
-/** A cable coil with two visible ends, distinct from Enclosure markers. */
-export const fiberLoopSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
-  <rect x="1" y="1" width="22" height="22" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
-  <path d="M5 8.5h2.2m9.6 7H19M8 8.5a5 5 0 1 1 0 7m0-7a3 3 0 1 0 0 7" fill="none" stroke="#c2410c" stroke-width="1.7" stroke-linecap="round"/>
-  <circle cx="7.2" cy="8.5" r="1" fill="#c2410c"/><circle cx="16.8" cy="15.5" r="1" fill="#c2410c"/>
-</svg>`;
+const DEFAULT_LOOP_COLOR = '#475569';
 
-export const createFiberLoopIcon = (size = 20) => L.divIcon({
+/** Match the route color while keeping SVG markup safe for Leaflet's HTML icon. */
+export const createFiberLoopSvg = (routeColor?: string) => {
+  const color = routeColor && /^#[0-9a-fA-F]{3,8}$/.test(routeColor)
+    ? routeColor
+    : DEFAULT_LOOP_COLOR;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="100%" height="100%" aria-hidden="true">
+    <circle cx="14" cy="14" r="12.5" fill="white" stroke="white" stroke-width="2"/>
+    <circle cx="14" cy="14" r="11" fill="none" stroke="${color}" stroke-width="2.2"/>
+    <circle cx="14" cy="14" r="7.5" fill="none" stroke="${color}" stroke-width="2.2"/>
+    <circle cx="14" cy="14" r="4" fill="none" stroke="${color}" stroke-width="2.2"/>
+    <circle cx="14" cy="14" r="1.3" fill="${color}"/>
+  </svg>`;
+};
+
+export const fiberLoopSvg = createFiberLoopSvg();
+
+export const createFiberLoopIcon = (routeColor?: string, size = 26) => L.divIcon({
   className: 'fiber-loop-map-icon',
-  html: fiberLoopSvg,
+  html: createFiberLoopSvg(routeColor),
   iconSize: [size, size],
   iconAnchor: [size / 2, size / 2],
   popupAnchor: [0, -size / 2]
