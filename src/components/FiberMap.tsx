@@ -5,6 +5,7 @@ import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, Fibe
 import { useMapDrawing } from '../hooks/useMapDrawing';
 import { createFiberLoopIcon, fiberLoopSvg } from '../utils/fiberLoopIcon';
 import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
+import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -142,7 +143,7 @@ function EnclosureTooltipContent({
   }).filter(Boolean);
 
   // Connected routes and ports
-  const connectedRoutes = routes.filter(r => r.startEnclosureId === enclosure.id || r.endEnclosureId === enclosure.id);
+  const connectedRoutes = getConnectedEnclosureRoutes(enclosure, routes);
   const portAssignments = enclosure.portAssignments || {};
 
   const ownerColorMap: Record<string, { text: string, bar: string, bg: string, border: string }> = {
@@ -161,18 +162,9 @@ function EnclosureTooltipContent({
     5: { bg: 'bg-rose-600', border: 'border-rose-400', text: 'text-rose-400', badgeBg: 'bg-rose-500/15 border-rose-500/30 text-rose-400' }
   };
 
-  const dropPortDefaultOwners: Record<number, CoreOwner> = {
-    3: 'ITEL',
-    4: 'SYMC',
-    5: 'UIH'
-  };
-
-  const getDropOwner = (pId: number): CoreOwner => {
-    if (portAssignments[pId]?.owner && portAssignments[pId].owner !== 'None') {
-      return portAssignments[pId].owner!;
-    }
-    return dropPortDefaultOwners[pId] || 'None';
-  };
+  const getPortRoute = (pId: number) => connectedRoutes.find(route => route.id === portAssignments[pId]?.routeId);
+  const getDropOwner = (pId: number): CoreOwner =>
+    ![3, 4, 5].includes(pId) || getPortRoute(pId) ? 'None' : (portAssignments[pId]?.owner || 'None');
 
   // Helper to extract clean remote destination from route name relative to current enclosure
   const getRemoteTargetName = (route: Route) => {
@@ -192,41 +184,28 @@ function EnclosureTooltipContent({
     return name.slice(0, 10);
   };
 
-  // Main cable port mapping for P1, P2, P6 (Main Ports)
-  const mainPortOrder = [1, 2, 6];
-  const mainPortMap: Record<number, Route | null> = {};
-  const assignedRouteIds = new Set<string>();
-
-  mainPortOrder.forEach(pId => {
-    const assignment = portAssignments[pId];
-    if (assignment?.routeId) {
-      const route = routes.find(r => r.id === assignment.routeId) || null;
-      if (route) {
-        mainPortMap[pId] = route;
-        assignedRouteIds.add(route.id);
-      }
-    }
-  });
-
-  const availableMainPorts = mainPortOrder.filter(pId => !mainPortMap[pId]);
-  const unassignedConnectedRoutes = connectedRoutes.filter(r => !assignedRouteIds.has(r.id));
-
-  unassignedConnectedRoutes.forEach((route, idx) => {
-    if (idx < availableMainPorts.length) {
-      const pId = availableMainPorts[idx];
-      mainPortMap[pId] = route;
-    }
-  });
-
+  // Show only assignments saved in Physical View.
   // Collect connected main cable entries for bottom list
-  const connectedMainCableEntries = mainPortOrder
-    .filter(pId => mainPortMap[pId])
+  const connectedMainCableEntries = [1, 2, 3, 4, 5, 6]
+    .filter(pId => getPortRoute(pId))
     .map(pId => ({
       portId: pId,
-      route: mainPortMap[pId]!,
+      route: getPortRoute(pId)!,
       theme: portThemes[pId] || portThemes[1],
-      remoteTarget: getRemoteTargetName(mainPortMap[pId]!)
+      remoteTarget: getRemoteTargetName(getPortRoute(pId)!)
     }));
+  const renderPort = (pId: number, side: 'left' | 'right') => {
+    const route = getPortRoute(pId);
+    const owner = getDropOwner(pId);
+    const hasOwner = owner !== 'None';
+    const label = route ? getShortCode(getRemoteTargetName(route)) : hasOwner ? owner : '';
+    const theme = route ? portThemes[pId] : hasOwner ? ownerColorMap[owner] : null;
+    const badgeClass = route ? `${portThemes[pId].bg} ${portThemes[pId].border} text-white` :
+      hasOwner ? `${ownerColorMap[owner].bar} border-transparent text-slate-950` : 'bg-slate-800 border-slate-700 text-slate-500';
+    const badge = <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border ${badgeClass}`}>P{pId}</div>;
+    const text = <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] ${side === 'right' ? 'text-right' : ''} ${theme?.text || 'text-slate-500'}`} title={route?.name || (hasOwner ? owner : '')}>{label && (side === 'left' ? `→ ${label}` : `${label} ←`)}</span>;
+    return <div key={pId} className="flex items-center gap-1.5">{side === 'left' ? <>{badge}{text}</> : <>{text}{badge}</>}</div>;
+  };
 
   return (
     <div className="p-1 space-y-2 text-slate-800 dark:text-slate-100 min-w-[340px] max-w-[460px] w-auto">
@@ -332,66 +311,9 @@ function EnclosureTooltipContent({
 
         {/* Hardware Capsule Schematic */}
         <div className="relative py-2 px-1 flex items-center justify-between gap-2">
-          {/* Left Ports (1: Main, 3: Drop ITEL, 5: Drop UIH) */}
           <div className="flex flex-col gap-1.5 shrink-0">
-            {/* P1 Main */}
-            {(() => {
-              const route = mainPortMap[1];
-              const isConnected = !!route;
-              const theme = portThemes[1];
-              const shortDest = route ? getShortCode(getRemoteTargetName(route)) : 'Main';
-              return (
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${
-                    isConnected 
-                      ? `${theme.bg} ${theme.border} text-white shadow-sm` 
-                      : 'bg-slate-800 border-slate-700 text-slate-500'
-                  }`}>
-                    P1
-                  </div>
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] ${
-                    isConnected ? theme.text : 'text-slate-500'
-                  }`} title={route ? getRemoteTargetName(route) : 'Port 1 (Main)'}>
-                    {isConnected ? `→ ${shortDest}` : 'Main'}
-                  </span>
-                </div>
-              );
-            })()}
-
-            {/* P3 Drop (ITEL) */}
-            {(() => {
-              const owner = getDropOwner(3);
-              const theme = ownerColorMap[owner] || ownerColorMap.ITEL;
-              return (
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${theme.bar} text-slate-950 shadow-sm shadow-amber-500/20`}>
-                    P3
-                  </div>
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] ${theme.text}`} title={`Port 3 Drop (${owner})`}>
-                    → {owner}
-                  </span>
-                </div>
-              );
-            })()}
-
-            {/* P5 Drop (UIH) */}
-            {(() => {
-              const owner = getDropOwner(5);
-              const theme = ownerColorMap[owner] || ownerColorMap.UIH;
-              return (
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${theme.bar} text-slate-950 shadow-sm shadow-sky-500/20`}>
-                    P5
-                  </div>
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] ${theme.text}`} title={`Port 5 Drop (${owner})`}>
-                    → {owner}
-                  </span>
-                </div>
-              );
-            })()}
+            {[1, 3, 5].map(portId => renderPort(portId, 'left'))}
           </div>
-
-          {/* Central Enclosure Capsule & Tray Core */}
           <div className="flex-1 bg-slate-950 border-2 border-slate-700 rounded-2xl p-2 flex flex-col items-center justify-center shadow-inner relative overflow-hidden h-20">
             <div className="w-full h-full bg-slate-900/90 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-1 p-1">
               <div className="w-16 h-1 bg-slate-700 rounded-full" />
@@ -399,76 +321,10 @@ function EnclosureTooltipContent({
               <div className="w-20 h-1.5 bg-brand-500/40 rounded-full border border-brand-500/50" />
               <div className="w-16 h-1 bg-slate-700 rounded-full" />
             </div>
-            <span className="text-[6.5px] font-black text-slate-500 uppercase tracking-widest mt-0.5">
-              FIBER ENCLOSURE
-            </span>
+            <span className="text-[6.5px] font-black text-slate-500 uppercase tracking-widest mt-0.5">FIBER ENCLOSURE</span>
           </div>
-
-          {/* Right Ports (2: Main, 4: Drop SYMC, 6: Main) */}
           <div className="flex flex-col gap-1.5 shrink-0 items-end">
-            {/* P2 Main */}
-            {(() => {
-              const route = mainPortMap[2];
-              const isConnected = !!route;
-              const theme = portThemes[2];
-              const shortDest = route ? getShortCode(getRemoteTargetName(route)) : 'Main';
-              return (
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] text-right ${
-                    isConnected ? theme.text : 'text-slate-500'
-                  }`} title={route ? getRemoteTargetName(route) : 'Port 2 (Main)'}>
-                    {isConnected ? `${shortDest} ←` : 'Main'}
-                  </span>
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${
-                    isConnected 
-                      ? `${theme.bg} ${theme.border} text-white shadow-sm` 
-                      : 'bg-slate-800 border-slate-700 text-slate-500'
-                  }`}>
-                    P2
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* P4 Drop (SYMC) */}
-            {(() => {
-              const owner = getDropOwner(4);
-              const theme = ownerColorMap[owner] || ownerColorMap.SYMC;
-              return (
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] text-right ${theme.text}`} title={`Port 4 Drop (${owner})`}>
-                    {owner} ←
-                  </span>
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${theme.bar} text-slate-950 shadow-sm shadow-pink-500/20`}>
-                    P4
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* P6 Main */}
-            {(() => {
-              const route = mainPortMap[6];
-              const isConnected = !!route;
-              const theme = portThemes[6];
-              const shortDest = route ? getShortCode(getRemoteTargetName(route)) : 'Main';
-              return (
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[7.5px] font-black uppercase truncate max-w-[55px] text-right ${
-                    isConnected ? theme.text : 'text-slate-500'
-                  }`} title={route ? getRemoteTargetName(route) : 'Port 6 (Main)'}>
-                    {isConnected ? `${shortDest} ←` : 'Main'}
-                  </span>
-                  <div className={`w-5 h-4 rounded-md flex items-center justify-center font-mono text-[7.5px] font-black border transition-all ${
-                    isConnected 
-                      ? `${theme.bg} ${theme.border} text-white shadow-sm` 
-                      : 'bg-slate-800 border-slate-700 text-slate-500'
-                  }`}>
-                    P6
-                  </div>
-                </div>
-              );
-            })()}
+            {[2, 4, 6].map(portId => renderPort(portId, 'right'))}
           </div>
         </div>
 

@@ -1061,6 +1061,17 @@ export function DesignApprovalModal({
       typeCounts: Array.from(typeCounts, ([name, count]) => ({ name, count }))
     };
   });
+  const approvalEnclosureTypeTotals = Array.from(
+    sldEnclosures.reduce((counts, enclosure) => {
+      const type = getEnclosureType(enclosure);
+      const baseName = type?.name || enclosure.locationType || 'ไม่ระบุ Type';
+      const name = type?.capacity && !baseName.includes(String(type.capacity))
+        ? `${baseName} (${type.capacity} Core)` : baseName;
+      counts.set(name, (counts.get(name) || 0) + 1);
+      return counts;
+    }, new Map<string, number>()),
+    ([name, count]) => ({ name, count })
+  );
 
   const renderRouteEnclosureGallery = (
     routeEncs: FiberEnclosure[],
@@ -2200,7 +2211,7 @@ export function DesignApprovalModal({
               <td>${approvalSummaryRows.length} เส้น Fiber Optic</td>
               <td>${totalLengthKm} กม.</td>
               <td style="text-align: left;">${participatingOwners.map(owner => `<div>${owner}: ${owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>`).join('')}</td>
-              <td>ตาม Type ที่ใช้จริง</td>
+              <td style="text-align: left;">${approvalEnclosureTypeTotals.length ? approvalEnclosureTypeTotals.map(type => `<div>${escapePrintText(type.name)} <strong>(${type.count} หัว)</strong></div>`).join('') : '-'}</td>
             </tr>
           </tfoot>
         </table>
@@ -2698,17 +2709,11 @@ export function DesignApprovalModal({
                               const encColor = encType?.color || '#3b82f6';
                               const iconUrl = encType?.icon;
                               if (!e.position) return null;
-                              const nearbyEnclosures = locationGroupedPlacements.find(group =>
-                                group.enclosures.includes(e))?.enclosures || [e];
                               const enclosureTooltip = (
                                 <Tooltip direction="top" offset={[0, -8]} opacity={0.98}>
                                   <div className="font-sans text-xs text-slate-900 min-w-[150px] max-w-[280px] max-h-[240px] overflow-y-auto">
                                     <strong className="block font-extrabold">{e.name || 'Enclosure'}</strong>
                                     {e.locationName && <span className="block text-slate-700">{e.locationName}</span>}
-                                    {nearbyEnclosures.length > 1 && <div className="border-t border-slate-200 mt-1 pt-1 text-slate-700">
-                                      <span className="font-bold">Enclosure ใกล้เคียง ({nearbyEnclosures.length} จุด)</span>
-                                      {nearbyEnclosures.map(item => <span key={item.id} className="block">{item.name}</span>)}
-                                    </div>}
                                     <span className="block text-slate-600 font-mono mt-1">{e.position.lat.toFixed(6)}, {e.position.lng.toFixed(6)}</span>
                                   </div>
                                 </Tooltip>
@@ -3518,7 +3523,11 @@ export function DesignApprovalModal({
                                       <div key={owner}>{owner}: {owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>
                                     ))}
                                   </td>
-                                  <td className="p-2 border-r border-slate-700">ตาม Type ที่ใช้จริง</td>
+                                  <td className="p-2 border-r border-slate-700">
+                                    {approvalEnclosureTypeTotals.length ? approvalEnclosureTypeTotals.map(type => (
+                                      <div key={type.name} className="break-words">{type.name} <strong>({type.count} หัว)</strong></div>
+                                    )) : '-'}
+                                  </td>
                                 </tr>
                               </tfoot>
                             </table>

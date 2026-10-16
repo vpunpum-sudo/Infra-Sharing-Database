@@ -22,6 +22,7 @@ import { getClosestPointOnRoute, getDistance, insertPointOnRoute, splitRoutePath
 import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './utils/splitRoute';
 import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdates } from './utils/tubeOwnership';
 import { getRouteEnclosureSpans } from './utils/routeSegments';
+import { getConnectedEnclosureRoutes } from './utils/enclosureRoutes';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -916,6 +917,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     const path = `projects/${activeProjectId}/enclosures/${enclosureId}`;
     try {
       const enclosure = enclosures.find(e => e.id === enclosureId);
+      if (!enclosure) return;
+      if (data.routeId && !getConnectedEnclosureRoutes(enclosure, routes).some(route => route.id === data.routeId)) return;
       const currentAssignments = enclosure?.portAssignments || {};
       await setDoc(doc(db, path), { 
         portAssignments: {
