@@ -1,0 +1,17 @@
+{
+  "name": "infra-sharing-approval-notifications",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "nodemailer": "^7.0.0"
+  }
+}
