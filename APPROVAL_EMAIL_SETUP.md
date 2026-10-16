@@ -16,9 +16,12 @@ one message for the event.
 ## Required setup before deployment
 
 - The Firebase project must be on Blaze and Cloud Functions must be enabled.
-- Create a Resend account, verify a sender domain, and create an API key.
-- Set the `RESEND_API_KEY` secret with `firebase functions:secrets:set RESEND_API_KEY`.
-- Set `APPROVAL_EMAIL_FROM` to an address on the verified domain and
+- Use a dedicated Gmail mailbox with 2-Step Verification and generate a unique
+  App Password for this function. The account holder must do this in Google
+  Account settings; do not put the password in chat or commit it to GitHub.
+- Set the `GMAIL_APP_PASSWORD` secret with
+  `firebase functions:secrets:set GMAIL_APP_PASSWORD` in a trusted terminal.
+- Set `APPROVAL_EMAIL_FROM` to that Gmail address and
   `APPROVAL_APP_URL` to the HTTPS application URL when deploying. These are
   Firebase parameter values, not Vite frontend variables.
 - Install dependencies in `functions/` and deploy **only when authorized** with
@@ -29,5 +32,8 @@ one message for the event.
 The Cloudflare frontend deployment is separate. This feature sends no email
 until the Firebase Function and its settings are deployed. Delivery receipts
 are stored in `approvalEmailDeliveries`, a collection not exposed by client
-Firestore rules. Failed sends are retried. Resend's idempotency key protects
-retries for 24 hours; the receipt protects later retries once recorded.
+Firestore rules. A Firestore transaction claims each recipient before sending,
+and failed sends are retried. SMTP cannot guarantee exactly-once delivery if
+the process stops after Gmail accepts a message but before the receipt is
+saved. Gmail also has account sending limits and may block automated SMTP;
+a dedicated mail service with a verified domain is preferable for production.
