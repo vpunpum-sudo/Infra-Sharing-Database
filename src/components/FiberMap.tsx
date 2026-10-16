@@ -1695,10 +1695,9 @@ export default function FiberMap({
                   radius={isEditingThis ? 11 : 9}
                   bubblingMouseEvents={false}
                   pathOptions={{ 
-                    color: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? '#2563eb' : '#ffffff',
                     fillColor: color,
                     fillOpacity: 1, 
-                    weight: (selectedEnclosureId === enclosure.id || hoveredObjectId === enclosure.id || isEditingThis) ? 3 : 2
+                    weight: 0
                   }}
                   eventHandlers={{
                     click: (e) => handleEnclosureClick(enclosure, e),
@@ -1730,8 +1729,8 @@ export default function FiberMap({
                   bubblingMouseEvents={false}
                   pathOptions={{
                     color: (selectedRouteId === route.id || hoveredObjectId === route.id) ? '#3b82f6' : getRouteColor(route),
-                    weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 3.8 : 2.2,
-                    opacity: 0.8
+                    weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 5.5 : 4,
+                    opacity: 0.9
                   }}
                   eventHandlers={{
                     click: (e) => handleRouteClick(route, e),
