@@ -9,7 +9,7 @@ const {
 } = require('./approvalNotifications');
 
 const DATABASE_ID = 'ai-studio-0f13f204-a764-4677-a292-7476ef7d2ece';
-const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
+const gmailAppPassword = defineSecret('fiberinfrasharing');
 const emailFrom = defineString('APPROVAL_EMAIL_FROM');
 const appUrl = defineString('APPROVAL_APP_URL');
 
@@ -38,6 +38,7 @@ async function claimDelivery(db, id, details) {
 exports.sendApprovalNotifications = onDocumentUpdated({
   document: 'projects/{projectId}',
   database: DATABASE_ID,
+  region: 'asia-southeast1',
   retry: true,
   secrets: [gmailAppPassword],
   timeoutSeconds: 120
