@@ -43,7 +43,7 @@ export function getApprovalAllocation(
   });
   const distinct = [...new Set(trays.map(tray => tray.value))];
   const trayText = trays.length === 0 ? '-'
-    : distinct.length === 1 ? (distinct[0] === '-' ? '-' : `${distinct[0]} (${trays.length} จุด)`)
+    : distinct.length === 1 ? distinct[0]
       : trays.map(tray => `${tray.enclosure}: ${tray.value}`).join(' | ');
   return {
     coreText: formatNumberRanges(coreIds),

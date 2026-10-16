@@ -99,6 +99,10 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         ...keepTogether.flatMap(range => [range.start, range.end]),
         ...Array.from(slide.querySelectorAll('table')).map(table => pixelRange(table).end)
       ])).filter(position => position > 0 && position < canvas.height).sort((a, b) => a - b);
+      const pageStarts = Array.from(slide.querySelectorAll('.pdf-start-page'))
+        .map(element => pixelRange(element).start)
+        .filter(position => position > 0 && position < canvas.height)
+        .sort((a, b) => a - b);
 
       for (let top = 0; top < canvas.height;) {
         const continuedTable = tables.find(table =>
@@ -111,9 +115,10 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         const contentCapacity = pixelsPerPdfPage - repeatedHeight;
         if (contentCapacity <= 0) throw new Error('หัวตาราง PDF สูงเกินพื้นที่หน้า');
 
-        const limit = Math.min(canvas.height, top + contentCapacity);
+        const nextPageStart = pageStarts.find(position => position > top + 2 && position <= top + contentCapacity);
+        const limit = Math.min(canvas.height, top + contentCapacity, nextPageStart ?? canvas.height);
         let bottom = limit;
-        if (limit < canvas.height) {
+        if (limit < canvas.height && limit !== nextPageStart) {
           const crossing = keepTogether
             .filter(range => range.start > top + 2 && range.start < limit - 2 &&
               range.end > limit + 2 && range.end - range.start <= contentCapacity)
