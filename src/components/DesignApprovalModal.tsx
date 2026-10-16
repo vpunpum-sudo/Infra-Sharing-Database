@@ -4,7 +4,7 @@ import {
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
   FiberLoop, EnclosureType, FiberType, ApprovalStage, FiberColorConfig 
 } from '../types';
-import { doc, setDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logActivity } from '../services/logService';
 import { 
@@ -156,9 +156,7 @@ export function DesignApprovalModal({
   // Request form state
   const [requestNotes, setRequestNotes] = useState('');
   const [mapLabelMode, setMapLabelMode] = useState<'all' | 'hover' | 'code'>('hover');
-  const [contractorInput, setContractorInput] = useState(
-    project.designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.'
-  );
+  const [contractorInput, setContractorInput] = useState(project.designApproval?.contractorName || '');
   const [contractorContactInput, setContractorContactInput] = useState(
     project.designApproval?.contractorContact || ''
   );
@@ -175,14 +173,8 @@ export function DesignApprovalModal({
   const [isSavingContractor, setIsSavingContractor] = useState(false);
   const [contractorSaveSuccess, setContractorSaveSuccess] = useState(false);
   const [contractorSaveError, setContractorSaveError] = useState<string | null>(null);
-  const [operationKmInput, setOperationKmInput] = useState('1.50');
-  const [targetInstallDate, setTargetInstallDate] = useState(() => {
-    return project.designApproval?.estimatedInstallationDate || (() => {
-      const d = new Date();
-      d.setDate(d.getDate() + 14);
-      return d.toISOString().split('T')[0];
-    })();
-  });
+  const [operationKmInput, setOperationKmInput] = useState('');
+  const [targetInstallDate, setTargetInstallDate] = useState(project.designApproval?.estimatedInstallationDate || '');
 
   // Sync contractor inputs if project designApproval updates
   useEffect(() => {
@@ -343,9 +335,10 @@ export function DesignApprovalModal({
     };
   }, [isOpen, project?.id]);
 
-  const effectiveRoutes = loadedRoutes.length > 0 ? loadedRoutes : propRoutes;
-  const effectiveEnclosures = loadedEnclosures.length > 0 ? loadedEnclosures : propEnclosures;
+  const effectiveRoutes = loadedRoutes;
+  const effectiveEnclosures = loadedEnclosures;
   const effectiveLoops = loadedLoops;
+  const hasApprovalDesign = effectiveRoutes.length > 0 && effectiveEnclosures.length > 0;
 
   // Participating / Authorized operators for this project (แสดงตาม authorized operators ที่กำหนดสิทธิ์ไว้ในโครงการ)
   const participatingOwners: CoreOwner[] = useMemo(() => {
@@ -367,12 +360,14 @@ export function DesignApprovalModal({
 
     const orderMap: Record<string, number> = { 'ITEL': 1, 'SYMC': 2, 'UIH': 3 };
 
-    if (list.length > 0) {
-      return list.sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
+    if (list.length === 0) {
+      effectiveRoutes.forEach(route => {
+        (route.owners || route.tierSharingPartners || []).forEach(addOwner);
+        route.cores?.forEach(core => addOwner(core.owner));
+      });
     }
-    // Default fallback if no authorized operator was configured
-    return ['ITEL', 'SYMC', 'UIH'];
-  }, [project.owners, project.owner]);
+    return list.sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
+  }, [project.owners, project.owner, effectiveRoutes]);
 
   const designApproval = project.designApproval;
 
@@ -420,7 +415,7 @@ export function DesignApprovalModal({
     if (routeTiers.includes('Tier 2')) return 'Tier 2';
     if (routeTiers.includes('Tier 3')) return 'Tier 3';
 
-    return 'Tier 1';
+    return 'ยังไม่ได้กำหนด';
   }, [effectiveRoutes, participatingOwners]);
 
   const projectTierLabel = useMemo(() => {
@@ -560,16 +555,7 @@ export function DesignApprovalModal({
   // Sort enclosures along corridor according to natural BJ sequence
   const sldEnclosures = useMemo(() => {
     if (effectiveEnclosures.length === 0) {
-      return [
-        { id: 'bj1', name: 'BJ#01 สภากาชาดไทย', position: { lat: 13.7315, lng: 100.5332 }, locationType: 'PB#' },
-        { id: 'bj2', name: 'BJ#02 สำนักงานบรรเทาทุกข์', position: { lat: 13.7328, lng: 100.5335 }, locationType: 'PB#' },
-        { id: 'bj3', name: 'BJ#03 สถานเสาวภา', position: { lat: 13.7342, lng: 100.5338 }, locationType: 'PB#' },
-        { id: 'bj4', name: 'BJ#04 คณะวิศวกรรมศาสตร์ จุฬาฯ', position: { lat: 13.7368, lng: 100.5342 }, locationType: 'PB#' },
-        { id: 'bj5', name: 'BJ#05 โรงเรียนสาธิต มศว', position: { lat: 13.7385, lng: 100.5345 }, locationType: 'PB#' },
-        { id: 'bj6', name: 'BJ#06 อาคารสมเด็จพระเทพฯ', position: { lat: 13.7402, lng: 100.5348 }, locationType: 'PB#' },
-        { id: 'bj7', name: 'BJ#07 วิทยาลัยพยาบาลตำรวจ', position: { lat: 13.7420, lng: 100.5350 }, locationType: 'PB#' },
-        { id: 'bj8', name: 'BJ#08 สำนักงานพิสูจน์หลักฐาน', position: { lat: 13.7445, lng: 100.5353 }, locationType: 'Riser#' },
-      ];
+      return [];
     }
     
     // Sort enclosures primarily by natural BJ sequence
@@ -639,41 +625,7 @@ export function DesignApprovalModal({
   // Accurate Fiber Optic Route Schedule (Referenced directly to each Fiber Optic Line)
   const fiberRouteSchedule = useMemo(() => {
     if (effectiveRoutes.length === 0) {
-      let defaultSymc = 0;
-      let defaultUih = 0;
-      let defaultItel = 0;
-      if (participatingOwners.length === 1) {
-        if (participatingOwners[0] === 'SYMC') defaultSymc = 144;
-        else if (participatingOwners[0] === 'UIH') defaultUih = 144;
-        else if (participatingOwners[0] === 'ITEL') defaultItel = 144;
-      } else if (participatingOwners.length === 3) {
-        defaultSymc = 48;
-        defaultUih = 48;
-        defaultItel = 48;
-      } else if (participatingOwners.includes('SYMC') && participatingOwners.includes('UIH')) {
-        defaultSymc = 72;
-        defaultUih = 72;
-      } else if (participatingOwners.includes('ITEL') && participatingOwners.includes('SYMC')) {
-        defaultSymc = 72;
-        defaultItel = 72;
-      } else if (participatingOwners.includes('ITEL') && participatingOwners.includes('UIH')) {
-        defaultUih = 72;
-        defaultItel = 72;
-      }
-
-      return [{
-        id: 't2_default',
-        cableId: 't2_default',
-        tier: projectTierCompactLabel,
-        routeName: project.name || 'แนวสาย OFC 144 Core',
-        capacity: 144,
-        sectionName: `${sldEnclosures[0]?.name || 'BJ#01'} - ${sldEnclosures[sldEnclosures.length - 1]?.name || 'BJ#08'}`,
-        distanceKm: '1.50',
-        symcCores: defaultSymc,
-        uihCores: defaultUih,
-        itelCores: defaultItel,
-        totalCores: 144
-      }];
+      return [];
     }
 
     // Map each distinct shared fiber route into structured table rows
@@ -683,7 +635,7 @@ export function DesignApprovalModal({
       const endEnc = effectiveEnclosures.find(e => e.id === route.endEnclosureId) || sldEnclosures[sldEnclosures.length - 1];
 
       // Calculate realistic distance of this specific fiber line
-      let distKm = '1.50';
+      let distKm = '0.00';
       if (route.totalLength && route.totalLength > 0 && route.totalLength < 100000) {
         distKm = (route.totalLength / 1000).toFixed(2);
       } else if (route.markStart !== undefined && route.markEnd !== undefined && Math.abs(route.markEnd - route.markStart) > 0 && Math.abs(route.markEnd - route.markStart) < 100000) {
@@ -695,12 +647,12 @@ export function DesignApprovalModal({
           const p2 = L.latLng(route.path[i + 1].lat, route.path[i + 1].lng);
           distMeters += p1.distanceTo(p2);
         }
-        distKm = distMeters > 0 ? (distMeters / 1000).toFixed(2) : '1.50';
+        distKm = (distMeters / 1000).toFixed(2);
       } else if (startEnc?.position && endEnc?.position) {
         const p1 = L.latLng(startEnc.position.lat, startEnc.position.lng);
         const p2 = L.latLng(endEnc.position.lat, endEnc.position.lng);
         const distMeters = p1.distanceTo(p2);
-        distKm = distMeters > 0 ? (distMeters / 1000).toFixed(2) : '1.50';
+        distKm = (distMeters / 1000).toFixed(2);
       }
 
       // Determine participating owners specific to THIS route line strictly from the route itself (no project fallback)
@@ -775,7 +727,7 @@ export function DesignApprovalModal({
     });
 
     return {
-      distanceKm: totalDist > 0 ? totalDist.toFixed(2) : '1.50',
+      distanceKm: totalDist.toFixed(2),
       symcCores: totalSYMC,
       uihCores: totalUIH,
       itelCores: totalITEL,
@@ -805,18 +757,6 @@ export function DesignApprovalModal({
     }));
   }, [fiberRouteSchedule, effectiveRoutes]);
 
-  const primaryRoute = fiberRouteSchedule[0] || {
-    tier: projectTierCompactLabel,
-    routeName: project.name,
-    capacity: 144,
-    sectionName: `${sldEnclosures[0]?.name || 'BJ#01'} - ${sldEnclosures[sldEnclosures.length - 1]?.name || 'BJ#08'}`,
-    distanceKm: '1.50',
-    symcCores: 72,
-    uihCores: 72,
-    itelCores: 0,
-    totalCores: 144
-  };
-
   // Helper to dynamically calculate per-route fiber and enclosure sharing configuration
   const calculateRouteSharingDetails = (routeSched: typeof fiberRouteSchedule[0]) => {
     const rawRoute = effectiveRoutes.find(r => r.id === routeSched.id);
@@ -827,23 +767,6 @@ export function DesignApprovalModal({
     let itelCores = routeSched.itelCores || 0;
     let symcCores = routeSched.symcCores || 0;
     let uihCores = routeSched.uihCores || 0;
-
-    // Fallback if route.cores individual records aren't set
-    if (itelCores === 0 && symcCores === 0 && uihCores === 0) {
-      if (participatingOwners.length === 3) {
-        itelCores = Math.floor(totalC / 3);
-        symcCores = Math.floor(totalC / 3);
-        uihCores = Math.floor(totalC / 3);
-      } else if (participatingOwners.length === 2) {
-        if (participatingOwners.includes('SYMC')) symcCores = Math.floor(totalC / 2);
-        if (participatingOwners.includes('UIH')) uihCores = Math.floor(totalC / 2);
-        if (participatingOwners.includes('ITEL')) itelCores = Math.floor(totalC / 2);
-      } else if (participatingOwners.length === 1) {
-        if (participatingOwners[0] === 'ITEL') itelCores = totalC;
-        if (participatingOwners[0] === 'SYMC') symcCores = totalC;
-        if (participatingOwners[0] === 'UIH') uihCores = totalC;
-      }
-    }
 
     const itelTubesCount = itelCores > 0 ? Math.ceil(itelCores / coresPerTube) : 0;
     const symcTubesCount = symcCores > 0 ? Math.ceil(symcCores / coresPerTube) : 0;
@@ -1258,16 +1181,49 @@ export function DesignApprovalModal({
     }
   };
 
-  const canCorrectSignOff = (signOff: OwnerSignOff, owner: CoreOwner, level: 'Planning' | 'OM') =>
-    !!appUser && canUserSign(owner, level) && (
-      appUser.role === 'Admin' ||
-      signOff.signedByUid === appUser.id ||
-      (!signOff.signedByUid && signOff.signedByEmail?.toLowerCase() === appUser.email.toLowerCase())
-    );
+  const canCorrectSignOff = () => appUser?.role === 'Admin';
+
+  const handleRewindApproval = async () => {
+    if (appUser?.role !== 'Admin' || !project.designApproval ||
+        (currentStage !== 'OM' && currentStage !== 'Completed')) return;
+    const nextStage: ApprovalStage = currentStage === 'Completed' ? 'OM' : 'Planning';
+    if (!window.confirm(`ถอยขั้นตอนอนุมัติกลับไป ${nextStage} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่?`)) return;
+
+    const pendingSignOffs = (level: 'Planning' | 'OM') =>
+      Object.fromEntries(participatingOwners.map(owner => [owner, { owner, level, status: 'Pending' as const }]));
+    const { finalApprovedAt, finalApprovedBy, ...previousApproval } = project.designApproval;
+    const updatedApproval: DesignApproval = {
+      ...previousApproval,
+      status: 'Pending Approval',
+      approvalStage: nextStage,
+      planningSignOffs: nextStage === 'Planning' ? pendingSignOffs('Planning') : previousApproval.planningSignOffs,
+      omSignOffs: pendingSignOffs('OM'),
+      ownerSignOffs: nextStage === 'Planning' ? pendingSignOffs('Planning') : previousApproval.ownerSignOffs
+    };
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await updateDoc(doc(db, `projects/${project.id}`), {
+        status: 'Pending Approval', designApproval: updatedApproval
+      });
+      await logActivity('rewind_design_approval', `Admin returned approval for ${project.name} to ${nextStage}`, {
+        projectId: project.id, fromStage: currentStage, toStage: nextStage, adminUid: appUser.id
+      });
+      onProjectUpdated?.({ ...project, status: 'Pending Approval', designApproval: updatedApproval });
+    } catch (err: any) {
+      setActionError(err.message || 'ไม่สามารถถอยขั้นตอนอนุมัติได้');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
     if (!appUser) return;
+    if (!hasApprovalDesign || participatingOwners.length === 0) {
+      setActionError('กรุณาเพิ่มเส้น Fiber, Enclosure และกำหนด Owner ของโครงการก่อนยื่นขออนุมัติ');
+      return;
+    }
     setIsSubmitting(true);
     setActionError(null);
 
@@ -1300,12 +1256,12 @@ export function DesignApprovalModal({
         requestedByUid: appUser.id,
         requestedAt: new Date().toISOString(),
         designNotes: requestNotes.trim() || 'ขออนุมัติแบบโครงการ Fiber Infra Sharing ตามสัดส่วน Core และ Enclosure',
-        contractorName: contractorInput.trim() || 'United Telecommunication Services Co., Ltd.',
+        contractorName: contractorInput.trim(),
         contractorContact: contractorContactInput.trim(),
         contractorPhone: contractorPhoneInput.trim(),
         contractorPoNumber: contractorPoInput.trim(),
         contractorScope: contractorScopeInput.trim(),
-        totalOperationDistanceKm: parseFloat(totalLengthKm) || 1.5,
+        totalOperationDistanceKm: parseFloat(totalLengthKm),
         estimatedInstallationDate: targetInstallDate,
         planningSignOffs: initialPlanningSignOffs,
         omSignOffs: initialOMSignOffs,
@@ -1318,10 +1274,10 @@ export function DesignApprovalModal({
         designApproval: newApproval
       };
 
-      await setDoc(doc(db, `projects/${project.id}`), {
+      await updateDoc(doc(db, `projects/${project.id}`), {
         status: 'Pending Approval',
         designApproval: newApproval
-      }, { merge: true });
+      });
 
       await logActivity('request_design_approval', `Requested 2-level design approval for project ${project.name} (${docNumber})`, {
         projectId: project.id,
@@ -1367,7 +1323,7 @@ export function DesignApprovalModal({
           omSignOffs: {},
           ownerSignOffs: {}
         }),
-        contractorName: contractorInput.trim() || 'United Telecommunication Services Co., Ltd.',
+        contractorName: contractorInput.trim(),
         contractorContact: contractorContactInput.trim(),
         contractorPhone: contractorPhoneInput.trim(),
         contractorPoNumber: contractorPoInput.trim(),
@@ -1410,6 +1366,13 @@ export function DesignApprovalModal({
   // Sign & Approve for specific Owner & Level (Planning or OM)
   const handleConfirmSignature = async (isApproved: boolean) => {
     if (!signingTarget || !appUser || !project.designApproval) return;
+    const existingSignOff = signingTarget.level === 'Planning'
+      ? project.designApproval.planningSignOffs?.[signingTarget.owner]
+      : project.designApproval.omSignOffs?.[signingTarget.owner];
+    if (existingSignOff?.status === 'Approved' && appUser.role !== 'Admin') {
+      setActionError('เฉพาะ Admin เท่านั้นที่แก้ไขการอนุมัติเดิมหรือถอยขั้นตอนอนุมัติได้');
+      return;
+    }
     const fullName = signerName.trim();
     const position = signerPosition.trim();
     if (fullName.split(/\s+/).length < 2) {
@@ -1500,10 +1463,10 @@ export function DesignApprovalModal({
         designApproval: updatedApproval
       };
 
-      await setDoc(doc(db, `projects/${project.id}`), {
+      await updateDoc(doc(db, `projects/${project.id}`), {
         status: nextProjectStatus,
         designApproval: updatedApproval
-      }, { merge: true });
+      });
 
       await logActivity('sign_design_approval', `${isApproved ? 'Approved' : 'Rejected'} [Level: ${level}] for ${owner} on project ${project.name}`, {
         projectId: project.id,
@@ -2304,10 +2267,12 @@ export function DesignApprovalModal({
                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
                   project.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
                   project.status === 'Rejected' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' :
+                  !designApproval ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' :
                   isPlanningComplete ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' :
                   'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 }`}>
-                  {project.status === 'Approved' ? '✓ ผ่านการอนุมัติสมบูรณ์' :
+                  {!designApproval ? 'ยังไม่ได้ยื่นขออนุมัติ' :
+                   project.status === 'Approved' ? '✓ ผ่านการอนุมัติสมบูรณ์' :
                    project.status === 'Rejected' ? '✕ ไม่อนุมัติ / ขอแก้ไข' :
                    isPlanningComplete ? '2/2 รออนุมัติระดับ O&M' : '1/2 รออนุมัติระดับ Planning'}
                 </span>
@@ -2332,7 +2297,7 @@ export function DesignApprovalModal({
             {/* Export HTML / Print */}
             <button
               onClick={handleExportDocument}
-              disabled={isExporting}
+              disabled={isExporting || !hasApprovalDesign}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
               title="ดาวน์โหลดเอกสาร PDF"
             >
@@ -2351,7 +2316,7 @@ export function DesignApprovalModal({
         </div>
 
         {/* 2-Level Approval Stage Indicator Header */}
-        <div className="px-6 py-2.5 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between gap-4 text-xs shrink-0">
+        {designApproval && <div className="px-6 py-2.5 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between gap-4 text-xs shrink-0">
           <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-0.5">
             {/* Stage 1: Planning */}
             <div className={`flex items-center gap-2 px-3 py-1 rounded-lg border ${
@@ -2389,10 +2354,16 @@ export function DesignApprovalModal({
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-3 text-[11px] text-slate-400">
-            <span>Doc: <span className="font-mono text-slate-300">{designApproval?.documentNumber || `APP-2026-${projectTierName.replace('Tier ', 'T')}-01`}</span></span>
+          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+            {appUser?.role === 'Admin' && (currentStage === 'OM' || currentStage === 'Completed') && (
+              <button type="button" onClick={handleRewindApproval} disabled={isSubmitting}
+                className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
+                ถอยขั้นตอนอนุมัติ
+              </button>
+            )}
+            <span className="hidden md:inline">Doc: <span className="font-mono text-slate-300">{designApproval.documentNumber || '-'}</span></span>
           </div>
-        </div>
+        </div>}
 
         {/* Modal Main Content Body */}
         <div className="flex-1 overflow-y-auto bg-slate-950 p-4 sm:p-6 custom-scrollbar">
@@ -2405,10 +2376,15 @@ export function DesignApprovalModal({
           {/* VIEW MODE 1: PRESENTATION SLIDES (Matching the attached PDF presentation) */}
           {viewMode === 'slides' && (
             <div className="w-full space-y-4">
+              {!hasApprovalDesign && !isLoadingData && (
+                <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-xs text-sky-200">
+                  โครงการนี้ยังไม่มีเส้น Fiber และ Enclosure สำหรับจัดทำเอกสารขออนุมัติ
+                </div>
+              )}
               {(!designApproval || isRejected) && (
                 <div className="approval-warning flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
                   <span>{isRejected ? 'คำขอเดิมถูกปฏิเสธ สามารถยื่นคำขอใหม่ได้' : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
-                  <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
+                  <button onClick={() => setViewMode('request')} disabled={!hasApprovalDesign || isLoadingData} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed">
                     ยื่นขออนุมัติใหม่
                   </button>
                 </div>
@@ -2450,6 +2426,11 @@ export function DesignApprovalModal({
 
                 {/* Slide Contents Body */}
                 <div className="py-6 flex-1 flex flex-col justify-center relative z-10">
+                  {!hasApprovalDesign && currentSlide !== 1 && (
+                    <div className="mx-auto max-w-lg rounded-2xl border border-slate-700 bg-slate-950/70 p-8 text-center text-sm text-slate-300">
+                      ยังไม่มีเส้น Fiber และ Enclosure ในโครงการ จึงยังไม่มีรายละเอียดสำหรับสไลด์นี้
+                    </div>
+                  )}
                   
                   {/* SLIDE 1: COVER */}
                   {currentSlide === 1 && (
@@ -2496,7 +2477,7 @@ export function DesignApprovalModal({
                   )}
 
                   {/* SLIDE 2: PROJECT OVERVIEW (Accurate Fiber Optic Table & High-Precision Map) */}
-                  {currentSlide === 2 && (
+                  {hasApprovalDesign && currentSlide === 2 && (
                     <div className="space-y-5">
                       {/* Metric Callouts */}
                       <div className="flex flex-wrap items-center gap-3">
@@ -2575,7 +2556,7 @@ export function DesignApprovalModal({
                   )}
 
                   {/* SLIDE 3: ROUTE MAP & GIS MAP WITH SIDE LEGEND PANEL */}
-                  {currentSlide === 3 && (
+                  {hasApprovalDesign && currentSlide === 3 && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                         {/* Interactive GIS Map */}
@@ -2625,7 +2606,7 @@ export function DesignApprovalModal({
                             {effectiveRoutes.map((r, i) => {
                               const routeData = fiberRouteSchedule[i] || fiberRouteSchedule.find(s => s.routeName === r.name) || {
                                 tier: r.tier || projectTierCompactLabel,
-                                distanceKm: '1.50',
+                                distanceKm: '0.00',
                                 symcCores: 0,
                                 uihCores: 0,
                                 itelCores: 0,
@@ -2679,7 +2660,7 @@ export function DesignApprovalModal({
 
                                       <div className="text-[10px] font-mono text-slate-600 flex justify-between pt-0.5">
                                         <span>ระยะทาง (Distance):</span>
-                                        <span className="font-bold text-slate-800">{r.totalLength ? `${(r.totalLength / 1000).toFixed(2)} km` : `${routeData.distanceKm || '1.50'} km`}</span>
+                                        <span className="font-bold text-slate-800">{r.totalLength ? `${(r.totalLength / 1000).toFixed(2)} km` : `${routeData.distanceKm || '0.00'} km`}</span>
                                       </div>
                                     </div>
                                   </Tooltip>
@@ -2817,7 +2798,7 @@ export function DesignApprovalModal({
                             {effectiveRoutes.map((r, i) => {
                               const routeData = fiberRouteSchedule[i] || fiberRouteSchedule.find(s => s.routeName === r.name) || {
                                 tier: r.tier || projectTierCompactLabel,
-                                distanceKm: '1.50',
+                                distanceKm: '0.00',
                                 symcCores: 0,
                                 uihCores: 0,
                                 itelCores: 0,
@@ -2877,14 +2858,14 @@ export function DesignApprovalModal({
                           <div className="border-t border-slate-800 pt-1 text-[10px] text-amber-300">รวม {totalLengthKm} km.</div>
                         </div>
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-pink-400">
-                          Enclosure 312 Core : {sldEnclosures.length} EA.
+                          Enclosures: {sldEnclosures.length} EA.
                         </div>
                       </div>
                     </div>
                   )}
 
                   {/* SLIDE 4: ENCLOSURE DETAIL TABLE & FIBER ROUTE SHARING */}
-                  {currentSlide === 4 && (
+                  {hasApprovalDesign && currentSlide === 4 && (
                     <div className="space-y-4">
                       {/* Route Selection Filter Tabs */}
                       <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-slate-800">
@@ -3147,7 +3128,7 @@ export function DesignApprovalModal({
                   )}
 
                   {/* SLIDE 5: FIBER USAGE BREAKDOWN & TUBE GRAPHIC */}
-                  {currentSlide === 5 && (
+                  {hasApprovalDesign && currentSlide === 5 && (
                     <div className="space-y-4">
                       {fiberRouteSchedule.map((routeSched, rIdx) => {
                         const routeEncs = getRouteEnclosures(routeSched.id);
@@ -3311,7 +3292,7 @@ export function DesignApprovalModal({
 
                                           </div>
                   )}{/* SLIDE 6: INSTALLATION SUMMARY & 2-LEVEL APPROVAL */}
-                  {currentSlide === 6 && (
+                  {hasApprovalDesign && currentSlide === 6 && (
                     <div className="space-y-4">
                       
                       {/* Installation Scope Overview - Full Project Scope */}
@@ -3667,7 +3648,7 @@ export function DesignApprovalModal({
                                       <span>ลงนาม Planning ({owner})</span>
                                     </button>
                                   )}
-                                  {isSigned && canCorrectSignOff(signOff, owner, 'Planning') && (
+                                  {isSigned && canCorrectSignOff() && (
                                     <button
                                       onClick={() => handleOpenSignModal(owner, 'Planning', signOff)}
                                       className="mt-2 w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-lg"
@@ -3757,7 +3738,7 @@ export function DesignApprovalModal({
                                       <span>ลงนาม O&M ({owner})</span>
                                     </button>
                                   )}
-                                  {isSigned && canCorrectSignOff(signOff, owner, 'OM') && (
+                                  {isSigned && canCorrectSignOff() && (
                                     <button
                                       onClick={() => handleOpenSignModal(owner, 'OM', signOff)}
                                       className="mt-2 w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-lg"
@@ -3875,7 +3856,7 @@ export function DesignApprovalModal({
                 <div className="pt-2">
                   <button
                     onClick={handleSubmitApprovalRequest}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !hasApprovalDesign || participatingOwners.length === 0 || isLoadingData}
                     className="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
