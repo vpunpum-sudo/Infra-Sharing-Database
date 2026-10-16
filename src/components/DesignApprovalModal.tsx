@@ -19,9 +19,10 @@ import {
   Edit3, Save, Phone, Briefcase, Calendar
 } from 'lucide-react';
 import { OwnerLogo } from './OwnerLogo';
-import { getEffectiveOwnerLogo, getEffectiveOwnerZoom } from '../services/ownerLogosService';
+import { getEffectiveOwnerLogo } from '../services/ownerLogosService';
 import { getClosestPointOnRoute } from '../utils/geo';
 import { renderPrintableProjectMap } from '../utils/printProjectMap';
+import { getApprovalAllocation } from '../utils/approvalAllocation';
 import { exportApprovalPdf } from '../utils/exportApprovalPdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
@@ -552,22 +553,6 @@ export function DesignApprovalModal({
       bjNo: `BJ#${String(fallbackIdx + 1).padStart(2, '0')}`,
       bjName: rawName || enc.locationName || `จุดต่อที่ ${fallbackIdx + 1}`
     };
-  };
-
-  // Default planned tray allocation for operators according to project sharing standard
-  const getDefaultPlannedTray = (owner: CoreOwner) => {
-    if (participatingOwners.length === 3) {
-      if (owner === 'ITEL') return '1-2';
-      if (owner === 'SYMC') return '3-4';
-      if (owner === 'UIH') return '5-6';
-    } else if (participatingOwners.length === 2) {
-      const idx = participatingOwners.indexOf(owner);
-      if (idx === 0) return '1-3';
-      if (idx === 1) return '4-6';
-    } else if (participatingOwners.length === 1) {
-      if (participatingOwners[0] === owner) return '1-6';
-    }
-    return '-';
   };
 
   // Sort enclosures along corridor according to natural BJ sequence
@@ -1603,36 +1588,43 @@ export function DesignApprovalModal({
         points: routePoints.length >= 2 ? routePoints : (start && end ? [start, end] : routePoints)
       };
     });
-    const printMapEnclosures = effectiveEnclosures.map((enc, index) => {
+    const printMapEnclosures = [...effectiveEnclosures]
+      .sort((a, b) => getBjSortKey(a.name || '') - getBjSortKey(b.name || ''))
+      .map((enc, index) => {
       const type = getEnclosureType(enc);
       return {
-        label: parseEnclosureName(enc, index).bjNo,
+        label: `${parseEnclosureName(enc, index).bjNo} ${parseEnclosureName(enc, index).bjName}`,
         color: getEnclosureColor(enc),
         iconUrl: type?.icon,
         position: enc.position
       };
     });
-    const projectMapHtml = renderPrintableProjectMap(printMapRoutes, printMapEnclosures);
+    // Keep the route table on the overview page. Large projects receive several
+    // full-size map pages so every Enclosure can retain a readable callout.
+    const mapGroups = printMapEnclosures.length > 12
+      ? Array.from({ length: Math.ceil(printMapEnclosures.length / 12) }, (_, index) =>
+          printMapEnclosures.slice(index * 12, (index + 1) * 12))
+      : [printMapEnclosures];
 
     // Generate dynamic cover logos HTML for ONLY participating owners
     const coverLogosHtml = participatingOwners.map(owner => {
       const logoUrl = getEffectiveOwnerLogo(owner) || (owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg');
-      const zoom = getEffectiveOwnerZoom(owner);
-      const isUih = owner === 'UIH' || (owner as string).includes('UNITED INFORMATION');
-      const baseH = isUih ? 48 : 40;
-      const h = Math.round(baseH * (isUih ? zoom / 120 : zoom / 100));
-      return `<img src="${logoUrl}" alt="${owner}" style="height: ${h}px; width: auto; object-fit: contain;" />`;
-    }).join('<span style="color: #cbd5e1; font-size: 22px; font-weight: bold;">&bull;</span>');
+      return `<span class="pdf-logo-slot"><img src="${logoUrl}" alt="${owner}" /></span>`;
+    }).join('');
 
     // Generate dynamic header logos HTML for ONLY participating owners
     const headerLogosHtml = participatingOwners.map(owner => {
       const logoUrl = getEffectiveOwnerLogo(owner) || (owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg');
-      const zoom = getEffectiveOwnerZoom(owner);
-      const isUih = owner === 'UIH' || (owner as string).includes('UNITED INFORMATION');
-      const baseH = isUih ? 26 : 22;
-      const h = Math.round(baseH * (isUih ? zoom / 120 : zoom / 100));
-      return `<img src="${logoUrl}" alt="${owner}" style="height: ${h}px; width: auto; object-fit: contain;" />`;
-    }).join('<span style="color: #cbd5e1; font-size: 13px; font-weight: bold;">&bull;</span>');
+      return `<span class="pdf-logo-slot"><img src="${logoUrl}" alt="${owner}" /></span>`;
+    }).join('');
+    const projectMapPages = mapGroups.map((group, index) => `
+      <div class="slide-page pdf-map-page">
+        <div class="slide-header">
+          <h2 class="slide-title">แผนที่เส้นทางโครงการ (Project Map)${mapGroups.length > 1 ? ` · ${index + 1}/${mapGroups.length}` : ''}</h2>
+          <div class="logos-bar">${headerLogosHtml}</div>
+        </div>
+        ${renderPrintableProjectMap(printMapRoutes, group, { focusOnEnclosures: mapGroups.length > 1 })}
+      </div>`).join('');
     
     return `<!DOCTYPE html>
 <html lang="th">
@@ -1680,10 +1672,23 @@ export function DesignApprovalModal({
     .logos-bar {
       display: flex;
       align-items: center;
-      gap: 16px;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
-    .logos-bar img {
-      height: 24px;
+    .logos-bar .pdf-logo-slot {
+      width: 85px;
+      height: 28px;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-logo-slot img {
+      display: block;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
     }
     .cover-logos {
@@ -1698,9 +1703,16 @@ export function DesignApprovalModal({
       margin-bottom: 30px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
-    .cover-logos img {
-      height: 48px;
-      object-fit: contain;
+    .cover-logos .pdf-logo-slot {
+      width: 170px;
+      height: 58px;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-map-page .pdf-map {
+      margin-top: 0 !important;
     }
     table {
       width: 100%;
@@ -1801,7 +1813,7 @@ export function DesignApprovalModal({
 <body>
   <!-- Slide 1: Cover -->
   <div class="slide-page" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
-    <div style="display: flex; align-items: center; justify-content: center; gap: 32px; background: white; padding: 18px 40px; border-radius: 18px; border: 1px solid #cbd5e1; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.05); flex-wrap: wrap;">
+    <div class="cover-logos" style="width: min(780px, 100%); box-sizing: border-box; flex-wrap: nowrap;">
       ${coverLogosHtml}
     </div>
     <h1 style="font-size: 42px; font-weight: 900; color: #0369a1; margin: 0 0 16px 0; text-transform: uppercase;">FIBER INFRA SHARING</h1>
@@ -1862,8 +1874,8 @@ export function DesignApprovalModal({
         `).join('')}
       </tbody>
     </table>
-    ${projectMapHtml}
   </div>
+  ${projectMapPages}
 
   <!-- Slide 4: Enclosure Details Table -->
   <div class="slide-page">
@@ -2004,9 +2016,7 @@ export function DesignApprovalModal({
                         .map(([tId]) => Number(tId))
                         .sort((a, b) => a - b);
                       let trayStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
-                      if (!trayStr) {
-                        trayStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
-                      }
+                      if (!trayStr) trayStr = 'ยังไม่ได้กำหนด';
                       return `<td style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'}; font-weight: 700;">${trayStr}</td>`;
                     }).join('')}
                     <td style="color: #64748b; font-weight: 700;">
@@ -2019,7 +2029,7 @@ export function DesignApprovalModal({
                           }
                           return spare;
                         }
-                        return Math.max(1, totalTrays - (participatingOwners.length * 2));
+                        return 'ยังไม่ได้กำหนด';
                       })()}
                     </td>
                     <td>${enc.locationType || 'PB'}</td>
@@ -2044,7 +2054,7 @@ export function DesignApprovalModal({
     ${fiberRouteSchedule.map((routeSched, rIdx) => {
       const routeEncs = getRouteEnclosures(routeSched.id);
       const totalC = routeSched.capacity || 144;
-      let coreCursor = 1;
+      const actualRoute = effectiveRoutes.find(route => route.id === routeSched.id);
       const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
       const fiberImgUrl = routeFt?.imageUrl || '';
       const fiberName = routeFt?.name || `OFC ${totalC} Core`;
@@ -2053,35 +2063,16 @@ export function DesignApprovalModal({
       const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
 
       const ownerRows = participatingOwners.map((owner) => {
-        const ownerCoresCount = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
-        let coreStr = '-';
-        let tubeStr = '-';
-        let trayStr = '-';
-
-        if (ownerCoresCount > 0) {
-          const cStart = coreCursor;
-          const cEnd = coreCursor + ownerCoresCount - 1;
-          coreStr = `${cStart}-${cEnd} (${ownerCoresCount}C)`;
-          
-          const tStart = Math.floor((cStart - 1) / 12) + 1;
-          const tEnd = Math.floor((cEnd - 1) / 12) + 1;
-          tubeStr = tStart === tEnd ? `Tube ${tStart}` : `Tube ${tStart}-${tEnd}`;
-
-          const trStart = Math.floor((cStart - 1) / 24) + 1;
-          const trEnd = Math.floor((cEnd - 1) / 24) + 1;
-          trayStr = trStart === trEnd ? `Tray ${trStart}` : `Tray ${trStart}-${trEnd}`;
-
-          coreCursor = cEnd + 1;
-        }
+        const allocation = getApprovalAllocation(actualRoute, routeEncs, owner);
 
         const colorHex = owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706';
 
         return {
           owner,
           colorHex,
-          coreStr,
-          tubeStr,
-          trayStr
+          coreStr: allocation.coreText,
+          tubeStr: allocation.tubeText,
+          trayStr: allocation.trayText
         };
       });
 
@@ -2137,17 +2128,17 @@ export function DesignApprovalModal({
                   ${idx === 0 ? `<td rowspan="${ownerRows.length + 1}" style="font-weight: 800;">${routeSched.tier}</td>` : ''}
                   <td style="font-weight: 800; color: ${row.colorHex};">${row.owner}</td>
                   <td><strong>${routeBjDisplay}</strong> <span style="font-size: 10px; color: #64748b;">(${routeEncs.length} หัว)</span></td>
-                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.trayStr}</td>
-                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.tubeStr}</td>
-                  <td style="color: ${row.colorHex}; font-weight: 700;">${row.coreStr}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700; text-align: left; overflow-wrap: anywhere;">${escapePrintText(row.trayStr)}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700;">${escapePrintText(row.tubeStr)}</td>
+                  <td style="color: ${row.colorHex}; font-weight: 700;">${escapePrintText(row.coreStr)}</td>
                 </tr>
               `).join('')}
               <tr>
                 <td style="font-weight: 700; color: #64748b;">Spare</td>
                 <td>${routeBjDisplay}</td>
-                <td>Tray ${ownerRows.length + 1}</td>
-                <td>-</td>
-                <td>-</td>
+                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').trayText)}</td>
+                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').tubeText)}</td>
+                <td>${escapePrintText(getApprovalAllocation(actualRoute, routeEncs, 'None').coreText)}</td>
               </tr>
             </tbody>
           </table>
@@ -3107,9 +3098,7 @@ export function DesignApprovalModal({
                                                 .map(([tId]) => Number(tId))
                                                 .sort((a, b) => a - b);
                                               let trayRangeStr = assignedTrays.length > 0 ? formatTrayRanges(assignedTrays) : '';
-                                              if (!trayRangeStr) {
-                                                trayRangeStr = hasExplicitAssignments ? '-' : getDefaultPlannedTray(owner);
-                                              }
+                                              if (!trayRangeStr) trayRangeStr = 'ยังไม่ได้กำหนด';
 
                                               return (
                                                 <td key={`${enc.id || idx}-${owner}`} className="p-2 border-r border-slate-800 font-black" style={{ color: owner === 'SYMC' ? '#f472b6' : owner === 'UIH' ? '#38bdf8' : '#fbbf24' }}>
@@ -3127,7 +3116,7 @@ export function DesignApprovalModal({
                                                   }
                                                   return spare;
                                                 }
-                                                return Math.max(1, totalTrays - (participatingOwners.length * 2));
+                                                return 'ยังไม่ได้กำหนด';
                                               })()}
                                             </td>
                                             <td className="p-2 font-bold text-slate-300">{enc.locationType || 'PB'}</td>
@@ -3150,39 +3139,20 @@ export function DesignApprovalModal({
                       {fiberRouteSchedule.map((routeSched, rIdx) => {
                         const routeEncs = getRouteEnclosures(routeSched.id);
                         const totalC = routeSched.capacity || 144;
-                        let coreCursor = 1;
+                        const actualRoute = effectiveRoutes.find(route => route.id === routeSched.id);
 
                         const ownerRows = participatingOwners.map((owner) => {
                           const ownerCoresCount = owner === 'SYMC' ? routeSched.symcCores : owner === 'UIH' ? routeSched.uihCores : (routeSched.itelCores || 0);
-                          
-                          let coreStr = '-';
-                          let tubeStr = '-';
-                          let trayStr = '-';
-
-                          if (ownerCoresCount > 0) {
-                            const cStart = coreCursor;
-                            const cEnd = coreCursor + ownerCoresCount - 1;
-                            coreStr = `${cStart}-${cEnd} (${ownerCoresCount}C)`;
-                            
-                            const tStart = Math.floor((cStart - 1) / 12) + 1;
-                            const tEnd = Math.floor((cEnd - 1) / 12) + 1;
-                            tubeStr = tStart === tEnd ? `Tube ${tStart}` : `Tube ${tStart}-${tEnd} (${tEnd - tStart + 1} Tube)`;
-
-                            const trStart = Math.floor((cStart - 1) / 24) + 1;
-                            const trEnd = Math.floor((cEnd - 1) / 24) + 1;
-                            trayStr = trStart === trEnd ? `Tray ${trStart}` : `Tray ${trStart}-${trEnd}`;
-
-                            coreCursor = cEnd + 1;
-                          }
+                          const allocation = getApprovalAllocation(actualRoute, routeEncs, owner);
 
                           const colorStyle = owner === 'SYMC' ? 'text-pink-400 bg-pink-500/10' : owner === 'UIH' ? 'text-sky-400 bg-sky-500/10' : 'text-amber-400 bg-amber-500/10';
 
                           return {
                             owner,
                             coresCount: ownerCoresCount,
-                            coreStr,
-                            tubeStr,
-                            trayStr,
+                            coreStr: allocation.coreText,
+                            tubeStr: allocation.tubeText,
+                            trayStr: allocation.trayText,
                             colorStyle
                           };
                         });
@@ -3312,9 +3282,9 @@ export function DesignApprovalModal({
                                         <td className="p-2 border-r border-slate-800 font-bold text-slate-400">
                                           {routeBjDisplay}
                                         </td>
-                                        <td className="p-2 border-r border-slate-800 text-slate-400">Tray {ownerRows.length + 1}</td>
-                                        <td className="p-2 border-r border-slate-800 text-slate-500">-</td>
-                                        <td className="p-2 text-slate-500">-</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-400">{getApprovalAllocation(actualRoute, routeEncs, 'None').trayText}</td>
+                                        <td className="p-2 border-r border-slate-800 text-slate-500">{getApprovalAllocation(actualRoute, routeEncs, 'None').tubeText}</td>
+                                        <td className="p-2 text-slate-500">{getApprovalAllocation(actualRoute, routeEncs, 'None').coreText}</td>
                                       </tr>
                                     </tbody>
                                   </table>
