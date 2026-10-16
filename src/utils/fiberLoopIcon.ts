@@ -19,7 +19,7 @@ export const createFiberLoopSvg = (routeColor?: string) => {
 
 export const fiberLoopSvg = createFiberLoopSvg();
 
-export const createFiberLoopIcon = (routeColor?: string, size = 26) => L.divIcon({
+export const createFiberLoopIcon = (routeColor?: string, size = 18) => L.divIcon({
   className: 'fiber-loop-map-icon',
   html: createFiberLoopSvg(routeColor),
   iconSize: [size, size],
