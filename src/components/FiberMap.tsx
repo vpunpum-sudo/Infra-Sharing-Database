@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
 import { useMapDrawing } from '../hooks/useMapDrawing';
+import { createFiberLoopIcon, fiberLoopSvg } from '../utils/fiberLoopIcon';
 import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
@@ -686,7 +687,7 @@ function MapLegend({
         >
           <div className="flex items-center gap-1.5">
             <Info className="w-3 h-3 text-brand-600" />
-            <span className="text-[8px] font-black text-slate-700 uppercase tracking-wider">Legend</span>
+            <span className="text-[10px] font-black text-slate-200 uppercase tracking-wider">Legend</span>
           </div>
           {isOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
         </button>
@@ -745,8 +746,8 @@ function MapLegend({
                 <div className="space-y-1">
                   {loops.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-orange-500" />
-                      <span className="text-[8px] font-medium text-slate-300">Fiber Loop</span>
+                      <span className="w-4 h-4 shrink-0" dangerouslySetInnerHTML={{ __html: fiberLoopSvg }} />
+                      <span className="text-[10px] font-medium text-slate-200">Fiber Loop</span>
                     </div>
                   )}
                   {draftRoute.length > 0 && (
@@ -1661,8 +1662,8 @@ export default function FiberMap({
               if (iconUrl) {
                 const customIcon = new L.Icon({
                   iconUrl: iconUrl,
-                  iconSize: isEditingThis ? [30, 30] : [26, 26],
-                  iconAnchor: isEditingThis ? [15, 15] : [13, 13],
+                  iconSize: isEditingThis ? [24, 24] : [20, 20],
+                  iconAnchor: isEditingThis ? [12, 12] : [10, 10],
                   className: `enclosure-map-icon ${selectedEnclosureId === enclosure.id || isEditingThis ? 'enclosure-map-icon-selected' : ''}`
                 });
 
@@ -1692,7 +1693,7 @@ export default function FiberMap({
                 <CircleMarker 
                   key={enclosure.id} 
                   center={[enclosure.position.lat, enclosure.position.lng]} 
-                  radius={isEditingThis ? 11 : 9}
+                  radius={isEditingThis ? 9 : 7}
                   bubblingMouseEvents={false}
                   pathOptions={{ 
                     fillColor: color,
@@ -1745,23 +1746,17 @@ export default function FiberMap({
         <LayersControl.Overlay checked name="Loops">
           <LayerGroup>
             {loops.map(loop => (
-              <CircleMarker
+              <Marker
                 key={loop.id}
-                center={[loop.position.lat, loop.position.lng]}
-                radius={7}
+                position={[loop.position.lat, loop.position.lng]}
+                icon={createFiberLoopIcon()}
                 bubblingMouseEvents={false}
-                pathOptions={{
-                  color: '#f97316',
-                  fillColor: '#f97316',
-                  fillOpacity: 1,
-                  weight: 1.2
-                }}
               >
                 <Popup className="fiber-detail-popup light-theme">
                   <div className="text-slate-900 text-xs font-bold">{loop.name}</div>
                   <div className="text-slate-600 text-[10px]">{loop.length} m</div>
                 </Popup>
-              </CircleMarker>
+              </Marker>
             ))}
           </LayerGroup>
         </LayersControl.Overlay>

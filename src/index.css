@@ -139,6 +139,19 @@
   filter: brightness(1.18);
 }
 
+.fiber-loop-map-icon {
+  background: transparent;
+  border: 0;
+}
+
+.approval-enclosure-map-icon {
+  box-sizing: border-box;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  object-fit: contain;
+}
+
 .leaflet-control-zoom {
   border: none !important;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
@@ -783,6 +796,17 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 
 .light-theme #root :is(.approval-dark-feature, .approval-dark-route-header) .approval-dark-badge-amber {
   color: #fde68a !important;
+}
+
+/* Approval totals and notices use tinted light surfaces in light mode. */
+.light-theme #root .approval-summary-total-row {
+  background: #dbeafe !important;
+  color: #0c4a6e !important;
+}
+
+.light-theme #root .approval-warning {
+  background: #fef3c7 !important;
+  color: #78350f !important;
 }
 
 /* The map remains visible behind the dialog, while its text and hint stay solid. */
