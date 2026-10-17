@@ -6,7 +6,7 @@ import { db, functions, logout, handleFirestoreError, OperationType } from '../f
 import { Project, User as AppUser, CoreOwner, ProjectStatus } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
-import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
@@ -39,6 +39,20 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const navigate = useNavigate();
 
   const userPermissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const displayName = appUser?.displayName || user.email?.split('@')[0];
+  const navItems = [
+    ...(userPermissions.viewUsers ? [{ label: 'ผู้ใช้งาน', title: 'จัดการผู้ใช้งาน', path: '/user-management', icon: Users, color: 'text-brand-400' }] : []),
+    ...(appUser?.role === 'Admin' ? [
+      { label: 'ประวัติการใช้งาน', title: 'ประวัติการใช้งานระบบ', path: '/logs', icon: Activity, color: 'text-amber-400' },
+      { label: 'สิทธิ์', title: 'กำหนดสิทธิ์ตามบทบาท', path: '/permission-management', icon: Shield, color: 'text-emerald-400' }
+    ] : []),
+    ...(userPermissions.viewSettings ? [
+      { label: 'โลโก้ Owner', title: 'จัดการรูปภาพโลโก้ของแต่ละ Owner', path: '/settings', icon: ImageIcon, color: 'text-pink-400' },
+      { label: 'ตั้งค่า', title: 'ตั้งค่าระบบ', path: '/settings', icon: SlidersHorizontal, color: 'text-sky-400' }
+    ] : []),
+    { label: 'คู่มือ (PDF)', title: 'คู่มือการใช้งานระบบ (นำเสนอและ PDF)', path: '/manual', icon: FileText, color: 'text-brand-400', primary: true }
+  ];
   const missingCreatedDateIds = projects.filter(project => !project.createdAt).map(project => project.id).sort().join('|');
 
   useEffect(() => {
@@ -137,7 +151,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       }
       setOldProjects([]);
       await logActivity('migrate_projects', `Migrated ${oldProjects.length} old projects to new structure`);
-      setSuccessMessage('Projects migrated successfully!');
+      setSuccessMessage('ย้ายข้อมูลโครงการแล้ว');
     } catch (error) {
       console.error("Error migrating projects:", error);
       setErrorMessage('Failed to migrate projects. See console for details.');
@@ -158,7 +172,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           owner: projectOwnersInput[0] || 'ITEL'
         }, { merge: true });
         await logActivity('edit_project', `Edited project ${projectNameInput.trim()}`, { projectId: editingProjectId, owners: projectOwnersInput });
-        setSuccessMessage('Project updated successfully!');
+        setSuccessMessage('บันทึกโครงการแล้ว');
       } else {
         const newProject: Project = { 
           id: uuidv4(), 
@@ -171,7 +185,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
         const path = `projects/${newProject.id}`;
         await setDoc(doc(db, path), newProject);
         await logActivity('create_project', `Created project ${newProject.name}`, { projectId: newProject.id, owners: projectOwnersInput });
-        setSuccessMessage('Project created successfully!');
+        setSuccessMessage('สร้างโครงการแล้ว');
       }
       
       setProjectNameInput('');
@@ -201,7 +215,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
         await logActivity('delete_project', `Deleted project ${projectToDelete.name}`, { projectId: deleteProjectId });
       }
       setDeleteProjectId(null);
-      setSuccessMessage('Project deleted successfully!');
+      setSuccessMessage('ลบโครงการแล้ว');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error: any) {
       const path = `projects/${deleteProjectId}`;
@@ -261,94 +275,45 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       <div className="fixed top-[40%] left-[30%] w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[160px] pointer-events-none"></div>
 
       {/* Modern Top Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-2xl border-b border-slate-800/80 px-6 py-4 flex justify-between items-center transition-all">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
+      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-3 transition-all">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
             <Layers className="text-white w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
-              <span className="px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
+              <h1 className="truncate text-base sm:text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
+              <span className="hidden sm:inline px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">Telecom Optical Infrastructure Manager</p>
+            <p className="hidden sm:block text-xs text-slate-400 font-medium">ระบบจัดการโครงข่ายใยแก้วนำแสง</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {userPermissions.viewUsers && (
-            <button 
-              onClick={() => navigate('/user-management')}
-              className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-              title="User Management"
-            >
-              <Users className="w-3.5 h-3.5 text-brand-400" />
-              <span className="hidden sm:inline">Users</span>
-            </button>
-          )}
-
-          {appUser?.role === 'Admin' && (
-            <>
-              <button 
-                onClick={() => navigate('/logs')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="System Logs"
-              >
-                <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Logs</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Desktop: one button per destination */}
+          <nav aria-label="เมนูหลัก" className="hidden lg:flex items-center gap-1.5">
+            {navItems.map(item => (
+              <button key={item.label} type="button" onClick={() => navigate(item.path)} title={item.title} aria-label={item.title}
+                className={item.primary
+                  ? 'px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm'
+                  : 'px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700'}>
+                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                {item.label}
               </button>
-              <button 
-                onClick={() => navigate('/permission-management')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="Permissions"
-              >
-                <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Permissions</span>
-              </button>
-            </>
-          )}
-
-          {userPermissions.viewSettings && (
-            <>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="จัดการรูปภาพ Logo ของแต่ละ Owner"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
-                <span className="hidden sm:inline">Owner Logos</span>
-              </button>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="System Settings"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
-                <span className="hidden sm:inline">Settings</span>
-              </button>
-            </>
-          )}
-
-          <button 
-            onClick={() => navigate('/manual')}
-            className="px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
-            title="System Manual (Presentation & PDF)"
-          >
-            <FileText className="w-3.5 h-3.5 text-brand-400" />
-            <span className="hidden sm:inline">Manual (PDF)</span>
-          </button>
+            ))}
+          </nav>
 
           <ThemeToggle />
 
-          <div className="h-5 w-px bg-slate-800 mx-1 hidden md:block"></div>
+          <div className="h-5 w-px bg-slate-800 mx-1 hidden lg:block"></div>
 
-          <div 
-            className="hidden md:flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 pl-2.5 pr-2 py-1 rounded-xl cursor-pointer transition-all group"
+          <button type="button"
+            className="hidden lg:flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 pl-2.5 pr-2 py-1 rounded-xl transition-all group"
             onClick={() => navigate('/profile')}
-            title="Profile Settings"
+            title="ตั้งค่าโปรไฟล์" aria-label="ตั้งค่าโปรไฟล์"
           >
             <div className="flex flex-col items-end">
-              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{appUser?.displayName || user.email?.split('@')[0]}</span>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{displayName}</span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-xs text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
@@ -356,20 +321,52 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             </div>
             <div className="w-7 h-7 bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all overflow-hidden border border-slate-600">
               {appUser?.photoURL ? (
-                <img src={appUser.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={appUser.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <UserIcon size={14} />
               )}
             </div>
-          </div>
+          </button>
 
-          <button 
-            onClick={logout} 
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20" 
-            title="Logout"
+          <button type="button"
+            onClick={logout}
+            className="hidden lg:block p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20"
+            title="ออกจากระบบ" aria-label="ออกจากระบบ"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
+
+          {/* Phones and tablets: everything moves into one menu */}
+          <div className="relative lg:hidden">
+            <button type="button" onClick={() => setMenuOpen(open => !open)} aria-expanded={menuOpen} aria-controls="dashboard-menu"
+              aria-label="เปิดเมนู" className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700/60">
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            {menuOpen && <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+              <div id="dashboard-menu" role="menu"
+                className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate('/profile'); }}
+                  className="flex w-full items-center gap-3 border-b border-slate-800 px-4 py-3 text-left hover:bg-slate-800">
+                  <UserIcon className="w-4 h-4 text-slate-300" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-slate-100">{displayName}</span>
+                    <span className="block text-xs text-slate-400">{appUser?.role || 'Viewer'}</span>
+                  </span>
+                </button>
+                {navItems.map(item => (
+                  <button key={item.label} type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate(item.path); }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800">
+                    <item.icon className={`w-4 h-4 ${item.color}`} /> {item.label}
+                  </button>
+                ))}
+                <button type="button" role="menuitem" onClick={logout}
+                  className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm font-semibold text-rose-300 hover:bg-rose-500/10">
+                  <LogOut className="w-4 h-4" /> ออกจากระบบ
+                </button>
+              </div>
+            </>}
+          </div>
         </div>
       </header>
 
@@ -380,9 +377,9 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <div className="w-16 h-16 bg-rose-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-rose-500/20">
               <Shield className="w-8 h-8 text-rose-400" />
             </div>
-            <h3 className="text-2xl font-black text-white mb-2 tracking-tight font-display">Access Restricted</h3>
-            <p className="text-slate-400 mb-8 text-sm leading-relaxed">You do not have a role assigned. Please contact an administrator to grant you access to the fiber network workspace.</p>
-            <button onClick={logout} className="btn-secondary text-xs">Sign In With Another Account</button>
+            <h3 className="text-2xl font-black text-white mb-2 tracking-tight font-display">ยังไม่มีสิทธิ์เข้าใช้งาน</h3>
+            <p className="text-slate-400 mb-8 text-sm leading-relaxed">บัญชีนี้ยังไม่ได้รับบทบาท กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์เข้าใช้งาน</p>
+            <button onClick={logout} className="btn-secondary text-xs">เข้าสู่ระบบด้วยบัญชีอื่น</button>
           </div>
         ) : (
           <>
@@ -394,8 +391,8 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     <Sparkles size={12} /> Workspaces Overview
                   </span>
                 </div>
-                <h2 className="text-2xl font-bold text-white tracking-tight font-display">Network Projects</h2>
-                <p className="text-slate-300 mt-1 text-sm font-medium">Select an optical fiber project to inspect routes, splice enclosures, and core assignments.</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight font-display">โครงการโครงข่าย</h2>
+                <p className="text-slate-300 mt-1 text-sm font-medium">เลือกโครงการเพื่อดูเส้นทาง จุด Splice และการจัดสรร Core</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -406,7 +403,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 text-xs disabled:opacity-50"
                   >
                     <Database className="w-4 h-4" />
-                    {isMigrating ? 'Migrating...' : `Migrate ${oldProjects.length} Projects`}
+                    {isMigrating ? 'กำลังย้ายข้อมูล...' : `ย้ายข้อมูล ${oldProjects.length} โครงการ`}
                   </button>
                 )}
                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].createProjects) && (
@@ -416,7 +413,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="btn-primary py-2.5 px-5 text-xs font-bold shadow-lg shadow-brand-500/20"
                   >
                     <Plus className="w-4 h-4" />
-                    New Project
+                    สร้างโครงการ
                   </button>
                 )}
               </div>
@@ -428,7 +425,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input 
                   type="text"
-                  placeholder="Search project by name..."
+                  placeholder="ค้นหาชื่อโครงการ..." aria-label="ค้นหาชื่อโครงการ"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-slate-950/80 border border-slate-700/80 pl-10 pr-4 py-2.5 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all font-medium"
@@ -436,10 +433,12 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
               </div>
 
               <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                <span className="text-xs font-bold text-slate-300 mr-1.5 whitespace-nowrap">Filter Owner:</span>
+                <span className="text-xs font-bold text-slate-300 mr-1.5 whitespace-nowrap">กรองตาม Owner:</span>
                 {(['All', 'ITEL', 'SYMC', 'UIH'] as const).map((owner) => (
                   <button
                     key={owner}
+                    type="button"
+                    aria-pressed={selectedOwnerFilter === owner}
                     onClick={() => setSelectedOwnerFilter(owner)}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                       selectedOwnerFilter === owner
@@ -447,7 +446,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                         : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
                     }`}
                   >
-                    {owner}
+                    {owner === 'All' ? 'ทั้งหมด' : owner}
                   </button>
                 ))}
               </div>
@@ -460,12 +459,12 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                   <Folder className="w-8 h-8 text-slate-400" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-1 font-display">
-                  {searchQuery ? 'No matching projects found' : 'No projects created yet'}
+                  {searchQuery ? 'ไม่พบโครงการที่ค้นหา' : 'ยังไม่มีโครงการ'}
                 </h3>
                 <p className="text-slate-300 mb-6 text-xs max-w-sm mx-auto">
                   {searchQuery 
-                    ? 'Try adjusting your search keywords or owner filter.' 
-                    : 'Create your first project workspace to map optical routes, deploy splice enclosures, and allocate fiber cores.'}
+                    ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรอง Owner' 
+                    : 'สร้างโครงการแรกเพื่อวาดเส้นทาง วางจุด Splice และจัดสรร Core'}
                 </p>
                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].createProjects) && !searchQuery && (
                   <button 
@@ -473,7 +472,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="btn-primary text-xs"
                   >
                     <Plus className="w-4 h-4" />
-                    Create First Project
+                    สร้างโครงการแรก
                   </button>
                 )}
               </div>
@@ -508,7 +507,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                               </h3>
                               {project.uid === user.uid && (
                                 <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
-                                  Created by you
+                                  คุณเป็นผู้สร้าง
                                 </span>
                               )}
                             </div>
@@ -519,7 +518,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                               <button 
                                 onClick={(e) => openEditModal(project, e)}
                                 className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
-                                title="Edit Project"
+                                title="แก้ไขโครงการ" aria-label="แก้ไขโครงการ"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
@@ -528,7 +527,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                               <button 
                                 onClick={(e) => handleDeleteProject(project.id, e)}
                                 className="p-2 text-slate-300 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                                title="Delete Project"
+                                title="ลบโครงการ" aria-label="ลบโครงการ"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -615,7 +614,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                         {/* Owner badges */}
                         <div className="flex flex-wrap items-center gap-2 lg:flex-1 min-w-0">
                           <span className="text-xs font-semibold text-slate-300">
-                            Authorized Operators ({owners.length}):
+                            Operator ที่มีสิทธิ์ ({owners.length}):
                           </span>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {owners.map(o => (
@@ -639,7 +638,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                       <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse"></span>
-                          <span className="text-xs font-semibold text-slate-300">Active Workspace</span>
+                          <span className="text-xs font-semibold text-slate-300">พร้อมใช้งาน</span>
                         </div>
                         <div className="flex items-center gap-3">
                           {canAccessFiles && <button type="button" onClick={event => { event.stopPropagation(); setFilesModalProject(project); }}
@@ -647,7 +646,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                             <Folder size={14} /> ไฟล์โครงการ
                           </button>}
                           <span className="text-xs font-bold text-brand-400 group-hover:text-brand-300 flex items-center gap-1">
-                            Open Map <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                            เปิดแผนที่ <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                           </span>
                         </div>
                       </div>
@@ -694,22 +693,22 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     <Folder className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white font-display">{editingProjectId ? 'Edit Project Details' : 'Create New Project'}</h2>
-                    <p className="text-xs text-slate-400">Configure workspace name and authorized network operators</p>
+                    <h2 className="text-lg font-bold text-white font-display">{editingProjectId ? 'แก้ไขโครงการ' : 'สร้างโครงการใหม่'}</h2>
+                    <p className="text-xs text-slate-400">ตั้งชื่อโครงการและเลือก Operator ที่มีสิทธิ์</p>
                   </div>
                 </div>
-                <button onClick={() => setProjectModalOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
+                <button type="button" aria-label="ปิด" onClick={() => setProjectModalOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
                   <X size={18} />
                 </button>
               </div>
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Project Name</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">ชื่อโครงการ</label>
                   <input
                     type="text"
                     autoFocus
-                    placeholder="e.g. Bangkok Core Ring-1 Expansion"
+                    placeholder="เช่น ถนนพระราม 4 ช่วงที่ 1"
                     className="w-full bg-slate-950/80 border border-slate-700 p-3 rounded-xl text-white text-sm focus:border-brand-500 focus:outline-none transition-colors"
                     value={projectNameInput}
                     onChange={e => setProjectNameInput(e.target.value)}
@@ -778,13 +777,13 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
               </div>
 
               <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-800">
-                <button onClick={() => setProjectModalOpen(false)} className="btn-secondary text-xs">Cancel</button>
+                <button onClick={() => setProjectModalOpen(false)} className="btn-secondary text-xs">ยกเลิก</button>
                 <button 
                   onClick={handleSaveProject} 
                   disabled={quotaExceeded || !projectNameInput.trim() || projectOwnersInput.length === 0}
                   className="btn-primary text-xs"
                 >
-                  {editingProjectId ? 'Save Changes' : 'Create Project'}
+                  {editingProjectId ? 'บันทึกการแก้ไข' : 'สร้างโครงการ'}
                 </button>
               </div>
             </div>
@@ -803,18 +802,18 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <div className="w-14 h-14 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
               <Trash2 className="w-7 h-7" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2 font-display">Delete Project?</h2>
+            <h2 className="text-xl font-bold text-white mb-2 font-display">ลบโครงการ?</h2>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              Are you sure you want to delete this project? All associated routes, enclosures, and splice connections will be permanently removed.
+              เส้นทาง จุด Enclosure และการเชื่อมต่อ Splice ทั้งหมดของโครงการนี้จะถูกลบถาวร และกู้คืนไม่ได้
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteProjectId(null)} className="btn-secondary flex-1 text-xs">Cancel</button>
+              <button onClick={() => setDeleteProjectId(null)} className="btn-secondary flex-1 text-xs">ยกเลิก</button>
               <button 
                 onClick={confirmDeleteProject} 
                 disabled={quotaExceeded}
                 className="flex-1 px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-500 transition-all text-xs shadow-lg shadow-rose-600/20"
               >
-                Confirm Delete
+                ลบโครงการ
               </button>
             </div>
           </motion.div>

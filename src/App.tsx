@@ -1507,7 +1507,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <button 
                   onClick={() => navigate('/profile')} 
                   className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all overflow-hidden" 
-                  title="Profile Settings"
+                  title="Profile Settings" aria-label="Profile Settings"
                 >
                   {appUser?.photoURL ? (
                     <img src={appUser.photoURL} alt="Profile" className="w-5 h-5 rounded object-cover border border-slate-700" referrerPolicy="no-referrer" />
@@ -1515,13 +1515,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     <UserIcon size={16} />
                   )}
                 </button>
-                <button onClick={() => navigate('/settings')} className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all" title="Settings">
+                <button onClick={() => navigate('/settings')} className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all" title="Settings" aria-label="Settings">
                   <SettingsIcon size={16} />
                 </button>
                 <button 
                   onClick={() => navigate('/manual')} 
                   className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all" 
-                  title="คู่มือระบบ (PDF)"
+                  title="คู่มือระบบ (PDF)" aria-label="คู่มือระบบ (PDF)"
                 >
                   <FileText size={16} />
                 </button>
@@ -1529,7 +1529,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
               <div className="flex items-center gap-1">
                 <ThemeToggle className="!p-1.5" />
-                <button onClick={logout} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all" title="Logout">
+                <button onClick={logout} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all" title="Logout" aria-label="Logout">
                   <LogOut size={16} />
                 </button>
               </div>
@@ -1582,7 +1582,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 font-black shadow-md shadow-amber-500/20'
                       : 'bg-brand-600 hover:bg-brand-500 text-white border-brand-500 shadow-sm'
                   }`}
-                  title="Design Approval & Management Sign-off"
+                  title="Design Approval & Management Sign-off" aria-label="Design Approval & Management Sign-off"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>
@@ -1745,18 +1745,18 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                   <>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); openSplitRoute(route); }}
-                                      title="Split route at Enclosure"
+                                      title="Split route at Enclosure" aria-label="Split route at Enclosure"
                                       className="p-1.5 hover:bg-sky-500/20 rounded-lg text-sky-400 transition-colors"
                                     >
                                       <Scissors className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
+                                    <button type="button" aria-label="แก้ไข" title="แก้ไข"
                                       onClick={(e) => { e.stopPropagation(); startEditRoute(route); }}
                                       className="p-1.5 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
+                                    <button type="button" aria-label="ลบ" title="ลบ"
                                       onClick={(e) => { e.stopPropagation(); handleDeleteRoute(route.id); }}
                                       className="p-1.5 hover:bg-rose-500/20 rounded-lg text-rose-400 transition-colors"
                                     >
@@ -1825,13 +1825,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
                                   <>
-                                    <button
+                                    <button type="button" aria-label="แก้ไข" title="แก้ไข"
                                       onClick={(e) => { e.stopPropagation(); startEditEnclosure(enclosure); }}
                                       className="p-1.5 hover:bg-rose-500/20 rounded-lg text-rose-400 transition-colors"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
+                                    <button type="button" aria-label="ลบ" title="ลบ"
                                       onClick={(e) => { e.stopPropagation(); setDeleteEnclosureId(enclosure.id); }}
                                       className="p-1.5 hover:bg-rose-500/30 rounded-lg text-rose-500 transition-colors"
                                     >
@@ -1890,7 +1890,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
                                   <>
-                                    <button
+                                    <button type="button" aria-label="แก้ไข" title="แก้ไข"
                                       onClick={(e) => { 
                                         e.stopPropagation(); 
                                         setEditingLoopId(loop.id);
@@ -1906,7 +1906,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
+                                    <button type="button" aria-label="ลบ" title="ลบ"
                                       onClick={(e) => { e.stopPropagation(); setDeleteLoopId(loop.id); }}
                                       className="p-1.5 hover:bg-rose-500/20 rounded-lg text-rose-400 transition-colors"
                                     >
@@ -1931,7 +1931,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         <button 
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className={`absolute top-1/2 -translate-y-1/2 left-full z-[1001] bg-slate-900 border-y border-r border-slate-800 py-6 px-1 rounded-r-2xl shadow-2xl hover:bg-slate-800 transition-all duration-500 flex items-center justify-center group`}
-          title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"} aria-label={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
           {sidebarCollapsed ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-100 transition-colors" /> : <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-slate-100 transition-colors" />}
         </button>

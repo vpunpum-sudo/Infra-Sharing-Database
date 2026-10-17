@@ -271,7 +271,7 @@ export const OwnerLogoSettings: React.FC = () => {
           <button 
             onClick={handleAutoEqualize}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-bold transition-all border border-emerald-500/30 shadow-sm"
-            title="ปรับขนาดและซูมของทุก Logo ให้สมดุลเท่ากันทุกตำแหน่งทันที"
+            title="ปรับขนาดและซูมของทุก Logo ให้สมดุลเท่ากันทุกตำแหน่งทันที" aria-label="ปรับขนาดและซูมของทุก Logo ให้สมดุลเท่ากันทุกตำแหน่งทันที"
           >
             <Scale size={15} />
             <span>ปรับขนาดให้เท่ากันอัตโนมัติ</span>
@@ -360,7 +360,7 @@ export const OwnerLogoSettings: React.FC = () => {
             <button
               onClick={() => handleResetZoom(selectedOwner)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors"
-              title="รีเซ็ตการซูมของแบรนด์นี้กลับเป็นค่าเริ่มต้น"
+              title="รีเซ็ตการซูมของแบรนด์นี้กลับเป็นค่าเริ่มต้น" aria-label="รีเซ็ตการซูมของแบรนด์นี้กลับเป็นค่าเริ่มต้น"
             >
               <RotateCcw size={13} />
               <span>รีเซ็ตขนาดซูม ({selectedOwner === 'UIH' ? '120%' : '100%'})</span>
@@ -370,7 +370,7 @@ export const OwnerLogoSettings: React.FC = () => {
               <button
                 onClick={() => handleResetToDefault(selectedOwner)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
-                title="ลบรูปภาพที่อัปโหลดและกลับไปใช้ Logo ค่าเริ่มต้น"
+                title="ลบรูปภาพที่อัปโหลดและกลับไปใช้ Logo ค่าเริ่มต้น" aria-label="ลบรูปภาพที่อัปโหลดและกลับไปใช้ Logo ค่าเริ่มต้น"
               >
                 <RotateCcw size={13} />
                 <span>คืนค่ารูปไฟล์เดิม</span>
@@ -428,42 +428,42 @@ export const OwnerLogoSettings: React.FC = () => {
               <button
                 onClick={() => handleZoomChange(currentZoom - 25)}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                title="ลดขนาด 25%"
+                title="ลดขนาด 25%" aria-label="ลดขนาด 25%"
               >
                 -25%
               </button>
               <button
                 onClick={() => handleZoomChange(currentZoom - 10)}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                title="ลดขนาด 10%"
+                title="ลดขนาด 10%" aria-label="ลดขนาด 10%"
               >
                 -10%
               </button>
               <button
                 onClick={() => handleZoomChange(currentZoom - 5)}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-                title="ลดขนาด 5%"
+                title="ลดขนาด 5%" aria-label="ลดขนาด 5%"
               >
                 <ZoomOut size={15} />
               </button>
               <button
                 onClick={() => handleZoomChange(currentZoom + 5)}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-                title="เพิ่มขนาด 5%"
+                title="เพิ่มขนาด 5%" aria-label="เพิ่มขนาด 5%"
               >
                 <ZoomIn size={15} />
               </button>
               <button
                 onClick={() => handleZoomChange(currentZoom + 10)}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                title="เพิ่มขนาด 10%"
+                title="เพิ่มขนาด 10%" aria-label="เพิ่มขนาด 10%"
               >
                 +10%
               </button>
               <button
                 onClick={() => handleZoomChange(currentZoom + 25)}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                title="เพิ่มขนาด 25%"
+                title="เพิ่มขนาด 25%" aria-label="เพิ่มขนาด 25%"
               >
                 +25%
               </button>

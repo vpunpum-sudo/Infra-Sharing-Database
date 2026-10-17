@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useConfirm } from './ConfirmModal';
 import { 
   Project, User as AppUser, CoreOwner, DesignApproval, 
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
@@ -1181,6 +1182,7 @@ export function DesignApprovalModal({
 
   const canCorrectSignOff = () => appUser?.role === 'Admin';
 
+  const confirm = useConfirm();
   const handleRewindApproval = async () => {
     if (appUser?.role !== 'Admin' || !project.designApproval) return;
     const allowedTargets = currentStage === 'Completed' ? ['Draft', 'Planning', 'OM']
@@ -1189,7 +1191,7 @@ export function DesignApprovalModal({
       : ['Draft'];
     if (!allowedTargets.includes(rewindTarget)) return;
     const targetLabel = rewindTarget === 'Draft' ? 'ก่อนส่งขออนุมัติ' : rewindTarget;
-    if (!window.confirm(`ถอยขั้นตอนอนุมัติไป ${targetLabel} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่?`)) return;
+    if (!(await confirm({ title: 'ถอยขั้นตอนอนุมัติ?', message: `ถอยไป ${targetLabel} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่`, confirmText: 'ถอยขั้นตอน', danger: false }))) return;
 
     const pendingSignOffs = (level: 'Planning' | 'OM') =>
       Object.fromEntries(participatingOwners.map(owner => [owner, { owner, level, status: 'Pending' as const }]));
@@ -2302,14 +2304,14 @@ export function DesignApprovalModal({
               onClick={handleExportDocument}
               disabled={isExporting || !hasApprovalDesign}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-              title="ดาวน์โหลดเอกสาร PDF"
+              title="ดาวน์โหลดเอกสาร PDF" aria-label="ดาวน์โหลดเอกสาร PDF"
             >
               {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} className={exportSuccess ? 'text-emerald-400' : 'text-slate-300'} />}
               <span>{isExporting ? 'กำลังสร้าง PDF…' : exportSuccess ? 'ดาวน์โหลดแล้ว!' : 'Export / PDF'}</span>
             </button>
 
             {/* Close */}
-            <button
+            <button type="button" aria-label="ปิด"
               onClick={onClose}
               className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all border border-slate-700/60"
             >
@@ -2581,7 +2583,7 @@ export function DesignApprovalModal({
                               type="button"
                               onClick={() => setMapLabelMode('all')}
                               className={`px-2 py-1 rounded font-bold transition-all ${mapLabelMode === 'all' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
-                              title="แสดงชื่อ Enclosure และพิกัดพร้อมการจัดระเบียบไม่ให้ทับกัน"
+                              title="แสดงชื่อ Enclosure และพิกัดพร้อมการจัดระเบียบไม่ให้ทับกัน" aria-label="แสดงชื่อ Enclosure และพิกัดพร้อมการจัดระเบียบไม่ให้ทับกัน"
                             >
                               📌 แสดงทั้งหมด (จัดระเบียบ)
                             </button>
@@ -2589,7 +2591,7 @@ export function DesignApprovalModal({
                               type="button"
                               onClick={() => setMapLabelMode('code')}
                               className={`px-2 py-1 rounded font-bold transition-all ${mapLabelMode === 'code' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
-                              title="แสดงรหัสย่อสำหรับแผนที่คลีน"
+                              title="แสดงรหัสย่อสำหรับแผนที่คลีน" aria-label="แสดงรหัสย่อสำหรับแผนที่คลีน"
                             >
                               🏷️ รหัสย่อ
                             </button>
@@ -2597,7 +2599,7 @@ export function DesignApprovalModal({
                               type="button"
                               onClick={() => setMapLabelMode('hover')}
                               className={`px-2 py-1 rounded font-bold transition-all ${mapLabelMode === 'hover' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
-                              title="แสดงเมื่อเอาเมาส์ไปชี้ที่หมุด"
+                              title="แสดงเมื่อเอาเมาส์ไปชี้ที่หมุด" aria-label="แสดงเมื่อเอาเมาส์ไปชี้ที่หมุด"
                             >
                               🔍 ชี้เพื่อดู (Hover)
                             </button>
@@ -2986,7 +2988,7 @@ export function DesignApprovalModal({
                                           ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
                                           : 'bg-slate-800 text-sky-300 border-slate-700 hover:bg-slate-750 hover:border-sky-500/50'
                                       }`}
-                                      title="เลือก/แก้ไข Enclosure ที่เกาะอยู่กับเส้นนี้โดยเฉพาะ"
+                                      title="เลือก/แก้ไข Enclosure ที่เกาะอยู่กับเส้นนี้โดยเฉพาะ" aria-label="เลือก/แก้ไข Enclosure ที่เกาะอยู่กับเส้นนี้โดยเฉพาะ"
                                     >
                                       <Box size={12} />
                                       <span>{editingEnclosureRouteId === routeSched.id ? 'ปิดการเลือก' : 'เลือก Enclosure ของเส้นนี้'}</span>
@@ -3905,7 +3907,7 @@ export function DesignApprovalModal({
                   <p className="text-[10px] text-slate-400">ลายเซ็นอิเล็กทรอนิกส์พร้อมบันทึกลงระบบ</p>
                 </div>
               </div>
-              <button onClick={() => setSigningModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button type="button" aria-label="ปิด" onClick={() => setSigningModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X size={16} />
               </button>
             </div>
@@ -4035,7 +4037,7 @@ export function DesignApprovalModal({
                   <p className="text-[11px] text-slate-400">รูป Enclosure ที่ใช้งานในเส้นทางนี้</p>
                 </div>
               </div>
-              <button
+              <button aria-label="ปิด"
                 type="button"
                 onClick={() => setPreviewingEnclosureImage(null)}
                 className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
@@ -4086,7 +4088,7 @@ export function DesignApprovalModal({
                   <p className="text-[11px] text-slate-400">รูปภาพโครงสร้างสายเคเบิลใยแก้วนำแสงความละเอียดสูง (Cross-Section Diagram)</p>
                 </div>
               </div>
-              <button
+              <button aria-label="ปิด"
                 type="button"
                 onClick={() => setPreviewingFiberImage(null)}
                 className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
