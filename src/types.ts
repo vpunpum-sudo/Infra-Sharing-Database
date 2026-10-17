@@ -113,6 +113,16 @@ export type ProjectFile = {
   updatedAt: string;
   uploadedBy: string;
   storagePath: string;
+  folderId?: string | null;
+};
+
+export type ProjectFolder = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
 };
 
 export type EnclosureType = {

@@ -31,6 +31,8 @@ exports.cleanupProjectFiles = onDocumentDeleted({
     if (path) await bucket.file(path).delete({ ignoreNotFound: true });
     await fileDoc.ref.delete();
   }
+  const folders = await files.parent.collection('folders').get();
+  for (const folderDoc of folders.docs) await folderDoc.ref.delete();
 });
 
 async function claimDelivery(db, id, details) {
