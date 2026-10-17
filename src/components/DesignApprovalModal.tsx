@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useConfirm } from './ConfirmModal';
 import { 
   Project, User as AppUser, CoreOwner, DesignApproval, 
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
@@ -1181,6 +1182,7 @@ export function DesignApprovalModal({
 
   const canCorrectSignOff = () => appUser?.role === 'Admin';
 
+  const confirm = useConfirm();
   const handleRewindApproval = async () => {
     if (appUser?.role !== 'Admin' || !project.designApproval) return;
     const allowedTargets = currentStage === 'Completed' ? ['Draft', 'Planning', 'OM']
@@ -1189,7 +1191,7 @@ export function DesignApprovalModal({
       : ['Draft'];
     if (!allowedTargets.includes(rewindTarget)) return;
     const targetLabel = rewindTarget === 'Draft' ? 'ก่อนส่งขออนุมัติ' : rewindTarget;
-    if (!window.confirm(`ถอยขั้นตอนอนุมัติไป ${targetLabel} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่?`)) return;
+    if (!(await confirm({ title: 'ถอยขั้นตอนอนุมัติ?', message: `ถอยไป ${targetLabel} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่`, confirmText: 'ถอยขั้นตอน', danger: false }))) return;
 
     const pendingSignOffs = (level: 'Planning' | 'OM') =>
       Object.fromEntries(participatingOwners.map(owner => [owner, { owner, level, status: 'Pending' as const }]));

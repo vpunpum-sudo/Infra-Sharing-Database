@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
+import { useToast } from './Toast';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Route, FiberEnclosure, Point, Core, CoreConnection, EnclosureType, CoreOwner, CoreStatus, CorePriority, User as AppUser, FiberType, FiberColorConfig } from '../types';
@@ -551,6 +552,7 @@ const CoreList = memo(({
 });
 
 export default function SpliceManager({ enclosure, routes, enclosureTypes, fiberTypes, fiberColorConfigs, appUser, onClose, onSplice, onUnsplice, onUnspliceAll, onUnspliceTube, onSpliceTube, onUpdateTrayOwner, onUpdateRouteSide, onUpdatePortAssignment, onUpdateCore, onUpdateEnclosure, onEditEnclosure, quotaExceeded = false }: SpliceManagerProps) {
+  const notify = useToast();
   // Find routes that start or end at this enclosure, or pass through it
   const connectedRoutes = useMemo(() => {
     return getConnectedEnclosureRoutes(enclosure, routes)
@@ -1306,7 +1308,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
       console.log('Export successful');
     } catch (error) {
       console.error('Export failed:', error);
-      alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+      notify(`Export failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -2050,7 +2052,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                         // Assuming you want to trigger edit mode here, 
                         // you might need to pass onEditCore to SpliceManager
                         setHoveredCore(null);
-                        alert("Edit functionality needs to be connected to CoreManager");
+                        notify('แก้ไข Core ได้จากหน้า Core Manager', 'info');
                       }}
                       className="w-full py-4 px-4 rounded-2xl text-sm font-bold bg-brand-600 text-slate-100 hover:bg-brand-700 shadow-lg shadow-brand-100 transition-all flex items-center justify-center gap-2"
                     >

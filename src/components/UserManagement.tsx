@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from './Toast';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, query, where, getDocs } from 'firebase/firestore';
 import { db, auth, createUserWithEmailAndPassword, secondaryAuth, signOut, handleFirestoreError, OperationType } from '../firebase';
 import { User as AppUser, UserRole, CoreOwner } from '../types';
@@ -10,6 +11,7 @@ import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 
 export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | null, quotaExceeded?: boolean }> = ({ user, appUser, quotaExceeded = false }) => {
+  const notify = useToast();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,14 +52,14 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
     
     // Check if user already exists in the local list
     if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-      alert("This user is already in the list.");
+      notify("This user is already in the list.", 'error');
       return;
     }
     
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      alert("Please enter a valid email address.");
+      notify("Please enter a valid email address.", 'error');
       return;
     }
 
@@ -69,7 +71,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
         const q = query(usersRef, where('email', '==', email.toLowerCase()));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
-          alert("This user already exists in the system database.");
+          notify("This user already exists in the system database.", 'error');
           setIsAdding(false);
           return;
         }
@@ -89,7 +91,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
           };
           await setDoc(doc(db, 'users', newUser.id), newUser);
           await logActivity('create_user', `Created new user account for ${email}`, { role, owner, isApproved: true });
-          alert("User account created and added successfully!");
+          notify("User account created and added successfully!");
         } catch (authError: any) {
           if (authError.code === 'auth/email-already-in-use') {
             // Fallback to pre-authorization if account exists in Auth but not in our list
@@ -103,7 +105,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
             };
             await setDoc(doc(db, 'users', dummyId), newUser);
             await logActivity('create_preauth_user', `Created pre-authorized profile for existing auth user ${email}`, { role, owner });
-            alert("This email is already registered in Authentication. A profile has been created for them so they can now access the system.");
+            notify("This email is already registered in Authentication. A profile has been created for them so they can now access the system.");
           } else {
             throw authError;
           }
@@ -120,7 +122,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
         };
         await setDoc(doc(db, 'users', dummyId), newUser);
         await logActivity('create_preauth_user', `Pre-authorized email ${email}`, { role, owner });
-        alert("Email pre-authorized successfully! They can now log in once their account is fully created.");
+        notify("Email pre-authorized successfully! They can now log in once their account is fully created.");
       }
       
       setEmail('');
@@ -131,13 +133,13 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
       console.error("Error creating user:", error);
       
       if (error.code === 'auth/weak-password') {
-        alert("The password is too weak. Please use at least 6 characters.");
+        notify("The password is too weak. Please use at least 6 characters.", 'error');
       } else if (error.code === 'auth/invalid-email') {
-        alert("The email address is invalid.");
+        notify("The email address is invalid.", 'error');
       } else if (error.code === 'auth/operation-not-allowed') {
-        alert("Email/Password authentication is not enabled in the Firebase Console. Please enable it in the Authentication > Sign-in method tab.");
+        notify("Email/Password authentication is not enabled in the Firebase Console. Please enable it in the Authentication > Sign-in method tab.", 'error');
       } else {
-        alert("Error creating user: " + (error.message || "Unknown error"));
+        notify("Error creating user: " + (error.message || "Unknown error"), 'error');
       }
       
       // Log firestore error if it's a permission issue
