@@ -30,6 +30,7 @@ import { exportApprovalPdf } from '../utils/exportApprovalPdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { useRolePermissions } from '../services/rolePermissionsStore';
 
 interface DesignApprovalModalProps {
   isOpen: boolean;
@@ -128,6 +129,9 @@ export function DesignApprovalModal({
   enclosures: propEnclosures = [],
   onProjectUpdated
 }: DesignApprovalModalProps) {
+  const rolePermissions = useRolePermissions();
+  const permissions = appUser ? rolePermissions[appUser.role] : rolePermissions['Viewer'];
+
   // Modal View State: presentation and the approval request form
   const [viewMode, setViewMode] = useState<'slides' | 'request'>('slides');
   const [currentSlide, setCurrentSlide] = useState(1);
@@ -1166,18 +1170,11 @@ export function DesignApprovalModal({
 
   // Check if current logged in user can sign for owner & level
   const canUserSign = (owner: CoreOwner, level: 'Planning' | 'OM') => {
-    if (!appUser) return false;
+    if (!appUser || !permissions?.approveDesign) return false;
+    if (!(level === 'Planning' ? permissions.approvePlanning : permissions.approveOM)) return false;
     if (appUser.role === 'Admin') return true;
 
-    if (appUser.owner && appUser.owner !== 'None' && appUser.owner !== owner) {
-      return false;
-    }
-
-    if (level === 'Planning') {
-      return appUser.role === 'Planning' || appUser.role === 'Design';
-    } else {
-      return appUser.role === 'Management';
-    }
+    return !(appUser.owner && appUser.owner !== 'None' && appUser.owner !== owner);
   };
 
   const canCorrectSignOff = () => appUser?.role === 'Admin';
@@ -1238,7 +1235,7 @@ export function DesignApprovalModal({
 
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
-    if (!appUser) return;
+    if (!appUser || !permissions?.requestApproval) return;
     if (!hasApprovalDesign || participatingOwners.length === 0) {
       setActionError('กรุณาเพิ่มเส้น Fiber, Enclosure และกำหนด Owner ของโครงการก่อนยื่นขออนุมัติ');
       return;
@@ -1499,7 +1496,7 @@ export function DesignApprovalModal({
 
   // Render the printable presentation and download an actual PDF file.
   const handleExportDocument = async () => {
-    if (isExporting) return;
+    if (isExporting || !permissions?.exportData) return;
     setIsExporting(true);
     setExportError(null);
     try {
@@ -2300,7 +2297,7 @@ export function DesignApprovalModal({
             </button>
 
             {/* Export HTML / Print */}
-            <button
+            {permissions?.exportData && <button
               onClick={handleExportDocument}
               disabled={isExporting || !hasApprovalDesign}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
@@ -2308,7 +2305,7 @@ export function DesignApprovalModal({
             >
               {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} className={exportSuccess ? 'text-emerald-400' : 'text-slate-300'} />}
               <span>{isExporting ? 'กำลังสร้าง PDF…' : exportSuccess ? 'ดาวน์โหลดแล้ว!' : 'Export / PDF'}</span>
-            </button>
+            </button>}
 
             {/* Close */}
             <button type="button" aria-label="ปิด"
@@ -2399,9 +2396,11 @@ export function DesignApprovalModal({
               {hasApprovalDesign && !isLoadingData && (!designApproval || isRejected) && (
                 <div className="approval-warning flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
                   <span>{isRejected ? 'คำขอเดิมถูกปฏิเสธ สามารถยื่นคำขอใหม่ได้' : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
-                  <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
-                    ยื่นขออนุมัติใหม่
-                  </button>
+                  {permissions?.requestApproval && (
+                    <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
+                      ยื่นขออนุมัติใหม่
+                    </button>
+                  )}
                 </div>
               )}
               
@@ -3872,7 +3871,7 @@ export function DesignApprovalModal({
                 <div className="pt-2">
                   <button
                     onClick={handleSubmitApprovalRequest}
-                    disabled={isSubmitting || !hasApprovalDesign || participatingOwners.length === 0 || isLoadingData}
+                    disabled={isSubmitting || !hasApprovalDesign || participatingOwners.length === 0 || isLoadingData || !permissions?.requestApproval}
                     className="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}

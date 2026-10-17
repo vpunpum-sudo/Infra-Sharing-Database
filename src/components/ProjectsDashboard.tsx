@@ -454,7 +454,13 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             </div>
 
             {/* Projects Grid */}
-            {filteredProjects.length === 0 ? (
+            {!userPermissions.viewProjects ? (
+              <div role="status" className="card p-16 text-center max-w-lg mx-auto">
+                <Shield className="w-8 h-8 text-slate-400 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-1 font-display">ไม่มีสิทธิ์ดูโครงการ</h3>
+                <p className="text-slate-300 text-xs max-w-sm mx-auto">บทบาทของคุณยังไม่ได้รับสิทธิ์ View Projects กรุณาติดต่อผู้ดูแลระบบ</p>
+              </div>
+            ) : filteredProjects.length === 0 ? (
               <div className="card p-16 text-center max-w-lg mx-auto">
                 <div className="w-16 h-16 bg-slate-800/80 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-700">
                   <Folder className="w-8 h-8 text-slate-400" />
@@ -490,7 +496,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                       key={project.id}
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
-                      onClick={() => navigate(`/project/${project.id}`)}
+                      onClick={() => userPermissions.viewMap && navigate(`/project/${project.id}`)}
                       className="card p-4 sm:p-5 cursor-pointer group flex flex-col justify-between relative overflow-hidden"
                     >
                       <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity blur-xl pointer-events-none"></div>
@@ -592,7 +598,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                   </div>
                                 </div>
 
-                                <button
+                                {userPermissions.viewApprovalDocs && <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setApprovalModalProject(project);
@@ -606,7 +612,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                   }`}
                                 >
                                   {status === 'Pending Approval' ? 'ลงนาม 2 ระดับ' : 'เอกสารอนุมัติ'}
-                                </button>
+                                </button>}
                               </div>
                             </div>
                           );

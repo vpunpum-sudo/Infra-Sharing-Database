@@ -9,9 +9,12 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Shield, User as UserIcon, Edit2, Loader2, Check, X } from 'lucide-react';
 import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
+import { useRolePermissions } from '../services/rolePermissionsStore';
 
 export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | null, quotaExceeded?: boolean }> = ({ user, appUser, quotaExceeded = false }) => {
   const notify = useToast();
+  const rolePermissions = useRolePermissions();
+  const canManageUsers = !!appUser && !!rolePermissions[appUser.role]?.manageUsers;
   const [users, setUsers] = useState<AppUser[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -237,17 +240,22 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
             
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <button 
+              {appUser?.role === 'Admin' && <button 
                 onClick={() => navigate('/permission-management')} 
                 className="flex items-center gap-2 text-brand-300 hover:text-white font-bold text-xs bg-brand-500/10 hover:bg-brand-500/20 px-4 py-2.5 rounded-xl transition-all border border-brand-500/30"
               >
                 <Shield size={15} /> Role Permissions Matrix
-              </button>
+              </button>}
             </div>
           </div>
           
           {/* Add User Form */}
-          <div className="p-6 bg-slate-900/60 rounded-2xl border border-slate-800 mb-8 relative overflow-hidden">
+          {!canManageUsers && (
+            <div role="status" className="mb-8 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
+              ดูรายชื่อผู้ใช้ได้อย่างเดียว บทบาทของคุณไม่มีสิทธิ์ Manage Users (เพิ่ม แก้ไข อนุมัติ หรือลบผู้ใช้)
+            </div>
+          )}
+          {canManageUsers && <div className="p-6 bg-slate-900/60 rounded-2xl border border-slate-800 mb-8 relative overflow-hidden">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Plus size={14} className="text-brand-400" /> Provision New User
             </h3>
@@ -311,7 +319,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                 <span>{isAdding ? 'Adding...' : 'Add User'}</span>
               </button>
             </div>
-          </div>
+          </div>}
 
           {/* User List Section */}
           <div className="space-y-4">
@@ -412,6 +420,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                           <div className="col-span-2">
                             <button 
                               onClick={() => toggleApproval(u)}
+                              disabled={!canManageUsers}
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-extrabold border transition-all ${
                                 u.isApproved 
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
@@ -439,6 +448,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             </span>
                           </div>
                           <div className="col-span-2 flex justify-end gap-1">
+                            {canManageUsers && <>
                             <button 
                               onClick={() => startEdit(u)} 
                               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
@@ -454,6 +464,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             >
                               <Trash2 size={14} />
                             </button>
+                            </>}
                           </div>
                         </>
                       )}

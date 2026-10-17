@@ -108,6 +108,15 @@ service cloud.firestore {
              request.auth.uid == projectData.uid;
     }
 
+    // Management (O&M) and Planning sign approvals but do not edit the design:
+    // they may only change the approval fields of projects their company is in.
+    function canSignApproval(projectData) {
+      return userExists() && getUserData().get('isApproved', false) == true &&
+             getUserData().role in ['Management', 'Planning'] &&
+             canAccessProject(projectData) &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'designApproval']);
+    }
+
     function canDeleteProject(projectData) {
       return isAdmin() || 
              request.auth.uid == projectData.uid;
@@ -241,7 +250,7 @@ service cloud.firestore {
       return hasRequiredFields(['id', 'email', 'role']) &&
              data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
              data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
-             data.role in ['Admin', 'Design', 'Viewer', 'Sub-contract'] &&
+             data.role in ['Admin', 'Management', 'Planning', 'Design', 'Viewer', 'Sub-contract'] &&
              (!('owner' in data) || data.owner in ['None', 'ITEL', 'SYMC', 'UIH']) &&
              (!('requiresPasswordChange' in data) || data.requiresPasswordChange is bool) &&
              (!('isApproved' in data) || data.isApproved is bool) &&
@@ -343,7 +352,7 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
       allow create: if isAuthenticated() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
-      allow update: if isAuthenticated() && canEditProject(resource.data) && uidNotModified() &&
+      allow update: if isAuthenticated() && (canEditProject(resource.data) || canSignApproval(resource.data)) && uidNotModified() &&
         (!isApprovalRewind() || hasAdminRole());
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
 

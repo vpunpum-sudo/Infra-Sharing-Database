@@ -11,9 +11,12 @@ import { Toast } from './Toast';
 import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 import { OwnerLogoSettings } from './OwnerLogoSettings';
+import { useRolePermissions } from '../services/rolePermissionsStore';
 
 export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user: User, appUser: AppUser | null, quotaExceeded?: boolean }) => {
   const navigate = useNavigate();
+  const rolePermissions = useRolePermissions();
+  const canEditSettings = !!appUser && !!rolePermissions[appUser.role]?.editSettings;
   const [activeTab, setActiveTab] = useState<'logos' | 'enclosure' | 'fiber' | 'colorConfig'>('logos');
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
   const [fiberTypes, setFiberTypes] = useState<FiberType[]>([]);
@@ -390,6 +393,13 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
               </button>
             </div>
 
+            {!canEditSettings && (
+              <div role="status" className="p-4 rounded-2xl border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
+                ดูการตั้งค่าได้อย่างเดียว บทบาทของคุณไม่มีสิทธิ์ Edit Settings
+              </div>
+            )}
+            {/* Read-only roles: a disabled fieldset disables every control inside the tabs. */}
+            <fieldset disabled={!canEditSettings} className="min-w-0 border-0 p-0 m-0">
             {/* TAB 1: Owner Logos */}
             {activeTab === 'logos' && (
               <OwnerLogoSettings />
@@ -655,6 +665,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
               </div>
             </section>
             )}
+            </fieldset>
           </div>
         </div>
       </div>

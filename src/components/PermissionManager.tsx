@@ -82,9 +82,21 @@ const FEATURE_CATEGORIES = [
     name: 'Data & Analytics',
     description: 'Access reports, history, and data export tools.',
     features: [
-      { id: 'viewReports', label: 'View Reports' },
-      { id: 'exportData', label: 'Export Data' },
-      { id: 'viewHistory', label: 'View History' }
+      { id: 'viewReports', label: 'View Reports', unused: true },
+      { id: 'exportData', label: 'Export Data (PDF)' },
+      { id: 'viewHistory', label: 'View Core History' }
+    ] as { id: Feature; label: string; unused?: boolean }[]
+  },
+  {
+    id: 'approval',
+    name: 'Design Approval Workflow',
+    description: 'Approval documents, requests and the two sign-off levels (Planning, O&M).',
+    features: [
+      { id: 'viewApprovalDocs', label: 'View Approval Documents' },
+      { id: 'requestApproval', label: 'Submit Approval Request' },
+      { id: 'approveDesign', label: 'Sign Approvals (any level)' },
+      { id: 'approvePlanning', label: 'Sign Level 1: Planning' },
+      { id: 'approveOM', label: 'Sign Level 2: O&M' }
     ] as { id: Feature; label: string }[]
   }
 ];
@@ -94,7 +106,7 @@ export const PermissionManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const notify = useToast();
-  const roles: UserRole[] = ['Admin', 'Design', 'Viewer', 'Sub-contract'];
+  const roles: UserRole[] = ['Admin', 'Management', 'Planning', 'Design', 'Viewer', 'Sub-contract'];
 
   useEffect(() => {
     let cancelled = false;
@@ -168,6 +180,11 @@ export const PermissionManager: React.FC = () => {
         </button>
       </div>
       
+      <div className="px-8 py-3 border-b border-slate-800 bg-slate-900/40 text-xs text-slate-400">
+        สิทธิ์ในตารางนี้ควบคุมว่าแต่ละบทบาทเห็นปุ่มและหน้าจอใดบ้าง ส่วนการบันทึกข้อมูลยังถูกตรวจซ้ำโดย Firestore Rules ตามบทบาท
+        (เช่น การจัดการผู้ใช้และ Enclosure/Fiber Types บันทึกได้เฉพาะ Admin) การเปิดสิทธิ์ให้บทบาทอื่นจึงอาจยังบันทึกไม่ได้
+      </div>
+
       <div className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -217,6 +234,9 @@ export const PermissionManager: React.FC = () => {
                         <div className="flex items-center gap-2.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-brand-500/60" />
                           <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{feature.label}</span>
+                          {'unused' in feature && feature.unused && (
+                            <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5" title="ยังไม่มีหน้าจอรายงานในระบบ ตั้งค่าไว้ใช้ภายหลังได้">ยังไม่มีผลในระบบ</span>
+                          )}
                         </div>
                       </td>
                       {roles.map(role => (
