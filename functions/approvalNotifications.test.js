@@ -72,3 +72,28 @@ test('Planning users receive the Planning-stage request', () => {
   assert.deepEqual(notificationRecipients(users, notice),
     ['designer@example.com', 'planner@example.com']);
 });
+
+test('approval email lists project details, sign-off status and a direct project link', () => {
+  const after = project('Planning', {
+    ITEL: { status: 'Approved', signedBy: 'Somchai', signedAt: '2026-10-16T05:00:00.000Z' }, UIH: { status: 'Pending' }
+  });
+  after.routeCode = 'BKK-R01';
+  Object.assign(after.designApproval, {
+    requestedBy: 'Verayut', requestedByEmail: 'v@example.com', requestedAt: '2026-10-16T12:01:00.000Z',
+    projectCorridorDistanceKm: 1.25, totalOperationDistanceKm: 2.5, contractorName: 'ACME', contractorPoNumber: 'PO-9'
+  });
+  const notice = notificationForTransition({ status: 'Draft' }, after);
+  const { subject, text, html } = emailContent(notice, 'https://app.example.com/', 'proj 1');
+
+  assert.equal(subject, '[Fiber Sharing] มีเอกสารรออนุมัติขั้น Planning: ทดสอบ <Project> (APP-1)');
+  for (const expected of ['รหัสเส้นทาง: BKK-R01', 'ผู้ขออนุมัติ: Verayut (v@example.com)', 'วันที่ขออนุมัติ: 16 ต.ค. 2569 19:01 น.',
+    'ระยะ Project Corridor: 1.25 กม.', 'ผู้รับเหมา: ACME / PO PO-9', 'Operator: ITEL, UIH',
+    '- ITEL: Planning อนุมัติแล้ว (Somchai, 16 ต.ค. 2569 12:00 น.)', '- UIH: Planning รออนุมัติ',
+    'https://app.example.com/project/proj%201']) {
+    assert.ok(text.includes(expected), `text should include ${expected}`);
+  }
+  assert.ok(!text.includes('วันติดตั้งโดยประมาณ'), 'empty fields are omitted');
+  assert.match(html, /href="https:\/\/app\.example\.com\/project\/proj%201"/);
+  assert.match(html, /อนุมัติแล้ว/);
+  assert.doesNotMatch(html, /<Project>/);
+});
