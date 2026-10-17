@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, or } from 'firebase/firestore';
-import { db, logout, handleFirestoreError, OperationType } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions, logout, handleFirestoreError, OperationType } from '../firebase';
 import { Project, User as AppUser, CoreOwner, ProjectStatus } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,11 +12,20 @@ import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 import { DesignApprovalModal } from './DesignApprovalModal';
+import { ProjectFilesModal } from './ProjectFilesModal';
+
+const formatProjectDate = (value?: string) => {
+  if (!value) return 'ไม่ระบุ';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'ไม่ระบุ' : date.toLocaleDateString('th-TH', { dateStyle: 'medium' });
+};
 
 export default function ProjectsDashboard({ user, appUser, quotaExceeded = false }: { user: FirebaseUser, appUser: AppUser | null, quotaExceeded?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [approvalModalProject, setApprovalModalProject] = useState<Project | null>(null);
+  const [filesModalProject, setFilesModalProject] = useState<Project | null>(null);
+  const [legacyCreatedDates, setLegacyCreatedDates] = useState<Record<string, string>>({});
   const [projectNameInput, setProjectNameInput] = useState('');
   const [projectOwnersInput, setProjectOwnersInput] = useState<CoreOwner[]>(['ITEL']);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -29,6 +39,20 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const navigate = useNavigate();
 
   const userPermissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  const missingCreatedDateIds = projects.filter(project => !project.createdAt).map(project => project.id).sort().join('|');
+
+  useEffect(() => {
+    if (!missingCreatedDateIds) return;
+    let cancelled = false;
+    const getDates = httpsCallable<{ projectIds: string[] }, Record<string, string | null>>(functions, 'getProjectCreatedDates');
+    const ids = missingCreatedDateIds.split('|');
+    Promise.all(Array.from({ length: Math.ceil(ids.length / 50) }, (_, index) =>
+      getDates({ projectIds: ids.slice(index * 50, index * 50 + 50) })
+    )).then(results => {
+      if (!cancelled) setLegacyCreatedDates(Object.assign({}, ...results.map(result => result.data)));
+    }).catch(() => { /* Older projects can still be viewed if the date service is unavailable. */ });
+    return () => { cancelled = true; };
+  }, [missingCreatedDateIds]);
 
   useEffect(() => {
     if (!user || !appUser) return;
@@ -140,6 +164,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           id: uuidv4(), 
           name: projectNameInput.trim(), 
           uid: user.uid, 
+          createdAt: new Date().toISOString(),
           owners: projectOwnersInput,
           owner: projectOwnersInput[0] || 'ITEL'
         };
@@ -457,6 +482,9 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 {filteredProjects.map(project => {
                   const orderMap: Record<string, number> = { 'ITEL': 1, 'SYMC': 2, 'UIH': 3 };
                   const owners = [...(project.owners || (project.owner ? [project.owner] : ['ITEL']))].sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
+                  const fileOwners = project.owners || (project.owner ? [project.owner] : []);
+                  const canAccessFiles = !!appUser?.isApproved && (appUser.role === 'Admin' ||
+                    !!(appUser.owner && fileOwners.includes(appUser.owner)));
                   return (
                     <motion.div 
                       key={project.id}
@@ -601,18 +629,27 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           </div>
                         </div>
                         </div>
+                        <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-300">
+                          <span>สร้างโครงการ: <strong className="text-slate-100">{formatProjectDate(project.createdAt || legacyCreatedDates[project.id])}</strong></span>
+                          <span>อนุมัติขั้นสุดท้าย: <strong className="text-slate-100">{formatProjectDate(project.designApproval?.finalApprovedAt)}</strong></span>
+                        </div>
                       </div>
 
                       {/* Card Footer */}
-                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse"></span>
                           <span className="text-xs font-semibold text-slate-300">Active Workspace</span>
                         </div>
-                        
-                        <span className="text-xs font-bold text-brand-400 group-hover:text-brand-300 flex items-center gap-1">
-                          Open Map <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                        </span>
+                        <div className="flex items-center gap-3">
+                          {canAccessFiles && <button type="button" onClick={event => { event.stopPropagation(); setFilesModalProject(project); }}
+                            className="flex items-center gap-1 text-xs font-bold text-sky-300 hover:text-sky-200">
+                            <Folder size={14} /> ไฟล์โครงการ
+                          </button>}
+                          <span className="text-xs font-bold text-brand-400 group-hover:text-brand-300 flex items-center gap-1">
+                            Open Map <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                          </span>
+                        </div>
                       </div>
                     </motion.div>
                   );
@@ -636,6 +673,11 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           }}
         />
       )}
+
+      {filesModalProject && <ProjectFilesModal project={filesModalProject}
+        canManage={!!appUser?.isApproved && (appUser.role === 'Admin' || (appUser.role !== 'Viewer' && !!appUser.owner &&
+          (filesModalProject.owners || (filesModalProject.owner ? [filesModalProject.owner] : [])).includes(appUser.owner)))}
+        onClose={() => setFilesModalProject(null)} />}
 
       {/* Project Modal */}
       {projectModalOpen && (

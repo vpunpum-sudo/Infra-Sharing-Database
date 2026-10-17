@@ -1,0 +1,162 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { Download, FileText, FolderOpen, Loader2, Pencil, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { db, functions } from '../firebase';
+import { Project, ProjectFile } from '../types';
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const manageProjectFile = httpsCallable(functions, 'manageProjectFile');
+
+function formatDate(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.readAsDataURL(file);
+  });
+}
+
+export function ProjectFilesModal({ project, canManage, onClose }: {
+  project: Project; canManage: boolean; onClose: () => void;
+}) {
+  const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [replaceId, setReplaceId] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, `projects/${project.id}/files`), snapshot => {
+      setFiles(snapshot.docs.map(item => item.data() as ProjectFile)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      setError('');
+    }, () => setError('ไม่สามารถโหลดไฟล์โครงการได้ กรุณาตรวจสอบสิทธิ์และลองใหม่'));
+    return unsubscribe;
+  }, [project.id]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  async function run(action: string, values: Record<string, unknown> = {}) {
+    setBusy(true);
+    setError('');
+    try {
+      return (await manageProjectFile({ action, projectId: project.id, ...values })).data as Record<string, string>;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'ดำเนินการกับไฟล์ไม่สำเร็จ');
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onChooseFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const chosen = event.target.files?.[0];
+    event.target.value = '';
+    if (!chosen) return;
+    if (chosen.size > MAX_FILE_BYTES || chosen.size === 0) {
+      setError('เลือกไฟล์ที่มีขนาดมากกว่า 0 และไม่เกิน 5 MB');
+      return;
+    }
+    const fileId = replaceId;
+    setReplaceId(null);
+    try {
+      const base64 = await fileToBase64(chosen);
+      await run(fileId ? 'replace' : 'upload', {
+        ...(fileId ? { fileId } : { name: chosen.name }),
+        contentType: chosen.type || 'application/octet-stream', base64
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'ไม่สามารถอ่านไฟล์ได้');
+    }
+  }
+
+  async function download(item: ProjectFile) {
+    const result = await run('download', { fileId: item.id });
+    if (!result) return;
+    const binary = atob(result.base64);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: result.contentType || 'application/octet-stream' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = result.name || item.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  async function rename(item: ProjectFile) {
+    const name = editingName.trim();
+    if (!name || name === item.name) { setEditingId(null); return; }
+    if (await run('rename', { fileId: item.id, name })) setEditingId(null);
+  }
+
+  async function remove(item: ProjectFile) {
+    if (!window.confirm(`ลบไฟล์ “${item.name}” ออกจากโครงการ?`)) return;
+    await run('delete', { fileId: item.id });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section role="dialog" aria-modal="true" aria-label={`ไฟล์โครงการ ${project.name}`}
+        className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl">
+        <header className="flex items-start justify-between gap-4 border-b border-slate-700 p-5">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold"><FolderOpen size={20} /> ไฟล์โครงการ</h2>
+            <p className="mt-1 text-sm text-slate-300">{project.name}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="ปิด" className="rounded-lg p-2 hover:bg-slate-800"><X size={18} /></button>
+        </header>
+        <div className="overflow-y-auto p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-slate-300">{files.length} ไฟล์ · สูงสุด 5 MB ต่อไฟล์</p>
+            {canManage && <button type="button" disabled={busy} onClick={() => { setReplaceId(null); fileInput.current?.click(); }}
+              className="flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-60">
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} เพิ่มไฟล์
+            </button>}
+            <input ref={fileInput} type="file" className="hidden" onChange={onChooseFile} />
+          </div>
+          {error && <p role="alert" className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-sm text-rose-100">{error}</p>}
+          {files.length === 0 ? <p className="rounded-xl border border-dashed border-slate-600 p-8 text-center text-sm text-slate-300">ยังไม่มีไฟล์ในโครงการนี้</p> :
+            <ul className="space-y-2">{files.map(item => <li key={item.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <FileText size={20} className="mt-1 shrink-0 text-sky-300" />
+                  <div className="min-w-0">
+                    {editingId === item.id ? <div className="flex gap-2">
+                      <input autoFocus value={editingName} onChange={event => setEditingName(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter') rename(item); }}
+                        className="min-w-0 flex-1 rounded border border-sky-500 bg-slate-950 px-2 py-1 text-sm" />
+                      <button type="button" onClick={() => rename(item)} disabled={busy} className="text-sm font-bold text-sky-300">บันทึก</button>
+                    </div> : <p className="break-all text-sm font-semibold">{item.name}</p>}
+                    <p className="mt-1 text-xs text-slate-300">{(item.size / 1024).toFixed(1)} KB · แก้ไข {formatDate(item.updatedAt)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={busy} onClick={() => download(item)} title="ดาวน์โหลด" aria-label={`ดาวน์โหลด ${item.name}`} className="rounded-lg p-2 hover:bg-slate-700"><Download size={17} /></button>
+                  {canManage && <>
+                    <button type="button" disabled={busy} onClick={() => { setEditingId(item.id); setEditingName(item.name); }} title="แก้ชื่อ" aria-label={`แก้ชื่อ ${item.name}`} className="rounded-lg p-2 hover:bg-slate-700"><Pencil size={17} /></button>
+                    <button type="button" disabled={busy} onClick={() => { setReplaceId(item.id); fileInput.current?.click(); }} title="แทนไฟล์" aria-label={`แทนไฟล์ ${item.name}`} className="rounded-lg p-2 hover:bg-slate-700"><RefreshCw size={17} /></button>
+                    <button type="button" disabled={busy} onClick={() => remove(item)} title="ลบ" aria-label={`ลบ ${item.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950"><Trash2 size={17} /></button>
+                  </>}
+                </div>
+              </div>
+            </li>)}</ul>}
+        </div>
+      </section>
+    </div>
+  );
+}

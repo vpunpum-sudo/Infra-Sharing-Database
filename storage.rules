@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Project files are served only by Cloud Functions. The project data is in
+    // a named Firestore database, which Storage rules cannot read directly.
+    match /project-files/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

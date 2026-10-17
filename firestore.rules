@@ -91,6 +91,14 @@ service cloud.firestore {
              request.auth.uid == projectData.uid;
     }
 
+    function canAccessProjectFiles(projectData) {
+      return (hasAdminRole() && getUserData().get('isApproved', false) == true) ||
+        (userExists() && getUserData().get('isApproved', false) == true &&
+          getUserData().owner != 'None' &&
+          (('owners' in projectData && getUserData().owner in projectData.owners) ||
+           ('owner' in projectData && getUserData().owner == projectData.owner)));
+    }
+
     function canEditProject(projectData) {
       return isAdmin() || 
              (userExists() && getUserData().role in ['Design', 'Sub-contract'] && (
@@ -316,6 +324,13 @@ service cloud.firestore {
       allow update: if isAuthenticated() && canEditProject(resource.data) && uidNotModified() &&
         (!isApprovalRewind() || hasAdminRole());
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
+
+      match /files/{fileId} {
+        allow read: if isAuthenticated() &&
+          canAccessProjectFiles(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        // All changes go through a callable function that checks operator membership.
+        allow write: if false;
+      }
 
       match /enclosures/{enclosureId} {
         allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
