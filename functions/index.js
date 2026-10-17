@@ -79,8 +79,8 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   const db = getFirestore(DATABASE_ID);
   const users = await db.collection('users').get();
   const recipients = notificationRecipients(users.docs.map(user => user.data()), notification);
-  const content = emailContent(notification, url);
   const projectId = event.params.projectId;
+  const content = emailContent(notification, url, projectId);
   const transport = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: from, pass: password }

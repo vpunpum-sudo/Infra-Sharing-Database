@@ -50,8 +50,29 @@ function notificationForTransition(before, after) {
     return null;
   }
 
+  const signOff = (signOffs, owner) => {
+    const entry = signOffs?.[owner] || {};
+    return { status: entry.status || 'Pending', signedBy: entry.signedBy || '', signedAt: entry.signedAt || '' };
+  };
+
   return { kind, roles, owners, approvalId: approval.id,
-    documentNumber: approval.documentNumber, projectName: after.name || 'Project' };
+    documentNumber: approval.documentNumber, projectName: after.name || 'Project',
+    details: {
+      routeCode: after.routeCode || '',
+      requestedBy: approval.requestedBy || '',
+      requestedByEmail: approval.requestedByEmail || '',
+      requestedAt: approval.requestedAt || '',
+      projectCorridorDistanceKm: approval.projectCorridorDistanceKm,
+      totalOperationDistanceKm: approval.totalOperationDistanceKm,
+      estimatedInstallationDate: approval.estimatedInstallationDate || '',
+      contractorName: approval.contractorName || '',
+      contractorPoNumber: approval.contractorPoNumber || '',
+      signOffs: owners.map(owner => ({
+        owner,
+        planning: signOff(approval.planningSignOffs, owner),
+        management: signOff(approval.omSignOffs, owner)
+      }))
+    } };
 }
 
 function notificationRecipients(users, notification) {
@@ -79,19 +100,150 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function emailContent(notification, appUrl) {
-  const description = {
-    'planning-requested': 'มีเอกสารรออนุมัติขั้น Planning',
-    'management-requested': 'Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management',
-    'approval-completed': 'Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย'
-  }[notification.kind];
-  const subject = `[Fiber Sharing] ${description}: ${notification.documentNumber}`;
-  const lines = [description, `โครงการ: ${notification.projectName}`,
-    `เลขที่เอกสาร: ${notification.documentNumber}`, `เปิดระบบ: ${appUrl}`];
-  const text = lines.join('\n');
-  const html = `<p>${escapeHtml(description)}</p><p>โครงการ: ${escapeHtml(notification.projectName)}<br>` +
-    `เลขที่เอกสาร: ${escapeHtml(notification.documentNumber)}</p>` +
-    `<p><a href="${escapeHtml(appUrl)}">เปิดระบบ Fiber Sharing</a></p>`;
+const KIND_COPY = {
+  'planning-requested': {
+    description: 'มีเอกสารรออนุมัติขั้น Planning',
+    stage: 'Planning',
+    intro: 'มีคำขออนุมัติการออกแบบโครงการใหม่ รอการพิจารณาลงนามจาก Planning ของแต่ละ Operator',
+    action: 'ตรวจสอบและอนุมัติเอกสาร',
+    accent: '#d97706'
+  },
+  'management-requested': {
+    description: 'Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management',
+    stage: 'Management (O&M)',
+    intro: 'Planning ของทุก Operator อนุมัติครบแล้ว เอกสารรอการพิจารณาลงนามจาก Management',
+    action: 'ตรวจสอบและอนุมัติเอกสาร',
+    accent: '#2563eb'
+  },
+  'approval-completed': {
+    description: 'Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย',
+    stage: 'อนุมัติครบทุกขั้น',
+    intro: 'เอกสารได้รับการอนุมัติครบทั้งขั้น Planning และ Management แล้ว',
+    action: 'เปิดดูโครงการ',
+    accent: '#059669'
+  }
+};
+
+const STATUS_LABELS = {
+  Approved: { text: 'อนุมัติแล้ว', color: '#047857', background: '#d1fae5' },
+  Rejected: { text: 'ไม่อนุมัติ', color: '#b91c1c', background: '#fee2e2' },
+  Pending: { text: 'รออนุมัติ', color: '#b45309', background: '#fef3c7' }
+};
+
+function formatDate(value, withTime) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'medium', ...(withTime ? { timeStyle: 'short' } : {}), timeZone: 'Asia/Bangkok'
+  }).format(date) + (withTime ? ' น.' : '');
+}
+
+function formatKm(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toLocaleString('en-US', { maximumFractionDigits: 3 })} กม.` : '';
+}
+
+function projectLink(appUrl, projectId) {
+  const base = appUrl.replace(/\/+$/, '');
+  return projectId ? `${base}/project/${encodeURIComponent(projectId)}` : base;
+}
+
+/** Rows shown in both the HTML and plain-text bodies; empty values are left out. */
+function summaryRows(notification, copy) {
+  const details = notification.details || {};
+  const requester = [details.requestedBy, details.requestedByEmail && `(${details.requestedByEmail})`]
+    .filter(Boolean).join(' ');
+  const contractor = [details.contractorName,
+    details.contractorPoNumber && `PO ${details.contractorPoNumber}`].filter(Boolean).join(' / ');
+  return [
+    ['โครงการ', notification.projectName],
+    ['รหัสเส้นทาง', details.routeCode],
+    ['เลขที่เอกสาร', notification.documentNumber],
+    ['ขั้นการอนุมัติ', copy.stage],
+    ['Operator', notification.owners.join(', ')],
+    ['ผู้ขออนุมัติ', requester],
+    ['วันที่ขออนุมัติ', formatDate(details.requestedAt, true)],
+    ['ระยะ Project Corridor', formatKm(details.projectCorridorDistanceKm)],
+    ['ระยะดำเนินการรวม', formatKm(details.totalOperationDistanceKm)],
+    ['ผู้รับเหมา', contractor],
+    ['วันติดตั้งโดยประมาณ', formatDate(details.estimatedInstallationDate, false)]
+  ].filter(([, value]) => value);
+}
+
+function signOffText(signOff) {
+  const label = (STATUS_LABELS[signOff.status] || STATUS_LABELS.Pending).text;
+  const signer = [signOff.signedBy, formatDate(signOff.signedAt, true)].filter(Boolean).join(', ');
+  return signer ? `${label} (${signer})` : label;
+}
+
+function signOffCell(signOff) {
+  const label = STATUS_LABELS[signOff.status] || STATUS_LABELS.Pending;
+  const signer = [signOff.signedBy, formatDate(signOff.signedAt, true)].filter(Boolean).map(escapeHtml).join('<br>');
+  return `<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">` +
+    `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;` +
+    `color:${label.color};background:${label.background};">${escapeHtml(label.text)}</span>` +
+    (signer ? `<div style="margin-top:4px;font-size:12px;color:#64748b;">${signer}</div>` : '') +
+    `</td>`;
+}
+
+function emailContent(notification, appUrl, projectId) {
+  const copy = KIND_COPY[notification.kind];
+  const link = projectLink(appUrl, projectId);
+  const rows = summaryRows(notification, copy);
+  const signOffs = notification.details?.signOffs || [];
+  const subject = `[Fiber Sharing] ${copy.description}: ${notification.projectName} (${notification.documentNumber})`;
+
+  const text = [
+    copy.description, '', copy.intro, '',
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    ...(signOffs.length ? ['', 'สถานะการลงนาม',
+      ...signOffs.map(s => `- ${s.owner}: Planning ${signOffText(s.planning)} | Management ${signOffText(s.management)}`)] : []),
+    '', `${copy.action}: ${link}`, '',
+    'อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ'
+  ].join('\n');
+
+  const font = "font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;";
+  const summaryHtml = rows.map(([label, value]) =>
+    `<tr><td style="padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;">${escapeHtml(label)}</td>` +
+    `<td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;">${escapeHtml(value)}</td></tr>`
+  ).join('');
+  const signOffHtml = signOffs.length ? (
+    `<p style="margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;">สถานะการลงนาม</p>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;">` +
+    `<tr style="background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;">` +
+    `<th align="left" style="padding:10px 12px;">Operator</th><th align="left" style="padding:10px 12px;">Planning</th>` +
+    `<th align="left" style="padding:10px 12px;">Management</th></tr>` +
+    signOffs.map(s => `<tr><td style="padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;">${escapeHtml(s.owner)}</td>` +
+      signOffCell(s.planning) + signOffCell(s.management) + `</tr>`).join('') +
+    `</table>`
+  ) : '';
+
+  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>` +
+    `<body style="margin:0;padding:0;background:#f1f5f9;${font}">` +
+    `<div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(`${notification.projectName} · ${notification.documentNumber}`)}</div>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px;">` +
+    `<tr><td align="center">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">` +
+    `<tr><td style="background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;">Fiber Sharing</td></tr>` +
+    `<tr><td style="height:4px;background:${copy.accent};font-size:0;line-height:0;">&nbsp;</td></tr>` +
+    `<tr><td style="padding:28px;">` +
+    `<p style="margin:0 0 4px;font-size:12px;font-weight:bold;color:${copy.accent};text-transform:uppercase;letter-spacing:1px;">${escapeHtml(copy.stage)}</p>` +
+    `<h1 style="margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;">${escapeHtml(copy.description)}</h1>` +
+    `<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(copy.intro)}</p>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">${summaryHtml}</table>` +
+    signOffHtml +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px;"><tr>` +
+    `<td style="border-radius:8px;background:${copy.accent};">` +
+    `<a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">${escapeHtml(copy.action)}</a>` +
+    `</td></tr></table>` +
+    `<p style="margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">หรือเปิดลิงก์: <a href="${escapeHtml(link)}" style="color:#2563eb;">${escapeHtml(link)}</a></p>` +
+    `</td></tr>` +
+    `<tr><td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">` +
+    `อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr>` +
+    `</table></td></tr></table></body></html>`;
+
   return { subject, text, html };
 }
 
