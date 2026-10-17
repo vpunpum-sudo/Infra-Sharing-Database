@@ -3,7 +3,7 @@ import { useToast } from './Toast';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Route, FiberEnclosure, Point, Core, CoreConnection, EnclosureType, CoreOwner, CoreStatus, CorePriority, User as AppUser, FiberType, FiberColorConfig } from '../types';
-import { DEFAULT_PERMISSIONS } from '../constants';
+import { useRolePermissions } from '../services/rolePermissionsStore';
 import { X, GitMerge, Unlink, AlertCircle, ChevronRight, ChevronDown, List, Wrench, Network, Maximize2, Minimize2, ArrowLeftRight, Layers, Box, Zap, Activity, Plus, Minus, Edit2, MapPin, ShieldAlert, Pencil, Lock, Download } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -25,7 +25,8 @@ export const ownerHexColors: Record<CoreOwner, string> = {
 };
 
 const PortNode = ({ id, enclosure, connectedRoutes, fiberTypes, fiberColorConfigs, onUpdate, side, appUser }: { id: number, enclosure: FiberEnclosure, connectedRoutes: Route[], fiberTypes: FiberType[], fiberColorConfigs: FiberColorConfig[], onUpdate: (enclosureId: string, portId: number, data: { owner?: CoreOwner, routeId?: string }) => void, side: 'left' | 'right', appUser: AppUser | null }) => {
-  const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  const rolePermissions = useRolePermissions();
+  const permissions = appUser ? rolePermissions[appUser.role] : rolePermissions['Viewer'];
   const assignment = enclosure.portAssignments?.[id] || {};
   const [isOpen, setIsOpen] = useState(false);
 
@@ -639,7 +640,8 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
   const routeA = useMemo(() => connectedRoutes.find(r => r.id === routeAId), [connectedRoutes, routeAId]);
   const routeB = useMemo(() => connectedRoutes.find(r => r.id === routeBId), [connectedRoutes, routeBId]);
 
-  const permissions = useMemo(() => appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'], [appUser]);
+  const rolePermissions = useRolePermissions();
+  const permissions = useMemo(() => appUser ? rolePermissions[appUser.role] : rolePermissions['Viewer'], [appUser, rolePermissions]);
 
   const canSpliceCore = useMemo(() => {
     if (!permissions.manageSplices) return false;
