@@ -5,7 +5,6 @@ import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Loade
 import { db, functions } from '../firebase';
 import { Project, ProjectFile, ProjectFolder } from '../types';
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const manageProjectFile = httpsCallable(functions, 'manageProjectFile');
 
 function formatDate(value?: string) {
@@ -14,12 +13,22 @@ function formatDate(value?: string) {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function fileToBase64(file: File): Promise<string> {
+function formatSize(bytes: number) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+// Sends the file straight to the Storage resumable session from startUpload.
+function uploadToStorage(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
-    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
-    reader.readAsDataURL(file);
+    const request = new XMLHttpRequest();
+    request.open('PUT', url);
+    request.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
+    request.onload = () => request.status >= 200 && request.status < 300
+      ? resolve() : reject(new Error(`อัปโหลดไฟล์ไม่สำเร็จ (${request.status})`));
+    request.onerror = () => reject(new Error('อัปโหลดไฟล์ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่'));
+    request.send(file);
   });
 }
 
@@ -32,6 +41,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -90,34 +100,37 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     const chosen = event.target.files?.[0];
     event.target.value = '';
     if (!chosen) return;
-    if (chosen.size > MAX_FILE_BYTES || chosen.size === 0) {
-      setError('เลือกไฟล์ที่มีขนาดมากกว่า 0 และไม่เกิน 5 MB');
+    if (chosen.size === 0) {
+      setError('ไฟล์นี้ว่างเปล่า กรุณาเลือกไฟล์อื่น');
       return;
     }
     const fileId = replaceId;
     setReplaceId(null);
+    const target = fileId ? { fileId } : { name: chosen.name, folderId };
+    const session = await run('startUpload', { ...target, contentType: chosen.type || 'application/octet-stream' });
+    if (!session) return;
+    setBusy(true);
+    setProgress(0);
     try {
-      const base64 = await fileToBase64(chosen);
-      await run(fileId ? 'replace' : 'upload', {
-        ...(fileId ? { fileId } : { name: chosen.name, folderId }),
-        contentType: chosen.type || 'application/octet-stream', base64
-      });
+      await uploadToStorage(session.uploadUrl, chosen, setProgress);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'ไม่สามารถอ่านไฟล์ได้');
+      setError(cause instanceof Error ? cause.message : 'อัปโหลดไฟล์ไม่สำเร็จ');
+      setBusy(false);
+      return;
+    } finally {
+      setProgress(null);
     }
+    await run('finishUpload', { ...target, id: session.id, storagePath: session.storagePath });
   }
 
   async function download(item: ProjectFile) {
-    const result = await run('download', { fileId: item.id });
+    const result = await run('downloadUrl', { fileId: item.id });
     if (!result) return;
-    const binary = atob(result.base64);
-    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: result.contentType || 'application/octet-stream' }));
+    // Storage serves the file as an attachment under its project name.
     const link = document.createElement('a');
-    link.href = url;
+    link.href = result.url;
     link.download = result.name || item.name;
     link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function rename(item: ProjectFile) {
@@ -163,7 +176,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
         </header>
         <div className="overflow-y-auto p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-300">{childFolders.length > 0 && `${childFolders.length} โฟลเดอร์ · `}{folderFiles.length} ไฟล์ · สูงสุด 5 MB ต่อไฟล์</p>
+            <p className="text-sm text-slate-300">{childFolders.length > 0 && `${childFolders.length} โฟลเดอร์ · `}{folderFiles.length} ไฟล์</p>
             {canManage && <div className="flex gap-2">
               <button type="button" disabled={busy} onClick={() => setNewFolderName('')}
                 className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-bold hover:bg-slate-800 disabled:opacity-60">
@@ -171,7 +184,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
               </button>
               <button type="button" disabled={busy} onClick={() => { setReplaceId(null); fileInput.current?.click(); }}
                 className="flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-60">
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} เพิ่มไฟล์
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {progress === null ? 'เพิ่มไฟล์' : `กำลังอัปโหลด ${progress}%`}
               </button>
             </div>}
             <input ref={fileInput} type="file" className="hidden" onChange={onChooseFile} />
@@ -226,7 +239,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
                         className="min-w-0 flex-1 rounded border border-sky-500 bg-slate-950 px-2 py-1 text-sm" />
                       <button type="button" onClick={() => rename(item)} disabled={busy} className="text-sm font-bold text-sky-300">บันทึก</button>
                     </div> : <p className="break-all text-sm font-semibold">{item.name}</p>}
-                    <p className="mt-1 text-xs text-slate-300">{(item.size / 1024).toFixed(1)} KB · แก้ไข {formatDate(item.updatedAt)}</p>
+                    <p className="mt-1 text-xs text-slate-300">{formatSize(item.size)} · แก้ไข {formatDate(item.updatedAt)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
