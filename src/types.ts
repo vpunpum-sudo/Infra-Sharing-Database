@@ -93,6 +93,7 @@ export type DesignApproval = {
 export type Project = {
   id: string;
   name: string;
+  routeCode?: string;
   uid: string;
   createdAt?: string;
   owner?: CoreOwner;

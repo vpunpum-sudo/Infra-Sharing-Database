@@ -27,6 +27,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const [filesModalProject, setFilesModalProject] = useState<Project | null>(null);
   const [legacyCreatedDates, setLegacyCreatedDates] = useState<Record<string, string>>({});
   const [projectNameInput, setProjectNameInput] = useState('');
+  const [routeCodeInput, setRouteCodeInput] = useState('');
   const [projectOwnersInput, setProjectOwnersInput] = useState<CoreOwner[]>(['ITEL']);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
@@ -169,6 +170,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
         const path = `projects/${editingProjectId}`;
         await setDoc(doc(db, path), { 
           name: projectNameInput.trim(), 
+          routeCode: routeCodeInput.trim(),
           owners: projectOwnersInput,
           owner: projectOwnersInput[0] || 'ITEL'
         }, { merge: true });
@@ -178,6 +180,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
         const newProject: Project = { 
           id: uuidv4(), 
           name: projectNameInput.trim(), 
+          ...(routeCodeInput.trim() ? { routeCode: routeCodeInput.trim() } : {}),
           uid: user.uid, 
           createdAt: new Date().toISOString(),
           owners: projectOwnersInput,
@@ -190,6 +193,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       }
       
       setProjectNameInput('');
+      setRouteCodeInput('');
       setEditingProjectId(null);
       setProjectModalOpen(false);
       
@@ -228,6 +232,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
     e.stopPropagation();
     setEditingProjectId(project.id);
     setProjectNameInput(project.name);
+    setRouteCodeInput(project.routeCode || '');
     const existingOwners: CoreOwner[] = (project.owners && project.owners.length > 0 
       ? project.owners 
       : (project.owner ? [project.owner] : ['ITEL'])) as CoreOwner[];
@@ -238,6 +243,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const openCreateModal = () => {
     setEditingProjectId(null);
     setProjectNameInput('');
+    setRouteCodeInput('');
     if (appUser?.role === 'Design') {
       const defaultOwners: CoreOwner[] = appUser.owner && appUser.owner !== 'None' ? [appUser.owner] : ['ITEL', 'SYMC', 'UIH'];
       setProjectOwnersInput(defaultOwners);
@@ -262,7 +268,8 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   };
 
   const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(query) || (p.routeCode || '').toLowerCase().includes(query);
     const projectOwners = p.owners || (p.owner ? [p.owner] : []);
     const matchesOwner = selectedOwnerFilter === 'All' || projectOwners.includes(selectedOwnerFilter);
     return matchesSearch && matchesOwner;
@@ -426,7 +433,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input 
                   type="text"
-                  placeholder="ค้นหาชื่อโครงการ..." aria-label="ค้นหาชื่อโครงการ"
+                  placeholder="ค้นหาชื่อโครงการหรือรหัสเส้นทาง..." aria-label="ค้นหาชื่อโครงการหรือรหัสเส้นทาง"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-slate-950/80 border border-slate-700/80 pl-10 pr-4 py-2.5 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all font-medium"
@@ -512,6 +519,11 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                               <h3 className="text-base font-bold text-white tracking-tight group-hover:text-brand-300 transition-colors font-display break-words">
                                 {project.name}
                               </h3>
+                              {project.routeCode && (
+                                <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-slate-800/80 text-slate-300 border border-slate-700/80 rounded-full" title="รหัสเส้นทาง">
+                                  {project.routeCode}
+                                </span>
+                              )}
                               {project.uid === user.uid && (
                                 <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
                                   คุณเป็นผู้สร้าง
@@ -719,6 +731,20 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="w-full bg-slate-950/80 border border-slate-700 p-3 rounded-xl text-white text-sm focus:border-brand-500 focus:outline-none transition-colors"
                     value={projectNameInput}
                     onChange={e => setProjectNameInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveProject()}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="project-route-code" className="block text-xs font-semibold text-slate-300 mb-2">รหัสเส้นทาง <span className="font-normal text-slate-500">(ไม่บังคับ)</span></label>
+                  <input
+                    id="project-route-code"
+                    type="text"
+                    maxLength={50}
+                    placeholder="เช่น BKK-R4-01"
+                    className="w-full bg-slate-950/80 border border-slate-700 p-3 rounded-xl text-white text-sm focus:border-brand-500 focus:outline-none transition-colors"
+                    value={routeCodeInput}
+                    onChange={e => setRouteCodeInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSaveProject()}
                   />
                 </div>
