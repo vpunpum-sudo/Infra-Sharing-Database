@@ -99,6 +99,12 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         ...keepTogether.flatMap(range => [range.start, range.end]),
         ...Array.from(slide.querySelectorAll('table')).map(table => pixelRange(table).end)
       ])).filter(position => position > 0 && position < canvas.height).sort((a, b) => a - b);
+      // Bottom of the last real content (text, image, drawing). Anything below it
+      // is padding or a container's closing border and never earns its own page.
+      const contentEnd = Array.from(slide.querySelectorAll<HTMLElement>('*'))
+        .filter(element => ['IMG', 'SVG', 'svg', 'CANVAS'].includes(element.tagName) ||
+          Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()))
+        .reduce((end, element) => Math.max(end, pixelRange(element).end), 0) || canvas.height;
       const pageStarts = Array.from(slide.querySelectorAll('.pdf-start-page'))
         .map(element => pixelRange(element).start)
         .filter(position => position > 0 && position < canvas.height)
@@ -118,7 +124,16 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         const nextPageStart = pageStarts.find(position => position > top + 2 && position <= top + contentCapacity);
         const limit = Math.min(canvas.height, top + contentCapacity, nextPageStart ?? canvas.height);
         let bottom = limit;
-        if (limit < canvas.height && limit !== nextPageStart) {
+        // All remaining content fits here: take the blank tail along instead of
+        // starting a page for it (shrinking slightly if needed, or cropping a
+        // long empty tail).
+        const restIsBlank = limit < canvas.height && !nextPageStart && contentEnd <= limit + 2;
+        if (restIsBlank) {
+          bottom = canvas.height - limit <= contentCapacity * 0.15
+            ? canvas.height
+            : Math.min(canvas.height, Math.max(limit, contentEnd + Math.round(12 * pixelsPerCssPixel)));
+          if (bottom < canvas.height && bottom - top > contentCapacity) bottom = limit;
+        } else if (limit < canvas.height && limit !== nextPageStart) {
           const crossing = keepTogether
             .filter(range => range.start > top + 2 && range.start < limit - 2 &&
               range.end > limit + 2 && range.end - range.start <= contentCapacity)
@@ -152,9 +167,14 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
 
         if (!isFirstPage) pdf.addPage();
         isFirstPage = false;
-        pdf.addImage(slice.toDataURL('image/png'), 'PNG', MARGIN_MM, MARGIN_MM,
-          availableWidth, slice.height * availableWidth / canvas.width);
-        top = bottom;
+        // A page that took its blank tail along may be a little taller than the
+        // page; scale it down to fit instead of clipping.
+        const heightMm = slice.height * availableWidth / canvas.width;
+        const fit = Math.min(1, availableHeight / heightMm);
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', MARGIN_MM + availableWidth * (1 - fit) / 2, MARGIN_MM,
+          availableWidth * fit, heightMm * fit);
+        // Once only blank space is left, the slide is done.
+        top = restIsBlank ? canvas.height : bottom;
       }
     }
 
