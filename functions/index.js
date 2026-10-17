@@ -23,18 +23,18 @@ exports.getProjectCreatedDates = projectFiles.getProjectCreatedDates;
 exports.cleanupProjectFiles = onDocumentDeleted({
   document: 'projects/{projectId}', database: DATABASE_ID, region: 'asia-southeast1', retry: true
 }, async event => {
-  const files = getFirestore(DATABASE_ID).collection('projects').doc(event.params.projectId).collection('files');
+  const db = getFirestore(DATABASE_ID);
+  const project = db.collection('projects').doc(event.params.projectId);
   const bucket = getStorage().bucket('gen-lang-client-0942355314.firebasestorage.app');
-  const snapshot = await files.get();
-  for (const fileDoc of snapshot.docs) {
+  // Stored files first: their documents hold the Storage paths.
+  const files = await project.collection('files').get();
+  for (const fileDoc of files.docs) {
     const path = fileDoc.data().storagePath;
     if (path) await bucket.file(path).delete({ ignoreNotFound: true });
-    await fileDoc.ref.delete();
   }
-  for (const name of ['folders', 'schedule', 'scheduleLogs']) {
-    const children = await files.parent.collection(name).get();
-    for (const child of children.docs) await child.ref.delete();
-  }
+  // Then every subcollection the project had (routes, enclosures, loops,
+  // files, folders, schedule, ...), including ones added later.
+  await db.recursiveDelete(project);
 });
 
 async function claimDelivery(db, id, details) {
