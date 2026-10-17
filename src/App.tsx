@@ -2730,7 +2730,11 @@ export default function App() {
               if (userDoc.id !== currentUser.uid) {
                 try {
                   console.log("Migrating user doc to UID-based ID");
-                  await setDoc(doc(db, 'users', currentUser.uid), { ...userData, id: currentUser.uid });
+                  // preauthId lets the rules check this copies the Admin's pre-authorized profile.
+                  await setDoc(doc(db, 'users', currentUser.uid), {
+                    ...userData, id: currentUser.uid,
+                    ...(userDoc.id.startsWith('preauth_') ? { preauthId: userDoc.id } : {})
+                  });
                 } catch (migrationError: any) {
                   console.error("Migration error:", migrationError);
                 }
