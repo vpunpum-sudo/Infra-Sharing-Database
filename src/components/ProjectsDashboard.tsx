@@ -6,7 +6,7 @@ import { db, functions, logout, handleFirestoreError, OperationType } from '../f
 import { Project, User as AppUser, CoreOwner, ProjectStatus } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
-import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
@@ -39,6 +39,20 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const navigate = useNavigate();
 
   const userPermissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const displayName = appUser?.displayName || user.email?.split('@')[0];
+  const navItems = [
+    ...(userPermissions.viewUsers ? [{ label: 'Users', title: 'User Management', path: '/user-management', icon: Users, color: 'text-brand-400' }] : []),
+    ...(appUser?.role === 'Admin' ? [
+      { label: 'Logs', title: 'System Logs', path: '/logs', icon: Activity, color: 'text-amber-400' },
+      { label: 'Permissions', title: 'Permissions', path: '/permission-management', icon: Shield, color: 'text-emerald-400' }
+    ] : []),
+    ...(userPermissions.viewSettings ? [
+      { label: 'Owner Logos', title: 'จัดการรูปภาพ Logo ของแต่ละ Owner', path: '/settings', icon: ImageIcon, color: 'text-pink-400' },
+      { label: 'Settings', title: 'System Settings', path: '/settings', icon: SlidersHorizontal, color: 'text-sky-400' }
+    ] : []),
+    { label: 'Manual (PDF)', title: 'System Manual (Presentation & PDF)', path: '/manual', icon: FileText, color: 'text-brand-400', primary: true }
+  ];
   const missingCreatedDateIds = projects.filter(project => !project.createdAt).map(project => project.id).sort().join('|');
 
   useEffect(() => {
@@ -261,94 +275,45 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       <div className="fixed top-[40%] left-[30%] w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[160px] pointer-events-none"></div>
 
       {/* Modern Top Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-2xl border-b border-slate-800/80 px-6 py-4 flex justify-between items-center transition-all">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
+      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-3 transition-all">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
             <Layers className="text-white w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
-              <span className="px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
+              <h1 className="truncate text-base sm:text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
+              <span className="hidden sm:inline px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">Telecom Optical Infrastructure Manager</p>
+            <p className="hidden sm:block text-xs text-slate-400 font-medium">Telecom Optical Infrastructure Manager</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {userPermissions.viewUsers && (
-            <button 
-              onClick={() => navigate('/user-management')}
-              className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-              title="User Management"
-            >
-              <Users className="w-3.5 h-3.5 text-brand-400" />
-              <span className="hidden sm:inline">Users</span>
-            </button>
-          )}
-
-          {appUser?.role === 'Admin' && (
-            <>
-              <button 
-                onClick={() => navigate('/logs')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="System Logs"
-              >
-                <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Logs</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Desktop: one button per destination */}
+          <nav aria-label="เมนูหลัก" className="hidden lg:flex items-center gap-1.5">
+            {navItems.map(item => (
+              <button key={item.label} type="button" onClick={() => navigate(item.path)} title={item.title}
+                className={item.primary
+                  ? 'px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm'
+                  : 'px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700'}>
+                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                {item.label}
               </button>
-              <button 
-                onClick={() => navigate('/permission-management')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="Permissions"
-              >
-                <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Permissions</span>
-              </button>
-            </>
-          )}
-
-          {userPermissions.viewSettings && (
-            <>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="จัดการรูปภาพ Logo ของแต่ละ Owner"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
-                <span className="hidden sm:inline">Owner Logos</span>
-              </button>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
-                title="System Settings"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
-                <span className="hidden sm:inline">Settings</span>
-              </button>
-            </>
-          )}
-
-          <button 
-            onClick={() => navigate('/manual')}
-            className="px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
-            title="System Manual (Presentation & PDF)"
-          >
-            <FileText className="w-3.5 h-3.5 text-brand-400" />
-            <span className="hidden sm:inline">Manual (PDF)</span>
-          </button>
+            ))}
+          </nav>
 
           <ThemeToggle />
 
-          <div className="h-5 w-px bg-slate-800 mx-1 hidden md:block"></div>
+          <div className="h-5 w-px bg-slate-800 mx-1 hidden lg:block"></div>
 
-          <div 
-            className="hidden md:flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 pl-2.5 pr-2 py-1 rounded-xl cursor-pointer transition-all group"
+          <button type="button"
+            className="hidden lg:flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 pl-2.5 pr-2 py-1 rounded-xl transition-all group"
             onClick={() => navigate('/profile')}
             title="Profile Settings"
           >
             <div className="flex flex-col items-end">
-              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{appUser?.displayName || user.email?.split('@')[0]}</span>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{displayName}</span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-xs text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
@@ -356,20 +321,52 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             </div>
             <div className="w-7 h-7 bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all overflow-hidden border border-slate-600">
               {appUser?.photoURL ? (
-                <img src={appUser.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={appUser.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <UserIcon size={14} />
               )}
             </div>
-          </div>
+          </button>
 
-          <button 
-            onClick={logout} 
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20" 
-            title="Logout"
+          <button type="button"
+            onClick={logout}
+            className="hidden lg:block p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20"
+            title="Logout" aria-label="Logout"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
+
+          {/* Phones and tablets: everything moves into one menu */}
+          <div className="relative lg:hidden">
+            <button type="button" onClick={() => setMenuOpen(open => !open)} aria-expanded={menuOpen} aria-controls="dashboard-menu"
+              aria-label="เปิดเมนู" className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700/60">
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            {menuOpen && <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+              <div id="dashboard-menu" role="menu"
+                className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate('/profile'); }}
+                  className="flex w-full items-center gap-3 border-b border-slate-800 px-4 py-3 text-left hover:bg-slate-800">
+                  <UserIcon className="w-4 h-4 text-slate-300" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-slate-100">{displayName}</span>
+                    <span className="block text-xs text-slate-400">{appUser?.role || 'Viewer'}</span>
+                  </span>
+                </button>
+                {navItems.map(item => (
+                  <button key={item.label} type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate(item.path); }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800">
+                    <item.icon className={`w-4 h-4 ${item.color}`} /> {item.label}
+                  </button>
+                ))}
+                <button type="button" role="menuitem" onClick={logout}
+                  className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm font-semibold text-rose-300 hover:bg-rose-500/10">
+                  <LogOut className="w-4 h-4" /> Logout
+                </button>
+              </div>
+            </>}
+          </div>
         </div>
       </header>
 

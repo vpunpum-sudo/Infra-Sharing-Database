@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useToast } from './Toast';
 import { UserRole, Feature, RolePermissions } from '../types';
 import { DEFAULT_PERMISSIONS } from '../constants';
 import { Shield, Save, CheckCircle2, Circle } from 'lucide-react';
@@ -88,6 +89,7 @@ const FEATURE_CATEGORIES = [
 ];
 
 export const PermissionManager: React.FC = () => {
+  const notify = useToast();
   const [permissions, setPermissions] = useState<RolePermissions>(DEFAULT_PERMISSIONS);
   const roles: UserRole[] = ['Admin', 'Design', 'Viewer', 'Sub-contract'];
 
@@ -118,7 +120,7 @@ export const PermissionManager: React.FC = () => {
   const handleSave = async () => {
     console.log('Saving permissions:', permissions);
     await logActivity('update_permissions', 'Updated role permissions', { permissions });
-    alert('Permissions saved successfully!');
+    notify('Permissions saved successfully!');
   };
 
   return (

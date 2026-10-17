@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useConfirm } from './ConfirmModal';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, Upload, X } from 'lucide-react';
@@ -49,6 +50,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   const [replaceId, setReplaceId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const notify = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, `projects/${project.id}/files`), snapshot => {
@@ -157,12 +159,12 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   }
 
   async function removeFolder(folder: ProjectFolder) {
-    if (!window.confirm(`ลบโฟลเดอร์ “${folder.name}”? (ลบได้เฉพาะโฟลเดอร์ว่าง)`)) return;
+    if (!(await confirm({ title: 'ลบโฟลเดอร์?', message: `“${folder.name}” จะถูกลบ (ลบได้เฉพาะโฟลเดอร์ว่าง)` }))) return;
     await run('deleteFolder', { folderId: folder.id }, 'ลบโฟลเดอร์แล้ว');
   }
 
   async function remove(item: ProjectFile) {
-    if (!window.confirm(`ลบไฟล์ “${item.name}” ออกจากโครงการ?`)) return;
+    if (!(await confirm({ title: 'ลบไฟล์?', message: `“${item.name}” จะถูกลบออกจากโครงการ และกู้คืนไม่ได้` }))) return;
     await run('delete', { fileId: item.id }, 'ลบไฟล์แล้ว');
   }
 
