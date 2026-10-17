@@ -99,6 +99,30 @@ service cloud.firestore {
            ('owner' in projectData && getUserData().owner == projectData.owner)));
     }
 
+    // A role permission as saved by Admins in rolePermissions/{role}, or the
+    // built-in default when the role has never been saved.
+    function roleAllows(key, defaultRoles) {
+      let role = getUserData().role;
+      let saved = /databases/$(database)/documents/rolePermissions/$(role);
+      return exists(saved) ? get(saved).data.permissions.get(key, role in defaultRoles) : role in defaultRoles;
+    }
+
+    function canCreateProject() {
+      return isAdmin() || (userExists() && getUserData().get('isApproved', false) == true &&
+        roleAllows('createProjects', ['Admin', 'Planning', 'Design']));
+    }
+
+    // First sign-in of an Admin-pre-authorized account: the new users/{uid}
+    // document copies the preauth_ document with the same email.
+    function copiesPreauthorizedProfile(data) {
+      return 'preauthId' in data && data.preauthId is string && data.preauthId.matches('preauth_[A-Za-z0-9-]+') &&
+        exists(/databases/$(database)/documents/users/$(data.preauthId)) &&
+        get(/databases/$(database)/documents/users/$(data.preauthId)).data.email == request.auth.token.email.lower() &&
+        data.role == get(/databases/$(database)/documents/users/$(data.preauthId)).data.role &&
+        data.get('owner', 'None') == get(/databases/$(database)/documents/users/$(data.preauthId)).data.get('owner', 'None') &&
+        data.get('isApproved', false) == get(/databases/$(database)/documents/users/$(data.preauthId)).data.get('isApproved', false);
+    }
+
     function canEditProject(projectData) {
       return isAdmin() || 
              (userExists() && getUserData().role in ['Design', 'Sub-contract'] && (
@@ -284,7 +308,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow list: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (request.auth.uid == userId && request.resource.data.role != 'Admin' && request.resource.data.owner == 'None'));
+      // Self sign-up starts unapproved with no operator; only Admins (or an
+      // Admin's pre-authorized profile) grant approval, a role or an operator.
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() ||
+        (request.auth.uid == userId && (
+          (request.resource.data.role != 'Admin' && request.resource.data.get('owner', 'None') == 'None' &&
+            request.resource.data.get('isApproved', false) == false) ||
+          copiesPreauthorizedProfile(request.resource.data))));
       allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
                        (isOwner(userId) && isValidUser(request.resource.data) && 
                         request.resource.data.role == resource.data.role && 
@@ -353,7 +383,7 @@ service cloud.firestore {
 
     match /projects/{projectId} {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
-      allow create: if isAuthenticated() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
+      allow create: if isAuthenticated() && canCreateProject() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
       allow update: if isAuthenticated() && (canEditProject(resource.data) || canSignApproval(resource.data)) && uidNotModified() &&
         (!isApprovalRewind() || hasAdminRole());
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
