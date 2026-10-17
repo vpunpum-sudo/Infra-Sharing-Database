@@ -20,7 +20,11 @@ function allApproved(signOffs, owners) {
   return owners.length > 0 && owners.every(owner => signOffs?.[owner]?.status === 'Approved');
 }
 
-function notificationForTransition(before, after) {
+// The completion email waits this long for the signed documents (see index.js).
+const FINAL_DOCUMENTS_WAIT_MS = 170 * 1000;
+
+/** `changedAt` is when this update happened (the event time), used to spot signed documents saved too late for the completion email. */
+function notificationForTransition(before, after, changedAt) {
   const approval = after?.designApproval;
   if (!approval?.id || !approval?.documentNumber) return null;
   const owners = participatingOwners(after);
@@ -45,6 +49,13 @@ function notificationForTransition(before, after) {
       allApproved(approval.planningSignOffs, owners) &&
       allApproved(approval.omSignOffs, owners)) {
     kind = 'approval-completed';
+    roles = ['Design', 'Planning', 'Management'];
+  } else if (stage === 'Completed' && after.status === 'Approved' &&
+      previous?.id === approval.id && previous.approvalStage === 'Completed' &&
+      !previous.finalDocuments && approval.finalDocuments &&
+      Date.parse(changedAt) - Date.parse(approval.finalApprovedAt) > FINAL_DOCUMENTS_WAIT_MS) {
+    // Saved after the completion email went out without them: send them now.
+    kind = 'final-documents';
     roles = ['Design', 'Planning', 'Management'];
   } else {
     return null;
@@ -88,9 +99,15 @@ function notificationRecipients(users, notification) {
   return [...emails].sort();
 }
 
-function deliveryId(projectId, notification, email) {
+/**
+ * One delivery per recipient per triggering change. `eventId` is the Firestore
+ * event id: retries of the same change reuse it (no duplicate mail), while a
+ * later identical transition, e.g. completing again after an Admin rewind on
+ * the same approval, is a new event and is delivered again.
+ */
+function deliveryId(projectId, notification, email, eventId = '') {
   return createHash('sha256').update(JSON.stringify([
-    projectId, notification.approvalId, notification.kind, email
+    projectId, notification.approvalId, notification.kind, email, eventId
   ])).digest('hex');
 }
 
@@ -114,6 +131,13 @@ const KIND_COPY = {
     intro: 'Planning ของทุก Operator อนุมัติครบแล้ว เอกสารรอการพิจารณาลงนามจาก Management',
     action: 'ตรวจสอบและอนุมัติเอกสาร',
     accent: '#2563eb'
+  },
+  'final-documents': {
+    description: 'เอกสารอนุมัติฉบับลงนามครบ',
+    stage: 'อนุมัติครบทุกขั้น',
+    intro: 'ส่งเอกสารขออนุมัติฉบับลงนามครบ (PDF) และไฟล์แผนที่ (KMZ) ของโครงการที่ได้รับอนุมัติแล้ว',
+    action: 'เปิดดูโครงการ',
+    accent: '#059669'
   },
   'approval-completed': {
     description: 'Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย',

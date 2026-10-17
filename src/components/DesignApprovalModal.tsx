@@ -2370,8 +2370,8 @@ export function DesignApprovalModal({
               ) : (
                 <button type="button" onClick={createFinalDocuments}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300"
-                  title="สร้าง PDF ฉบับลงนามครบและ KMZ แล้วบันทึกในไฟล์โครงการ">
-                  <FileText size={13} /> {finalDocumentsState === 'error' ? 'สร้างเอกสารไม่สำเร็จ ลองใหม่' : 'สร้างเอกสารฉบับลงนามครบ'}
+                  title="สร้าง PDF ฉบับลงนามครบและ KMZ บันทึกในไฟล์โครงการ แล้วส่งอีเมลแนบไฟล์ให้ผู้เกี่ยวข้อง">
+                  <FileText size={13} /> {finalDocumentsState === 'error' ? 'สร้างเอกสารไม่สำเร็จ ลองใหม่' : 'สร้างและส่งเอกสารฉบับลงนามครบ'}
                 </button>
               )
             )}
