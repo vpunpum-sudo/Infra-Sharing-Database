@@ -1114,3 +1114,36 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
   background-color: rgba(245, 158, 11, 0.22) !important;
   border-color: rgba(251, 191, 36, 0.5) !important;
 }
+
+/* Project card footer actions. Own classes rather than colour utilities, so
+   the light-theme !important colour overrides don't flatten hover/press. */
+.card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  color: #7dd3fc;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.card-action:hover { background-color: rgba(14, 165, 233, 0.15); color: #e0f2fe; }
+.card-action:active { transform: scale(0.95); background-color: rgba(14, 165, 233, 0.28); }
+.card-action:disabled { cursor: wait; opacity: 0.7; transform: none; }
+.card-action-primary { border-color: rgba(14, 165, 233, 0.45); color: #38bdf8; }
+.group:hover .card-action-primary { border-color: rgba(56, 189, 248, 0.8); }
+.card-action-primary:hover { background-color: #0284c7; border-color: #0284c7; color: #ffffff; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35); }
+.card-action-primary:active { background-color: #0369a1; }
+.card-action-arrow { transition: transform 0.15s; }
+.group:hover .card-action-arrow { transform: translate(2px, -2px); }
+
+.light-theme #root .card-action { color: #0369a1 !important; }
+.light-theme #root .card-action:hover { background-color: #e0f2fe !important; color: #075985 !important; }
+.light-theme #root .card-action:active { background-color: #bae6fd !important; }
+.light-theme #root .card-action-primary { border-color: #7dd3fc !important; }
+.light-theme #root .card-action-primary:hover { background-color: #0284c7 !important; border-color: #0284c7 !important; color: #ffffff !important; }
+.light-theme #root .card-action-primary:active { background-color: #0369a1 !important; }
+.light-theme #root .card-action-primary:hover svg { color: #ffffff !important; }

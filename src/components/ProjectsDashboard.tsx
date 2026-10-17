@@ -3,10 +3,12 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, or } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, logout, handleFirestoreError, OperationType } from '../firebase';
-import { Project, User as AppUser, CoreOwner, ProjectStatus } from '../types';
+import { Project, User as AppUser, CoreOwner, ProjectStatus, Route, FiberEnclosure, FiberLoop } from '../types';
+import { buildProjectKml, kmlFileName } from '../utils/kml';
+import { useToast } from './Toast';
 import { getRolePermissions, useRolePermissions } from '../services/rolePermissionsStore';
 import { v4 as uuidv4 } from 'uuid';
-import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu } from 'lucide-react';
+import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu, Download, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
@@ -42,6 +44,37 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   useRolePermissions();
   const userPermissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
   const [menuOpen, setMenuOpen] = useState(false);
+  const [exportingKmlId, setExportingKmlId] = useState<string | null>(null);
+  const notify = useToast();
+  const cardActionClass = 'card-action';
+
+  const exportKml = async (project: Project) => {
+    setExportingKmlId(project.id);
+    try {
+      const read = async <T,>(name: string) =>
+        (await getDocs(collection(db, `projects/${project.id}/${name}`))).docs.map(item => item.data() as T);
+      const [routes, enclosures, loops] = await Promise.all([
+        read<Route>('routes'), read<FiberEnclosure>('enclosures'), read<FiberLoop>('loops')
+      ]);
+      if (!routes.length && !enclosures.length && !loops.length) {
+        notify('โครงการนี้ยังไม่มีเส้นทางหรือจุดบนแผนที่', 'info');
+        return;
+      }
+      const blob = new Blob([buildProjectKml({ project, routes, enclosures, loops })], { type: 'application/vnd.google-earth.kml+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = kmlFileName(project);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      notify(`ดาวน์โหลด ${link.download} แล้ว`);
+    } catch (error) {
+      console.error('KML export failed', error);
+      notify('Export KML ไม่สำเร็จ กรุณาลองใหม่', 'error');
+    } finally {
+      setExportingKmlId(null);
+    }
+  };
   const displayName = appUser?.displayName || user.email?.split('@')[0];
   const navItems = [
     ...(userPermissions.viewUsers ? [{ label: 'ผู้ใช้งาน', title: 'จัดการผู้ใช้งาน', path: '/user-management', icon: Users, color: 'text-brand-400' }] : []),
@@ -659,14 +692,22 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse"></span>
                           <span className="text-xs font-semibold text-slate-300">พร้อมใช้งาน</span>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {canAccessFiles && <button type="button" onClick={event => { event.stopPropagation(); setFilesModalProject(project); }}
-                            className="flex items-center gap-1 text-xs font-bold text-sky-300 hover:text-sky-200">
+                            className={cardActionClass}>
                             <Folder size={14} /> ไฟล์โครงการ
                           </button>}
-                          <span className="text-xs font-bold text-brand-400 group-hover:text-brand-300 flex items-center gap-1">
-                            เปิดแผนที่ <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                          </span>
+                          {userPermissions.viewMap && <button type="button" disabled={exportingKmlId === project.id}
+                            onClick={event => { event.stopPropagation(); exportKml(project); }}
+                            title="ดาวน์โหลดเส้นทาง Enclosure และ Fiber Loop เป็นไฟล์ KML สำหรับ Google Earth"
+                            className={cardActionClass}>
+                            {exportingKmlId === project.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                            {exportingKmlId === project.id ? 'กำลังสร้างไฟล์...' : 'Export KML'}
+                          </button>}
+                          {userPermissions.viewMap && <button type="button" onClick={event => { event.stopPropagation(); navigate(`/project/${project.id}`); }}
+                            className="card-action card-action-primary">
+                            เปิดแผนที่ <ArrowUpRight size={14} className="card-action-arrow" />
+                          </button>}
                         </div>
                       </div>
                     </motion.div>
