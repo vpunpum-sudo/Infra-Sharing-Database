@@ -94,10 +94,25 @@ export type Project = {
   id: string;
   name: string;
   uid: string;
+  createdAt?: string;
   owner?: CoreOwner;
   owners?: CoreOwner[];
   status?: ProjectStatus;
   designApproval?: DesignApproval;
+  approvalDraft?: Pick<DesignApproval, 'designNotes' | 'contractorName' | 'contractorContact' |
+    'contractorPhone' | 'contractorPoNumber' | 'contractorScope' |
+    'totalOperationDistanceKm' | 'estimatedInstallationDate' | 'routeEnclosureSelections'>;
+};
+
+export type ProjectFile = {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  uploadedBy: string;
+  storagePath: string;
 };
 
 export type EnclosureType = {
