@@ -64,6 +64,7 @@ interface FiberMapProps {
   onSplitRoute?: (route: Route) => void;
   onCutRoute?: (route: Route, point: Point) => void;
   onEditEnclosure?: (enclosure: FiberEnclosure) => void;
+  onEditLoop?: (loop: FiberLoop) => void;
   onEnclosureDragEnd?: (enclosure: FiberEnclosure, point: Point) => void;
   selectedRouteId?: string;
   selectedEnclosureId?: string;
@@ -78,7 +79,8 @@ interface FiberMapProps {
 
 type MapPopupData =
   | { kind: 'detail' | 'menu'; type: 'route'; data: Route; position: [number, number] }
-  | { kind: 'detail' | 'menu'; type: 'enclosure'; data: FiberEnclosure; position: [number, number] };
+  | { kind: 'detail' | 'menu'; type: 'enclosure'; data: FiberEnclosure; position: [number, number] }
+  | { kind: 'menu'; type: 'loop'; data: FiberLoop; position: [number, number] };
 
 // Reusing icon instances stops react-leaflet from rebuilding every marker element on each render.
 const enclosureIconCache = new Map<string, L.Icon>();
@@ -1320,6 +1322,7 @@ export default function FiberMap({
   onSplitRoute,
   onCutRoute,
   onEditEnclosure,
+  onEditLoop,
   onEnclosureDragEnd,
   editingEnclosureId
 }: FiberMapProps) {
@@ -1407,6 +1410,15 @@ export default function FiberMap({
     onRouteClick(route);
     setPopupData({ kind: 'menu', type: 'route', data: route, position: [e.latlng.lat, e.latlng.lng] });
     setHoveredObjectId(route.id);
+  };
+
+  const handleLoopContextMenu = (loop: FiberLoop, e: L.LeafletMouseEvent) => {
+    e.originalEvent?.preventDefault();
+    e.originalEvent?.stopPropagation();
+    if (drawingMode !== 'none') return;
+    onLoopClick?.(loop);
+    setPopupData({ kind: 'menu', type: 'loop', data: loop, position: [loop.position.lat, loop.position.lng] });
+    setHoveredObjectId(loop.id);
   };
 
   // Default center (Bangkok, Thailand)
@@ -1605,7 +1617,8 @@ export default function FiberMap({
                     click: (e) => {
                       e.originalEvent?.stopPropagation();
                       if (drawingMode === 'none') onLoopClick?.(loop);
-                    }
+                    },
+                    contextmenu: (e) => handleLoopContextMenu(loop, e)
                   }}
                 >
                   <Popup className="fiber-detail-popup light-theme" minWidth={280} maxWidth={360}>
@@ -1829,6 +1842,8 @@ export default function FiberMap({
                   onEditRoute(popupData.data);
                 } else if (popupData.type === 'enclosure' && onEditEnclosure) {
                   onEditEnclosure(popupData.data);
+                } else if (popupData.type === 'loop' && onEditLoop) {
+                  onEditLoop(popupData.data);
                 }
                 setPopupData(null);
                 setHoveredObjectId(null);
@@ -1843,12 +1858,12 @@ export default function FiberMap({
                 e.stopPropagation();
                 if (popupData.type === 'route') {
                   onOpenRouteDetail?.(popupData.data, { lat: popupData.position[0], lng: popupData.position[1] });
-                } else {
+                } else if (popupData.type === 'enclosure') {
                   onOpenEnclosureDetail?.(popupData.data);
                 }
                 setPopupData(null);
               }}
-              className="flex items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest"
+              className={`${popupData.type === 'loop' ? 'hidden' : 'flex'} items-center gap-2 px-2.5 py-1.5 text-[9px] font-black text-slate-300 hover:bg-slate-800 hover:text-brand-600 rounded-lg transition-all w-full text-left cursor-pointer uppercase tracking-widest`}
             >
               <ExternalLink className="w-3 h-3 text-brand-500" />
               <span>{popupData.type === 'route' ? 'Core details' : 'Enclosure details'}</span>
