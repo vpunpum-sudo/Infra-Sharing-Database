@@ -4,7 +4,7 @@ import {
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
   FiberLoop, EnclosureType, FiberType, ApprovalStage, FiberColorConfig 
 } from '../types';
-import { doc, setDoc, updateDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteField, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logActivity } from '../services/logService';
 import { 
@@ -154,51 +154,53 @@ export function DesignApprovalModal({
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Request form state
-  const [requestNotes, setRequestNotes] = useState('');
+  const [requestNotes, setRequestNotes] = useState(project.designApproval?.designNotes || project.approvalDraft?.designNotes || '');
   const [mapLabelMode, setMapLabelMode] = useState<'all' | 'hover' | 'code'>('hover');
-  const [contractorInput, setContractorInput] = useState(project.designApproval?.contractorName || '');
+  const [contractorInput, setContractorInput] = useState(project.designApproval?.contractorName || project.approvalDraft?.contractorName || '');
   const [contractorContactInput, setContractorContactInput] = useState(
-    project.designApproval?.contractorContact || ''
+    project.designApproval?.contractorContact || project.approvalDraft?.contractorContact || ''
   );
   const [contractorPhoneInput, setContractorPhoneInput] = useState(
-    project.designApproval?.contractorPhone || ''
+    project.designApproval?.contractorPhone || project.approvalDraft?.contractorPhone || ''
   );
   const [contractorPoInput, setContractorPoInput] = useState(
-    project.designApproval?.contractorPoNumber || ''
+    project.designApproval?.contractorPoNumber || project.approvalDraft?.contractorPoNumber || ''
   );
   const [contractorScopeInput, setContractorScopeInput] = useState(
-    project.designApproval?.contractorScope || ''
+    project.designApproval?.contractorScope || project.approvalDraft?.contractorScope || ''
   );
   const [isEditingContractor, setIsEditingContractor] = useState(false);
   const [isSavingContractor, setIsSavingContractor] = useState(false);
   const [contractorSaveSuccess, setContractorSaveSuccess] = useState(false);
   const [contractorSaveError, setContractorSaveError] = useState<string | null>(null);
-  const [operationKmInput, setOperationKmInput] = useState('');
-  const [targetInstallDate, setTargetInstallDate] = useState(project.designApproval?.estimatedInstallationDate || '');
+  const [operationKmInput, setOperationKmInput] = useState(
+    (project.designApproval?.totalOperationDistanceKm ?? project.approvalDraft?.totalOperationDistanceKm)?.toString() || ''
+  );
+  const [rewindTarget, setRewindTarget] = useState<'Draft' | 'Planning' | 'OM'>('Draft');
+  const [targetInstallDate, setTargetInstallDate] = useState(project.designApproval?.estimatedInstallationDate || project.approvalDraft?.estimatedInstallationDate || '');
 
   // Sync contractor inputs if project designApproval updates
   useEffect(() => {
     if (project?.designApproval) {
-      if (project.designApproval.contractorName) {
-        setContractorInput(project.designApproval.contractorName);
-      }
-      if (project.designApproval.contractorContact !== undefined) {
-        setContractorContactInput(project.designApproval.contractorContact || '');
-      }
-      if (project.designApproval.contractorPhone !== undefined) {
-        setContractorPhoneInput(project.designApproval.contractorPhone || '');
-      }
-      if (project.designApproval.contractorPoNumber !== undefined) {
-        setContractorPoInput(project.designApproval.contractorPoNumber || '');
-      }
-      if (project.designApproval.contractorScope !== undefined) {
-        setContractorScopeInput(project.designApproval.contractorScope || '');
-      }
-      if (project.designApproval.estimatedInstallationDate) {
-        setTargetInstallDate(project.designApproval.estimatedInstallationDate);
-      }
+      setRequestNotes(project.designApproval.designNotes || '');
+      setOperationKmInput(project.designApproval.totalOperationDistanceKm?.toString() || '');
+      setContractorInput(project.designApproval.contractorName || '');
+      setContractorContactInput(project.designApproval.contractorContact || '');
+      setContractorPhoneInput(project.designApproval.contractorPhone || '');
+      setContractorPoInput(project.designApproval.contractorPoNumber || '');
+      setContractorScopeInput(project.designApproval.contractorScope || '');
+      setTargetInstallDate(project.designApproval.estimatedInstallationDate || '');
+    } else if (project.approvalDraft) {
+      setRequestNotes(project.approvalDraft.designNotes || '');
+      setContractorInput(project.approvalDraft.contractorName || '');
+      setContractorContactInput(project.approvalDraft.contractorContact || '');
+      setContractorPhoneInput(project.approvalDraft.contractorPhone || '');
+      setContractorPoInput(project.approvalDraft.contractorPoNumber || '');
+      setContractorScopeInput(project.approvalDraft.contractorScope || '');
+      setOperationKmInput(project.approvalDraft.totalOperationDistanceKm?.toString() || '');
+      setTargetInstallDate(project.approvalDraft.estimatedInstallationDate || '');
     }
-  }, [project?.designApproval]);
+  }, [project?.designApproval, project.approvalDraft]);
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -213,10 +215,9 @@ export function DesignApprovalModal({
   const [previewingFiberImage, setPreviewingFiberImage] = useState<{ url: string; name: string; cores: number } | null>(null);
 
   useEffect(() => {
-    if (project?.designApproval?.routeEnclosureSelections) {
-      setRouteEnclosureSelections(project.designApproval.routeEnclosureSelections);
-    }
-  }, [project?.designApproval?.routeEnclosureSelections]);
+    setRouteEnclosureSelections(project.designApproval?.routeEnclosureSelections ||
+      project.approvalDraft?.routeEnclosureSelections || {});
+  }, [project.designApproval?.routeEnclosureSelections, project.approvalDraft?.routeEnclosureSelections]);
 
   const handleToggleEnclosureForRoute = async (routeId: string, encId: string) => {
     const currentList = getRouteEnclosures(routeId).map(e => e.id);
@@ -234,21 +235,13 @@ export function DesignApprovalModal({
 
     if (project?.id) {
       try {
-        await setDoc(doc(db, `projects/${project.id}`), {
-          designApproval: {
-            ...(project.designApproval || {}),
-            routeEnclosureSelections: updatedMap
-          }
-        }, { merge: true });
-        if (onProjectUpdated) {
-          onProjectUpdated({
-            ...project,
-            designApproval: {
-              ...(project.designApproval as DesignApproval),
-              routeEnclosureSelections: updatedMap
-            }
-          });
-        }
+        const updatedProject: Project = project.designApproval
+          ? { ...project, designApproval: { ...project.designApproval, routeEnclosureSelections: updatedMap } }
+          : { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
+        await setDoc(doc(db, `projects/${project.id}`), project.designApproval
+          ? { designApproval: updatedProject.designApproval }
+          : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
+        onProjectUpdated?.(updatedProject);
       } catch (err) {
         console.warn("Could not save routeEnclosureSelections:", err);
       }
@@ -262,21 +255,13 @@ export function DesignApprovalModal({
 
     if (project?.id) {
       try {
-        await setDoc(doc(db, `projects/${project.id}`), {
-          designApproval: {
-            ...(project.designApproval || {}),
-            routeEnclosureSelections: updatedMap
-          }
-        }, { merge: true });
-        if (onProjectUpdated) {
-          onProjectUpdated({
-            ...project,
-            designApproval: {
-              ...(project.designApproval as DesignApproval),
-              routeEnclosureSelections: updatedMap
-            }
-          });
-        }
+        const updatedProject: Project = project.designApproval
+          ? { ...project, designApproval: { ...project.designApproval, routeEnclosureSelections: updatedMap } }
+          : { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
+        await setDoc(doc(db, `projects/${project.id}`), project.designApproval
+          ? { designApproval: updatedProject.designApproval }
+          : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
+        onProjectUpdated?.(updatedProject);
       } catch (err) {
         console.warn("Could not reset routeEnclosureSelections:", err);
       }
@@ -376,6 +361,7 @@ export function DesignApprovalModal({
     project.status === 'Approved' ? 'Completed' :
     project.status === 'Pending Approval' ? 'Planning' : 'Planning'
   );
+  useEffect(() => setRewindTarget('Draft'), [currentStage, project.id]);
 
   const planningSignOffs = designApproval?.planningSignOffs || {};
   const omSignOffs = designApproval?.omSignOffs || {};
@@ -1057,6 +1043,11 @@ export function DesignApprovalModal({
   };
 
   const totalLengthKm = fiberRouteTotals.distanceKm;
+  useEffect(() => {
+    if (project.designApproval?.totalOperationDistanceKm == null && project.approvalDraft?.totalOperationDistanceKm == null) {
+      setOperationKmInput(current => current || totalLengthKm);
+    }
+  }, [project.id, project.designApproval?.totalOperationDistanceKm, project.approvalDraft?.totalOperationDistanceKm, totalLengthKm]);
 
   // Canvas drawing listeners
   useEffect(() => {
@@ -1184,32 +1175,51 @@ export function DesignApprovalModal({
   const canCorrectSignOff = () => appUser?.role === 'Admin';
 
   const handleRewindApproval = async () => {
-    if (appUser?.role !== 'Admin' || !project.designApproval ||
-        (currentStage !== 'OM' && currentStage !== 'Completed')) return;
-    const nextStage: ApprovalStage = currentStage === 'Completed' ? 'OM' : 'Planning';
-    if (!window.confirm(`ถอยขั้นตอนอนุมัติกลับไป ${nextStage} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่?`)) return;
+    if (appUser?.role !== 'Admin' || !project.designApproval) return;
+    const allowedTargets = currentStage === 'Completed' ? ['Draft', 'Planning', 'OM']
+      : currentStage === 'OM' ? ['Draft', 'Planning']
+      : currentStage === 'Rejected' ? ['Draft', 'Planning']
+      : ['Draft'];
+    if (!allowedTargets.includes(rewindTarget)) return;
+    const targetLabel = rewindTarget === 'Draft' ? 'ก่อนส่งขออนุมัติ' : rewindTarget;
+    if (!window.confirm(`ถอยขั้นตอนอนุมัติไป ${targetLabel} และล้างลายเซ็นของขั้นตอนที่ต้องอนุมัติใหม่?`)) return;
 
     const pendingSignOffs = (level: 'Planning' | 'OM') =>
       Object.fromEntries(participatingOwners.map(owner => [owner, { owner, level, status: 'Pending' as const }]));
     const { finalApprovedAt, finalApprovedBy, ...previousApproval } = project.designApproval;
-    const updatedApproval: DesignApproval = {
+    const approvalDraft: NonNullable<Project['approvalDraft']> = {
+      designNotes: previousApproval.designNotes || '',
+      contractorName: previousApproval.contractorName || '',
+      contractorContact: previousApproval.contractorContact || '',
+      contractorPhone: previousApproval.contractorPhone || '',
+      contractorPoNumber: previousApproval.contractorPoNumber || '',
+      contractorScope: previousApproval.contractorScope || '',
+      estimatedInstallationDate: previousApproval.estimatedInstallationDate || '',
+      routeEnclosureSelections: previousApproval.routeEnclosureSelections || {},
+      ...(previousApproval.totalOperationDistanceKm != null
+        ? { totalOperationDistanceKm: previousApproval.totalOperationDistanceKm } : {})
+    };
+    const updatedApproval: DesignApproval | undefined = rewindTarget === 'Draft' ? undefined : {
       ...previousApproval,
       status: 'Pending Approval',
-      approvalStage: nextStage,
-      planningSignOffs: nextStage === 'Planning' ? pendingSignOffs('Planning') : previousApproval.planningSignOffs,
+      approvalStage: rewindTarget,
+      planningSignOffs: rewindTarget === 'Planning' ? pendingSignOffs('Planning') : previousApproval.planningSignOffs,
       omSignOffs: pendingSignOffs('OM'),
-      ownerSignOffs: nextStage === 'Planning' ? pendingSignOffs('Planning') : previousApproval.ownerSignOffs
+      ownerSignOffs: rewindTarget === 'Planning' ? pendingSignOffs('Planning') : previousApproval.ownerSignOffs
     };
     setIsSubmitting(true);
     setActionError(null);
     try {
       await updateDoc(doc(db, `projects/${project.id}`), {
-        status: 'Pending Approval', designApproval: updatedApproval
+        status: rewindTarget === 'Draft' ? 'Draft' : 'Pending Approval',
+        designApproval: updatedApproval || deleteField(),
+        approvalDraft: rewindTarget === 'Draft' ? approvalDraft : deleteField()
       });
-      await logActivity('rewind_design_approval', `Admin returned approval for ${project.name} to ${nextStage}`, {
-        projectId: project.id, fromStage: currentStage, toStage: nextStage, adminUid: appUser.id
+      await logActivity('rewind_design_approval', `Admin returned approval for ${project.name} to ${targetLabel}`, {
+        projectId: project.id, fromStage: currentStage, toStage: rewindTarget, adminUid: appUser.id
       });
-      onProjectUpdated?.({ ...project, status: 'Pending Approval', designApproval: updatedApproval });
+      onProjectUpdated?.({ ...project, status: rewindTarget === 'Draft' ? 'Draft' : 'Pending Approval',
+        designApproval: updatedApproval, approvalDraft: rewindTarget === 'Draft' ? approvalDraft : undefined });
     } catch (err: any) {
       setActionError(err.message || 'ไม่สามารถถอยขั้นตอนอนุมัติได้');
     } finally {
@@ -1261,8 +1271,10 @@ export function DesignApprovalModal({
         contractorPhone: contractorPhoneInput.trim(),
         contractorPoNumber: contractorPoInput.trim(),
         contractorScope: contractorScopeInput.trim(),
-        totalOperationDistanceKm: parseFloat(totalLengthKm),
+        totalOperationDistanceKm: Number.isFinite(Number.parseFloat(operationKmInput)) && Number.parseFloat(operationKmInput) >= 0
+          ? Number.parseFloat(operationKmInput) : Number.parseFloat(totalLengthKm),
         estimatedInstallationDate: targetInstallDate,
+        routeEnclosureSelections,
         planningSignOffs: initialPlanningSignOffs,
         omSignOffs: initialOMSignOffs,
         ownerSignOffs: initialPlanningSignOffs
@@ -1271,12 +1283,14 @@ export function DesignApprovalModal({
       const updatedProject: Project = {
         ...project,
         status: 'Pending Approval',
-        designApproval: newApproval
+        designApproval: newApproval,
+        approvalDraft: undefined
       };
 
       await updateDoc(doc(db, `projects/${project.id}`), {
         status: 'Pending Approval',
-        designApproval: newApproval
+        designApproval: newApproval,
+        approvalDraft: deleteField()
       });
 
       await logActivity('request_design_approval', `Requested 2-level design approval for project ${project.name} (${docNumber})`, {
@@ -1307,38 +1321,20 @@ export function DesignApprovalModal({
     setContractorSaveError(null);
     try {
       const existingApproval = project.designApproval;
-      const docNumber = existingApproval?.documentNumber || `APP-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${project.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase() || 'PROJ'}`;
-      
-      const updatedApproval: DesignApproval = {
-        ...(existingApproval || {
-          id: `appr_${Date.now()}`,
-          documentNumber: docNumber,
-          status: project.status || 'Pending Approval',
-          approvalStage: 'Planning',
-          requestedBy: appUser?.displayName || appUser?.email || 'Planning Engineer',
-          requestedByEmail: appUser?.email,
-          requestedByUid: appUser?.id || '',
-          requestedAt: new Date().toISOString(),
-          planningSignOffs: {},
-          omSignOffs: {},
-          ownerSignOffs: {}
-        }),
+      const contractorDetails = {
         contractorName: contractorInput.trim(),
         contractorContact: contractorContactInput.trim(),
         contractorPhone: contractorPhoneInput.trim(),
         contractorPoNumber: contractorPoInput.trim(),
         contractorScope: contractorScopeInput.trim(),
-        estimatedInstallationDate: targetInstallDate,
+        estimatedInstallationDate: targetInstallDate
       };
-
-      const updatedProject: Project = {
-        ...project,
-        designApproval: updatedApproval
-      };
-
-      await setDoc(doc(db, `projects/${project.id}`), {
-        designApproval: updatedApproval
-      }, { merge: true });
+      const updatedProject: Project = existingApproval
+        ? { ...project, designApproval: { ...existingApproval, ...contractorDetails } }
+        : { ...project, approvalDraft: { ...project.approvalDraft, ...contractorDetails } };
+      await setDoc(doc(db, `projects/${project.id}`), existingApproval
+        ? { designApproval: updatedProject.designApproval }
+        : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
 
       await logActivity('update_contractor_details', `Updated contractor details for project ${project.name}: ${contractorInput.trim()}`, {
         projectId: project.id,
@@ -2355,11 +2351,21 @@ export function DesignApprovalModal({
           </div>
 
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
-            {appUser?.role === 'Admin' && (currentStage === 'OM' || currentStage === 'Completed') && (
-              <button type="button" onClick={handleRewindApproval} disabled={isSubmitting}
-                className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
-                ถอยขั้นตอนอนุมัติ
-              </button>
+            {appUser?.role === 'Admin' && designApproval && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="approval-rewind-target" className="sr-only">เลือกขั้นตอนที่ต้องการถอย</label>
+                <select id="approval-rewind-target" value={rewindTarget}
+                  onChange={event => setRewindTarget(event.target.value as 'Draft' | 'Planning' | 'OM')}
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1 text-xs text-slate-100">
+                  <option value="Draft">ก่อนส่งขออนุมัติ</option>
+                  {(currentStage === 'OM' || currentStage === 'Completed' || currentStage === 'Rejected') && <option value="Planning">Planning</option>}
+                  {currentStage === 'Completed' && <option value="OM">O&amp;M</option>}
+                </select>
+                <button type="button" onClick={handleRewindApproval} disabled={isSubmitting}
+                  className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
+                  ถอยขั้นตอนอนุมัติ
+                </button>
+              </div>
             )}
             <span className="hidden md:inline">Doc: <span className="font-mono text-slate-300">{designApproval.documentNumber || '-'}</span></span>
           </div>
@@ -3836,6 +3842,7 @@ export function DesignApprovalModal({
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={operationKmInput}
                     onChange={e => setOperationKmInput(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-sky-500"
