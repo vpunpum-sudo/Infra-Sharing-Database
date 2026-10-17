@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/Toast';
+import { ConfirmProvider } from './components/ConfirmModal';
 import './index.css';
 
 // Prevent AbortError from showing up as an unhandled rejection
@@ -24,7 +25,9 @@ createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <App />
+          <ConfirmProvider>
+            <App />
+          </ConfirmProvider>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

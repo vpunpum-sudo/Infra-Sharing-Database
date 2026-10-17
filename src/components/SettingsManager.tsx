@@ -458,7 +458,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                       <button 
                         onClick={() => { setEditingId(t.id); setEditingType('enclosure'); setEditName(t.name); setEditCapacity(t.capacity || 60); setEditSpliceTrays(t.spliceTrays || 1); setEditIcon(t.icon || null); setEditImageUrl(t.imageUrl || null); }}
                         className="p-3 text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 rounded-2xl transition-all"
-                        title="Edit"
+                        title="Edit" aria-label="Edit"
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
@@ -466,7 +466,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         onClick={() => handleDeleteClick('enclosure', t.id)}
                         disabled={quotaExceeded}
                         className={`p-3 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-2xl transition-all ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Delete"
+                        title="Delete" aria-label="Delete"
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -547,7 +547,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                           setEditImageUrl(t.imageUrl || null);
                         }}
                         className="p-3 text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 rounded-2xl transition-all"
-                        title="Edit"
+                        title="Edit" aria-label="Edit"
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
@@ -555,7 +555,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         onClick={() => handleDeleteClick('fiber', t.id)}
                         disabled={quotaExceeded}
                         className={`p-3 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-2xl transition-all ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Delete"
+                        title="Delete" aria-label="Delete"
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -636,7 +636,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             setEditColor(config.color); 
                           }}
                           className="p-3 text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 rounded-2xl transition-all"
-                          title="Edit"
+                          title="Edit" aria-label="Edit"
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
@@ -644,7 +644,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                           onClick={() => handleDeleteClick('colorConfig', config.id)}
                           disabled={quotaExceeded}
                           className={`p-3 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-2xl transition-all ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          title="Delete"
+                          title="Delete" aria-label="Delete"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -686,7 +686,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     </p>
                   </div>
                 </div>
-                <button 
+                <button type="button" aria-label="ปิด" 
                   onClick={() => { setEditingId(null); setEditingType(null); }} 
                   className="p-3 text-slate-500 hover:text-slate-100 hover:bg-slate-800 rounded-2xl transition-all"
                 >
@@ -797,7 +797,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                               type="button"
                               onClick={() => handlePasteFromClipboard('enclosure-image')}
                               className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
-                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
+                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)" aria-label="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
                             >
                               <ClipboardPaste className="w-4 h-4" />
                               Paste from Clipboard
@@ -906,7 +906,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                               type="button"
                               onClick={() => handlePasteFromClipboard('fiber')}
                               className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
-                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
+                              title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)" aria-label="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
                             >
                               <ClipboardPaste className="w-4 h-4" />
                               Paste from Clipboard
