@@ -159,6 +159,17 @@
       },
       "required": ["id", "fiberTypeId", "tier", "color", "uid"]
     },
+    "RolePermissionOverride": {
+      "title": "RolePermissionOverride",
+      "description": "Saved feature permissions for one role (document id = role name)",
+      "type": "object",
+      "properties": {
+        "permissions": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["permissions", "updatedAt", "updatedBy"]
+    },
     "User": {
       "title": "User",
       "description": "User account information",
@@ -223,6 +234,10 @@
     "/ownerConfigs/{ownerId}": {
       "schema": { "$ref": "#/entities/OwnerConfig" },
       "description": "Custom logo and branding settings for each infrastructure owner"
+    },
+    "/rolePermissions/{role}": {
+      "schema": { "$ref": "#/entities/RolePermissionOverride" },
+      "description": "Saved role permission matrix (one doc per role); overrides DEFAULT_PERMISSIONS. Admin-only writes"
     }
   }
 }

@@ -4,7 +4,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, 
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, logout, handleFirestoreError, OperationType } from '../firebase';
 import { Project, User as AppUser, CoreOwner, ProjectStatus } from '../types';
-import { DEFAULT_PERMISSIONS } from '../constants';
+import { getRolePermissions, useRolePermissions } from '../services/rolePermissionsStore';
 import { v4 as uuidv4 } from 'uuid';
 import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -38,7 +38,8 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const [selectedOwnerFilter, setSelectedOwnerFilter] = useState<'All' | CoreOwner>('All');
   const navigate = useNavigate();
 
-  const userPermissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  useRolePermissions();
+  const userPermissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
   const [menuOpen, setMenuOpen] = useState(false);
   const displayName = appUser?.displayName || user.email?.split('@')[0];
   const navItems = [
@@ -406,7 +407,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     {isMigrating ? 'กำลังย้ายข้อมูล...' : `ย้ายข้อมูล ${oldProjects.length} โครงการ`}
                   </button>
                 )}
-                {(!appUser || DEFAULT_PERMISSIONS[appUser.role].createProjects) && (
+                {(!appUser || getRolePermissions()[appUser.role].createProjects) && (
                   <button 
                     onClick={openCreateModal}
                     disabled={quotaExceeded}
@@ -466,7 +467,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรอง Owner' 
                     : 'สร้างโครงการแรกเพื่อวาดเส้นทาง วางจุด Splice และจัดสรร Core'}
                 </p>
-                {(!appUser || DEFAULT_PERMISSIONS[appUser.role].createProjects) && !searchQuery && (
+                {(!appUser || getRolePermissions()[appUser.role].createProjects) && !searchQuery && (
                   <button 
                     onClick={openCreateModal}
                     className="btn-primary text-xs"
@@ -514,7 +515,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           </div>
 
                           <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                            {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editProjects) && (
+                            {(!appUser || getRolePermissions()[appUser.role].editProjects) && (
                               <button 
                                 onClick={(e) => openEditModal(project, e)}
                                 className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
@@ -523,7 +524,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {(!appUser || DEFAULT_PERMISSIONS[appUser.role].deleteProjects || (appUser.role === 'Design' && project.uid === user.uid)) && (
+                            {(!appUser || getRolePermissions()[appUser.role].deleteProjects || (appUser.role === 'Design' && project.uid === user.uid)) && (
                               <button 
                                 onClick={(e) => handleDeleteProject(project.id, e)}
                                 className="p-2 text-slate-300 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"

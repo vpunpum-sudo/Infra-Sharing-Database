@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Route, Core, CoreStatus, CoreOwner, CorePriority, FiberEnclosure, Point, SegmentTubePriorityUpdate, User as AppUser } from '../types';
-import { DEFAULT_PERMISSIONS } from '../constants';
+import { useRolePermissions } from '../services/rolePermissionsStore';
 import { canChangeTubeOwner, getTubeOwner, tubeIdForCore } from '../utils/tubeOwnership';
 import { getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { X, Activity, User, ShieldAlert, Box, CheckCircle2, Eye, History, Clock, Maximize2, Minimize2, ChevronRight, ChevronDown, Filter, Lock, Pencil, AlertCircle, Save, RotateCcw } from 'lucide-react';
@@ -17,7 +17,8 @@ interface CoreManagerProps {
 }
 
 export default function CoreManager({ route, appUser, enclosures, selectedPoint, onClose, onUpdateCore, onUpdateCores }: CoreManagerProps) {
-  const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+  const rolePermissions = useRolePermissions();
+  const permissions = appUser ? rolePermissions[appUser.role] : rolePermissions['Viewer'];
   const [filterOwner, setFilterOwner] = useState<'All' | CoreOwner>('All');
   const [filterPriority, setFilterPriority] = useState<'All' | CorePriority>('All');
   const [selectedCore, setSelectedCore] = useState<Core | null>(null);

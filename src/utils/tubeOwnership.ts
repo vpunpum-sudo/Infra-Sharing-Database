@@ -1,5 +1,5 @@
 import { Core, CoreOwner, User } from '../types';
-import { DEFAULT_PERMISSIONS } from '../constants';
+import { getRolePermissions } from '../services/rolePermissionsStore';
 
 export type TubeOwner = CoreOwner | 'Mixed';
 
@@ -13,7 +13,7 @@ export function getTubeOwner(cores: Core[]): TubeOwner {
  * Once assigned, only its company or Admin may manage it.
  */
 export function canChangeTubeOwner(user: User | null, currentOwner: TubeOwner): boolean {
-  if (!user || !DEFAULT_PERMISSIONS[user.role]?.editRoutes) return false;
+  if (!user || !getRolePermissions()[user.role]?.editRoutes) return false;
   if (user.role === 'Admin') return true;
   const company = user.owner;
   return !!company && company !== 'None' &&

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { useToast } from './Toast';
+import React, { useEffect, useState } from 'react';
 import { UserRole, Feature, RolePermissions } from '../types';
-import { DEFAULT_PERMISSIONS } from '../constants';
 import { Shield, Save, CheckCircle2, Circle } from 'lucide-react';
 import { logActivity } from '../services/logService';
+import { getRolePermissions } from '../services/rolePermissionsStore';
+import { loadRolePermissions, saveRolePermissions } from '../services/rolePermissionsService';
+import { useToast } from './Toast';
 
 const FEATURE_CATEGORIES = [
   {
@@ -89,9 +90,23 @@ const FEATURE_CATEGORIES = [
 ];
 
 export const PermissionManager: React.FC = () => {
+  const [permissions, setPermissions] = useState<RolePermissions>(getRolePermissions);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const notify = useToast();
-  const [permissions, setPermissions] = useState<RolePermissions>(DEFAULT_PERMISSIONS);
   const roles: UserRole[] = ['Admin', 'Design', 'Viewer', 'Sub-contract'];
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRolePermissions()
+      .then(saved => { if (!cancelled) setPermissions(saved); })
+      .catch(err => {
+        console.error('Error loading permissions:', err);
+        if (!cancelled) notify('Could not load saved permissions. Showing current values.', 'error');
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [notify]);
 
   const togglePermission = (role: UserRole, feature: Feature) => {
     setPermissions(prev => ({
@@ -118,9 +133,18 @@ export const PermissionManager: React.FC = () => {
   };
 
   const handleSave = async () => {
-    console.log('Saving permissions:', permissions);
+    setSaving(true);
+    try {
+      await saveRolePermissions(permissions);
+    } catch (err) {
+      console.error('Error saving permissions:', err);
+      notify('Failed to save permissions. Please try again.', 'error');
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
+    notify('Permissions saved successfully!', 'success');
     await logActivity('update_permissions', 'Updated role permissions', { permissions });
-    notify('Permissions saved successfully!');
   };
 
   return (
@@ -137,9 +161,10 @@ export const PermissionManager: React.FC = () => {
         </div>
         <button 
           onClick={handleSave} 
-          className="btn-primary py-2.5 px-5 text-xs font-bold"
+          disabled={loading || saving}
+          className="btn-primary py-2.5 px-5 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save size={15} /> Save Changes
+          <Save size={15} /> {saving ? 'Saving...' : loading ? 'Loading...' : 'Save Changes'}
         </button>
       </div>
       
