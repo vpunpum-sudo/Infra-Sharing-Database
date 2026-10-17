@@ -332,6 +332,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /folders/{folderId} {
+        allow read: if isAuthenticated() &&
+          canAccessProjectFiles(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        // Same as files: changes go through the manageProjectFile callable.
+        allow write: if false;
+      }
+
       match /enclosures/{enclosureId} {
         allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
         allow create: if isAuthenticated() && isValidNode(request.resource.data) && uidUnchanged();

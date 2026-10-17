@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { Download, FileText, FolderOpen, Loader2, Pencil, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { db, functions } from '../firebase';
-import { Project, ProjectFile } from '../types';
+import { Project, ProjectFile, ProjectFolder } from '../types';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const manageProjectFile = httpsCallable(functions, 'manageProjectFile');
@@ -27,6 +27,10 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   project: Project; canManage: boolean; onClose: () => void;
 }) {
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -42,6 +46,26 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     }, () => setError('ไม่สามารถโหลดไฟล์โครงการได้ กรุณาตรวจสอบสิทธิ์และลองใหม่'));
     return unsubscribe;
   }, [project.id]);
+
+  useEffect(() => onSnapshot(collection(db, `projects/${project.id}/folders`), snapshot => {
+    setFolders(snapshot.docs.map(item => item.data() as ProjectFolder)
+      .sort((a, b) => a.name.localeCompare(b.name, 'th')));
+  }, () => setError('ไม่สามารถโหลดโฟลเดอร์ได้ กรุณาตรวจสอบสิทธิ์และลองใหม่')), [project.id]);
+
+  // Return to the top level if the open folder is deleted elsewhere.
+  useEffect(() => {
+    if (folderId && !folders.some(folder => folder.id === folderId)) setFolderId(null);
+  }, [folders, folderId]);
+
+  const breadcrumb: ProjectFolder[] = [];
+  for (let id = folderId; id;) {
+    const folder = folders.find(item => item.id === id);
+    if (!folder || breadcrumb.includes(folder)) break;
+    breadcrumb.unshift(folder);
+    id = folder.parentId;
+  }
+  const childFolders = folders.filter(folder => (folder.parentId || null) === folderId);
+  const folderFiles = files.filter(item => (item.folderId || null) === folderId);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -75,7 +99,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     try {
       const base64 = await fileToBase64(chosen);
       await run(fileId ? 'replace' : 'upload', {
-        ...(fileId ? { fileId } : { name: chosen.name }),
+        ...(fileId ? { fileId } : { name: chosen.name, folderId }),
         contentType: chosen.type || 'application/octet-stream', base64
       });
     } catch (cause) {
@@ -102,6 +126,23 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     if (await run('rename', { fileId: item.id, name })) setEditingId(null);
   }
 
+  async function createFolder() {
+    const name = (newFolderName || '').trim();
+    if (!name) { setNewFolderName(null); return; }
+    if (await run('createFolder', { name, parentId: folderId })) setNewFolderName(null);
+  }
+
+  async function renameFolder(folder: ProjectFolder) {
+    const name = editingName.trim();
+    if (!name || name === folder.name) { setEditingFolderId(null); return; }
+    if (await run('renameFolder', { folderId: folder.id, name })) setEditingFolderId(null);
+  }
+
+  async function removeFolder(folder: ProjectFolder) {
+    if (!window.confirm(`ลบโฟลเดอร์ “${folder.name}”? (ลบได้เฉพาะโฟลเดอร์ว่าง)`)) return;
+    await run('deleteFolder', { folderId: folder.id });
+  }
+
   async function remove(item: ProjectFile) {
     if (!window.confirm(`ลบไฟล์ “${item.name}” ออกจากโครงการ?`)) return;
     await run('delete', { fileId: item.id });
@@ -122,16 +163,59 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
         </header>
         <div className="overflow-y-auto p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-300">{files.length} ไฟล์ · สูงสุด 5 MB ต่อไฟล์</p>
-            {canManage && <button type="button" disabled={busy} onClick={() => { setReplaceId(null); fileInput.current?.click(); }}
-              className="flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-60">
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} เพิ่มไฟล์
-            </button>}
+            <p className="text-sm text-slate-300">{childFolders.length > 0 && `${childFolders.length} โฟลเดอร์ · `}{folderFiles.length} ไฟล์ · สูงสุด 5 MB ต่อไฟล์</p>
+            {canManage && <div className="flex gap-2">
+              <button type="button" disabled={busy} onClick={() => setNewFolderName('')}
+                className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-bold hover:bg-slate-800 disabled:opacity-60">
+                <FolderPlus size={16} /> สร้างโฟลเดอร์
+              </button>
+              <button type="button" disabled={busy} onClick={() => { setReplaceId(null); fileInput.current?.click(); }}
+                className="flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-60">
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} เพิ่มไฟล์
+              </button>
+            </div>}
             <input ref={fileInput} type="file" className="hidden" onChange={onChooseFile} />
           </div>
+          <nav aria-label="ตำแหน่งโฟลเดอร์" className="mb-3 flex flex-wrap items-center gap-1 text-sm">
+            <button type="button" onClick={() => setFolderId(null)}
+              className={`rounded px-1.5 py-0.5 hover:bg-slate-800 ${folderId ? 'text-sky-300' : 'font-bold'}`}>ไฟล์ทั้งหมด</button>
+            {breadcrumb.map(folder => <React.Fragment key={folder.id}>
+              <ChevronRight size={14} className="text-slate-400" />
+              <button type="button" onClick={() => setFolderId(folder.id)}
+                className={`rounded px-1.5 py-0.5 hover:bg-slate-800 ${folder.id === folderId ? 'font-bold' : 'text-sky-300'}`}>{folder.name}</button>
+            </React.Fragment>)}
+          </nav>
+          {newFolderName !== null && <div className="mb-3 flex items-center gap-2 rounded-xl border border-sky-500 bg-slate-800/60 p-3">
+            <FolderPlus size={20} className="shrink-0 text-amber-300" />
+            <input autoFocus value={newFolderName} placeholder="ชื่อโฟลเดอร์ใหม่" maxLength={100}
+              onChange={event => setNewFolderName(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Enter') createFolder(); if (event.key === 'Escape') { event.stopPropagation(); setNewFolderName(null); } }}
+              className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm" />
+            <button type="button" onClick={createFolder} disabled={busy} className="text-sm font-bold text-sky-300">สร้าง</button>
+            <button type="button" onClick={() => setNewFolderName(null)} className="text-sm text-slate-300">ยกเลิก</button>
+          </div>}
           {error && <p role="alert" className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-sm text-rose-100">{error}</p>}
-          {files.length === 0 ? <p className="rounded-xl border border-dashed border-slate-600 p-8 text-center text-sm text-slate-300">ยังไม่มีไฟล์ในโครงการนี้</p> :
-            <ul className="space-y-2">{files.map(item => <li key={item.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+          {childFolders.length > 0 && <ul className="mb-2 space-y-2">{childFolders.map(folder => <li key={folder.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {editingFolderId === folder.id ? <div className="flex min-w-0 flex-1 items-center gap-3">
+                <Folder size={20} className="shrink-0 text-amber-300" />
+                <input autoFocus value={editingName} maxLength={100} onChange={event => setEditingName(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') renameFolder(folder); }}
+                  className="min-w-0 flex-1 rounded border border-sky-500 bg-slate-950 px-2 py-1 text-sm" />
+                <button type="button" onClick={() => renameFolder(folder)} disabled={busy} className="text-sm font-bold text-sky-300">บันทึก</button>
+              </div> : <button type="button" onClick={() => setFolderId(folder.id)}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                <Folder size={20} className="shrink-0 text-amber-300" />
+                <span className="break-all text-sm font-semibold">{folder.name}</span>
+              </button>}
+              {canManage && <div className="flex items-center gap-1">
+                <button type="button" disabled={busy} onClick={() => { setEditingFolderId(folder.id); setEditingName(folder.name); }} title="แก้ชื่อ" aria-label={`แก้ชื่อโฟลเดอร์ ${folder.name}`} className="rounded-lg p-2 hover:bg-slate-700"><Pencil size={17} /></button>
+                <button type="button" disabled={busy} onClick={() => removeFolder(folder)} title="ลบ" aria-label={`ลบโฟลเดอร์ ${folder.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950"><Trash2 size={17} /></button>
+              </div>}
+            </div>
+          </li>)}</ul>}
+          {folderFiles.length === 0 ? (childFolders.length === 0 && <p className="rounded-xl border border-dashed border-slate-600 p-8 text-center text-sm text-slate-300">{folderId ? 'โฟลเดอร์นี้ยังว่างอยู่' : 'ยังไม่มีไฟล์ในโครงการนี้'}</p>) :
+            <ul className="space-y-2">{folderFiles.map(item => <li key={item.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
                   <FileText size={20} className="mt-1 shrink-0 text-sky-300" />

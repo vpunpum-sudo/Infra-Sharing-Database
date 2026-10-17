@@ -38,6 +38,23 @@ function validFileName(name) {
   return name.trim();
 }
 
+function validFolderName(name) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 100 || /[\x00-\x1f/\\]/.test(name)) {
+    throw new HttpsError('invalid-argument', 'ชื่อโฟลเดอร์ต้องมีความยาวไม่เกิน 100 ตัวอักษรและห้ามมี / หรือ \\');
+  }
+  return name.trim();
+}
+
+// null means the project's top level.
+async function validFolderId(folders, folderId) {
+  if (folderId === undefined || folderId === null || folderId === '') return null;
+  if (typeof folderId !== 'string' || !/^[\w-]{1,100}$/.test(folderId)) {
+    throw new HttpsError('invalid-argument', 'รหัสโฟลเดอร์ไม่ถูกต้อง');
+  }
+  if (!(await folders.doc(folderId).get()).exists) throw new HttpsError('not-found', 'ไม่พบโฟลเดอร์');
+  return folderId;
+}
+
 function decodeFile(base64) {
   if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_FILE_BYTES * 4 / 3) + 4 ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) {
@@ -77,14 +94,42 @@ exports.manageProjectFile = onCall({ region, timeoutSeconds: 120, memory: '512Mi
 
 async function handleProjectFile(request) {
   const { action, projectId, fileId } = request.data || {};
-  const write = ['upload', 'replace', 'rename', 'delete'].includes(action);
+  const write = ['upload', 'replace', 'rename', 'delete', 'createFolder', 'renameFolder', 'deleteFolder'].includes(action);
   if (!write && action !== 'download') throw new HttpsError('invalid-argument', 'คำสั่งไม่ถูกต้อง');
   const { db } = await authorize(request.auth, projectId, write);
   const files = db.collection('projects').doc(projectId).collection('files');
+  const folders = db.collection('projects').doc(projectId).collection('folders');
   const bucket = getStorage().bucket(BUCKET);
+
+  if (action === 'createFolder') {
+    const name = validFolderName(request.data.name);
+    const parentId = await validFolderId(folders, request.data.parentId);
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    await folders.doc(id).set({ id, name, parentId, createdAt: now, updatedAt: now, createdBy: request.auth.uid });
+    return { id };
+  }
+  if (action === 'renameFolder' || action === 'deleteFolder') {
+    const folderId = await validFolderId(folders, request.data.folderId);
+    if (!folderId) throw new HttpsError('invalid-argument', 'รหัสโฟลเดอร์ไม่ถูกต้อง');
+    if (action === 'renameFolder') {
+      await folders.doc(folderId).update({ name: validFolderName(request.data.name), updatedAt: new Date().toISOString() });
+      return { ok: true };
+    }
+    const [childFiles, childFolders] = await Promise.all([
+      files.where('folderId', '==', folderId).limit(1).get(),
+      folders.where('parentId', '==', folderId).limit(1).get()
+    ]);
+    if (!childFiles.empty || !childFolders.empty) {
+      throw new HttpsError('failed-precondition', 'ลบได้เฉพาะโฟลเดอร์ว่าง กรุณาลบไฟล์และโฟลเดอร์ย่อยก่อน');
+    }
+    await folders.doc(folderId).delete();
+    return { ok: true };
+  }
 
   if (action === 'upload') {
     const name = validFileName(request.data.name);
+    const folderId = await validFolderId(folders, request.data.folderId);
     const bytes = decodeFile(request.data.base64);
     const id = randomUUID();
     const storagePath = `project-files/${projectId}/${id}/${randomUUID()}`;
@@ -93,7 +138,7 @@ async function handleProjectFile(request) {
     await bucket.file(storagePath).save(bytes, { resumable: false, metadata: { contentType } });
     const now = new Date().toISOString();
     try {
-      await files.doc(id).set({ id, name, contentType, size: bytes.length, storagePath,
+      await files.doc(id).set({ id, name, folderId, contentType, size: bytes.length, storagePath,
         createdAt: now, updatedAt: now, uploadedBy: request.auth.uid });
     } catch (error) {
       await bucket.file(storagePath).delete({ ignoreNotFound: true });
