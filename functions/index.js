@@ -1,6 +1,7 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
-const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { getStorage } = require('firebase-admin/storage');
 const { defineSecret, defineString } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 const nodemailer = require('nodemailer');
@@ -14,6 +15,23 @@ const emailFrom = defineString('APPROVAL_EMAIL_FROM');
 const appUrl = defineString('APPROVAL_APP_URL');
 
 initializeApp();
+
+const projectFiles = require('./projectFiles');
+exports.manageProjectFile = projectFiles.manageProjectFile;
+exports.getProjectCreatedDates = projectFiles.getProjectCreatedDates;
+
+exports.cleanupProjectFiles = onDocumentDeleted({
+  document: 'projects/{projectId}', database: DATABASE_ID, region: 'asia-southeast1', retry: true
+}, async event => {
+  const files = getFirestore(DATABASE_ID).collection('projects').doc(event.params.projectId).collection('files');
+  const bucket = getStorage().bucket('gen-lang-client-0942355314.firebasestorage.app');
+  const snapshot = await files.get();
+  for (const fileDoc of snapshot.docs) {
+    const path = fileDoc.data().storagePath;
+    if (path) await bucket.file(path).delete({ ignoreNotFound: true });
+    await fileDoc.ref.delete();
+  }
+});
 
 async function claimDelivery(db, id, details) {
   const ref = db.collection('approvalEmailDeliveries').doc(id);
