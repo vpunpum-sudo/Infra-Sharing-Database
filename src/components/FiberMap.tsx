@@ -6,6 +6,7 @@ import { useMapDrawing } from '../hooks/useMapDrawing';
 import { createFiberLoopIcon, fiberLoopSvg } from '../utils/fiberLoopIcon';
 import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
+import { getRouteColor as getRouteColorFor } from '../utils/routeColor';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -1438,20 +1439,7 @@ export default function FiberMap({
     return t ? t.color : '#ef4444';
   };
 
-  const getRouteColor = (route: Route) => {
-    const fiberType = route.fiberType || route.capacity.toString();
-    const tier = route.tierSharing || route.tier || 'Tier 1';
-    
-    // Find matching color config
-    const ft = fiberTypes.find(f => f.name === fiberType);
-    if (ft) {
-      const config = fiberColorConfigs.find(c => c.fiberTypeId === ft.id && c.tier === tier);
-      if (config) return config.color;
-      return ft.color || '#10b981';
-    }
-    
-    return '#10b981';
-  };
+  const getRouteColor = (route: Route) => getRouteColorFor(route, fiberTypes, fiberColorConfigs);
 
   return (
     <MapContainer 
