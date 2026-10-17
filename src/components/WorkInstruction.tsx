@@ -5,6 +5,7 @@ import {
   WI_CHAPTERS, WI_DEFINITIONS, WI_META, WI_PURPOSE, WI_RECORDS, WI_REFERENCES, WI_REVISIONS, WI_ROLES, WI_SCOPE, WiStep
 } from '../content/workInstruction';
 import { ThemeToggle } from './ThemeToggle';
+import { markLabel, WiFigure } from './WiFigures';
 
 const thaiDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -100,7 +101,19 @@ export default function WorkInstruction() {
                 <div key={procedure.id} className="wi-procedure">
                   <h4>5.{c + 1}.{p + 1} {procedure.title}</h4>
                   <p className="wi-who"><b>ผู้ปฏิบัติ:</b> {procedure.who}</p>
+                  {procedure.detail.map(text => <p key={text} className="wi-detail">{text}</p>)}
+                  {(procedure.figure || procedure.image) && (
+                    <figure className="wi-figure">
+                      {procedure.image ? <img src={procedure.image} alt={procedure.title} /> : <WiFigure id={procedure.figure!} />}
+                      <figcaption>รูปที่ 5.{c + 1}.{p + 1} {procedure.title}</figcaption>
+                    </figure>
+                  )}
+                  {procedure.callouts && <ul className="wi-legend">{procedure.callouts.map((text, i) =>
+                    <li key={i}><span>{markLabel(i + 1)}</span><span>{text}</span></li>)}</ul>}
+                  <p className="wi-detail"><b>ขั้นตอน</b></p>
                   <Steps steps={procedure.steps} />
+                  {procedure.result && <div className="wi-result"><b>ผลลัพธ์ที่ได้:</b> {procedure.result}</div>}
+                  {procedure.tips && <div className="wi-tips"><b>เคล็ดลับ</b><ul>{procedure.tips.map(tip => <li key={tip}>{tip}</li>)}</ul></div>}
                   {procedure.notes && <div className="wi-caution"><b>ข้อควรระวัง</b><ul>{procedure.notes.map(note => <li key={note}>{note}</li>)}</ul></div>}
                 </div>
               ))}
