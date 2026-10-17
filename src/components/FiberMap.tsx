@@ -80,6 +80,24 @@ type MapPopupData =
   | { kind: 'detail' | 'menu'; type: 'route'; data: Route; position: [number, number] }
   | { kind: 'detail' | 'menu'; type: 'enclosure'; data: FiberEnclosure; position: [number, number] };
 
+// Reusing icon instances stops react-leaflet from rebuilding every marker element on each render.
+const enclosureIconCache = new Map<string, L.Icon>();
+
+function getEnclosureIcon(iconUrl: string, enlarged: boolean, highlighted: boolean) {
+  const key = `${iconUrl}|${enlarged}|${highlighted}`;
+  let icon = enclosureIconCache.get(key);
+  if (!icon) {
+    icon = new L.Icon({
+      iconUrl,
+      iconSize: enlarged ? [24, 24] : [20, 20],
+      iconAnchor: enlarged ? [12, 12] : [10, 10],
+      className: `enclosure-map-icon ${highlighted ? 'enclosure-map-icon-selected' : ''}`
+    });
+    enclosureIconCache.set(key, icon);
+  }
+  return icon;
+}
+
 function MapEvents({ onMapClick }: { onMapClick: (latlng: L.LatLng) => void }) {
   useMapEvents({
     click(e) {
@@ -1428,6 +1446,9 @@ export default function FiberMap({
       center={center} 
       zoom={13} 
       zoomControl={false}
+      // Quarter-level snapping lets the wheel and trackpad zoom in small steps instead of whole levels; a mouse notch is about half a level.
+      zoomSnap={0.25}
+      wheelPxPerZoomLevel={40}
       className={`w-full h-full z-0 bg-slate-900 fiber-map-container ${drawingMode !== 'none' ? 'cursor-crosshair' : ''}`}
       style={{ height: '100%', width: '100%' }}
     >
@@ -1490,12 +1511,7 @@ export default function FiberMap({
               const isEditingThis = drawingMode === 'edit-enclosure' && editingEnclosureId === enclosure.id;
 
               if (iconUrl) {
-                const customIcon = new L.Icon({
-                  iconUrl: iconUrl,
-                  iconSize: isEditingThis ? [24, 24] : [20, 20],
-                  iconAnchor: isEditingThis ? [12, 12] : [10, 10],
-                  className: `enclosure-map-icon ${selectedEnclosureId === enclosure.id || isEditingThis ? 'enclosure-map-icon-selected' : ''}`
-                });
+                const customIcon = getEnclosureIcon(iconUrl, isEditingThis, selectedEnclosureId === enclosure.id || isEditingThis);
 
                 return (
                   <Marker

@@ -19,10 +19,21 @@ export const createFiberLoopSvg = (routeColor?: string) => {
 
 export const fiberLoopSvg = createFiberLoopSvg();
 
-export const createFiberLoopIcon = (routeColor?: string, size = 18) => L.divIcon({
-  className: 'fiber-loop-map-icon',
-  html: createFiberLoopSvg(routeColor),
-  iconSize: [size, size],
-  iconAnchor: [size / 2, size / 2],
-  popupAnchor: [0, -size / 2]
-});
+const fiberLoopIconCache = new Map<string, L.DivIcon>();
+
+/** Cached per color and size so map re-renders keep the existing marker elements. */
+export const createFiberLoopIcon = (routeColor?: string, size = 18) => {
+  const key = `${routeColor ?? ''}|${size}`;
+  let icon = fiberLoopIconCache.get(key);
+  if (!icon) {
+    icon = L.divIcon({
+      className: 'fiber-loop-map-icon',
+      html: createFiberLoopSvg(routeColor),
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2]
+    });
+    fiberLoopIconCache.set(key, icon);
+  }
+  return icon;
+};
