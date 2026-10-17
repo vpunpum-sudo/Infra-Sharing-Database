@@ -200,7 +200,14 @@ export function DesignApprovalModal({
       setOperationKmInput(project.approvalDraft.totalOperationDistanceKm?.toString() || '');
       setTargetInstallDate(project.approvalDraft.estimatedInstallationDate || '');
     }
-  }, [project?.designApproval, project.approvalDraft]);
+  }, [project.id, project.designApproval?.designNotes, project.designApproval?.totalOperationDistanceKm,
+    project.designApproval?.contractorName, project.designApproval?.contractorContact,
+    project.designApproval?.contractorPhone, project.designApproval?.contractorPoNumber,
+    project.designApproval?.contractorScope, project.designApproval?.estimatedInstallationDate,
+    project.approvalDraft?.designNotes, project.approvalDraft?.totalOperationDistanceKm,
+    project.approvalDraft?.contractorName, project.approvalDraft?.contractorContact,
+    project.approvalDraft?.contractorPhone, project.approvalDraft?.contractorPoNumber,
+    project.approvalDraft?.contractorScope, project.approvalDraft?.estimatedInstallationDate]);
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
