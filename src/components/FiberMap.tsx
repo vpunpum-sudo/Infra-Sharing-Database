@@ -7,6 +7,7 @@ import { createFiberLoopIcon, fiberLoopSvg } from '../utils/fiberLoopIcon';
 import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority } from '../utils/routeSegments';
 import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
 import { getRouteColor as getRouteColorFor } from '../utils/routeColor';
+import { PlaceResult, searchPlaces } from '../utils/placeSearch';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -527,7 +528,8 @@ function MapLegend({
     <div 
       ref={containerRef}
       className="leaflet-top leaflet-right leaflet-control" 
-      style={{ marginTop: '8px', marginRight: '8px', zIndex: 1000, pointerEvents: 'auto' }}
+      // Sits below the full-width search bar.
+      style={{ marginTop: '56px', marginRight: '10px', zIndex: 999, pointerEvents: 'auto' }}
     >
       <div className="bg-slate-900 rounded-lg shadow-xl border border-slate-800 overflow-hidden min-w-[140px] max-w-[220px]">
         <button 
@@ -703,7 +705,9 @@ function MapSearchControl({
   const map = useMap();
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'coords' | 'enclosure' | 'route' | 'loop' | 'core'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'place' | 'coords' | 'enclosure' | 'route' | 'loop' | 'core'>('all');
+  const [places, setPlaces] = useState<PlaceResult[]>([]);
+  const [placesState, setPlacesState] = useState<'idle' | 'loading' | 'error'>('idle');
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -793,7 +797,28 @@ function MapSearchControl({
     });
   }
 
-  const totalResultsCount = (parsedCoord ? 1 : 0) + matchingEnclosures.length + matchingRoutes.length + matchingLoops.length + matchingCores.length;
+  // Places from OpenStreetMap: debounced, at least 3 characters, nearest to the map view first.
+  useEffect(() => {
+    const text = query.trim();
+    if (text.length < 3 || parseCoordinates(text)) { setPlaces([]); setPlacesState('idle'); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setPlacesState('loading');
+      const center = map.getCenter();
+      searchPlaces(text, { lat: center.lat, lng: center.lng }, controller.signal)
+        .then(results => { setPlaces(results); setPlacesState('idle'); })
+        .catch(error => { if (error?.name !== 'AbortError') { setPlaces([]); setPlacesState('error'); } });
+    }, 450);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [query, map]);
+
+  const totalResultsCount = (parsedCoord ? 1 : 0) + places.length + matchingEnclosures.length + matchingRoutes.length + matchingLoops.length + matchingCores.length;
+
+  const handleSelectPlace = (place: PlaceResult) => {
+    map.flyTo([place.lat, place.lng], 17, { animate: true, duration: 1.2 });
+    setSearchPin({ lat: place.lat, lng: place.lng, label: place.detail ? `${place.name} · ${place.detail}` : place.name });
+    setIsOpen(false);
+  };
 
   const handleSelectCoordinate = (lat: number, lng: number) => {
     map.flyTo([lat, lng], 18, { animate: true, duration: 1.2 });
@@ -830,7 +855,7 @@ function MapSearchControl({
   return (
     <div 
       ref={containerRef}
-      className="absolute top-2.5 left-28 sm:left-32 z-[1000] w-[260px] sm:w-[360px] md:w-[440px]"
+      className="absolute top-2.5 left-28 sm:left-32 right-2.5 z-[1000]"
     >
       {/* Search Input Bar */}
       <div className="relative group">
@@ -843,7 +868,8 @@ function MapSearchControl({
             ref={inputRef}
             type="text"
             className="w-full bg-transparent py-2 pr-14 text-xs text-slate-100 placeholder-slate-400 outline-none font-medium"
-            placeholder="Search coordinates (13.738, 100.531), closures, routes, cores..."
+            placeholder="ค้นหาสถานที่ พิกัด (13.738, 100.531), Enclosure, เส้นทาง, Loop หรือ Core..."
+            aria-label="ค้นหาสถานที่และข้อมูลบนแผนที่"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -876,7 +902,7 @@ function MapSearchControl({
         {/* Filter Category Chips (when focused or searching) */}
         {isOpen && (
           <div className="flex items-center gap-1 px-1 pt-1.5 overflow-x-auto no-scrollbar">
-            {(['all', 'coords', 'enclosure', 'route', 'loop', 'core'] as const).map(type => (
+            {(['all', 'place', 'coords', 'enclosure', 'route', 'loop', 'core'] as const).map(type => (
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
@@ -887,6 +913,7 @@ function MapSearchControl({
                 }`}
               >
                 {type === 'all' && `All (${totalResultsCount})`}
+                {type === 'place' && `🗺 สถานที่ (${placesState === 'loading' ? '…' : places.length})`}
                 {type === 'coords' && `📍 Coords`}
                 {type === 'enclosure' && `📦 Closures (${matchingEnclosures.length})`}
                 {type === 'route' && `⚡ Routes (${matchingRoutes.length})`}
@@ -901,13 +928,41 @@ function MapSearchControl({
       {/* Results Dropdown */}
       {isOpen && query.trim() && (
         <div className="mt-2 bg-slate-900/95 backdrop-blur-xl border border-slate-700/90 rounded-2xl shadow-2xl overflow-hidden max-h-[360px] overflow-y-auto custom-scrollbar divide-y divide-slate-800/80">
-          {totalResultsCount === 0 ? (
+          {totalResultsCount === 0 && placesState !== 'loading' ? (
             <div className="p-5 text-center text-slate-400">
               <Search className="w-5 h-5 mx-auto mb-1.5 opacity-30 text-slate-400" />
-              <p className="text-xs font-bold text-slate-300">No results found for "{query}"</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Try coordinates like 13.7381, 100.5312 or a cable name</p>
+              <p className="text-xs font-bold text-slate-300">ไม่พบผลลัพธ์สำหรับ "{query}"</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">ลองค้นหาชื่อสถานที่ พิกัด เช่น 13.7381, 100.5312 หรือชื่อเส้น Fiber</p>
             </div>
           ) : null}
+
+          {/* Places (OpenStreetMap) */}
+          {(filterType === 'all' || filterType === 'place') && (placesState === 'loading' || placesState === 'error' || places.length > 0) && (
+            <div className="p-1.5">
+              <div className="px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-sky-400 flex items-center justify-between">
+                <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> สถานที่ (OpenStreetMap)</span>
+                <span className="font-mono text-[9px]">{placesState === 'loading' ? 'กำลังค้นหา…' : places.length}</span>
+              </div>
+              {placesState === 'error' && <p className="px-2.5 py-1.5 text-[10px] text-slate-400">ค้นหาสถานที่ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่</p>}
+              <div className="space-y-0.5">
+                {places.map(place => (
+                  <button key={place.id} type="button" onClick={() => handleSelectPlace(place)}
+                    className="w-full text-left p-2 rounded-xl hover:bg-slate-800/80 transition-all flex items-center justify-between group">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/40 flex items-center justify-center shrink-0">
+                        <MapPin className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs text-slate-100 block truncate group-hover:text-brand-400">{place.name}</span>
+                        <span className="text-[10px] text-slate-400 block truncate">{place.detail || place.kind}</span>
+                      </div>
+                    </div>
+                    <CornerDownRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-brand-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Coordinates Match */}
           {parsedCoord && (filterType === 'all' || filterType === 'coords') && (
