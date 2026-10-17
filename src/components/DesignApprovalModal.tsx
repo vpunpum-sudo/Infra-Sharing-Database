@@ -2253,7 +2253,7 @@ export function DesignApprovalModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden">
+    <div className="fixed inset-0 z-[1500] flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden">
       <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-none max-h-[96vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Top Header Bar */}
@@ -3889,7 +3889,7 @@ export function DesignApprovalModal({
 
       {/* SIGNING MODAL POPUP */}
       {signingModalOpen && signingTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-[1600] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-md">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -4018,7 +4018,7 @@ export function DesignApprovalModal({
       {/* ENCLOSURE IMAGE LIGHTBOX PREVIEW */}
       {previewingEnclosureImage && (
         <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[1600] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => setPreviewingEnclosureImage(null)}
         >
           <div 
@@ -4069,7 +4069,7 @@ export function DesignApprovalModal({
       {/* FIBER OPTIC IMAGE LIGHTBOX PREVIEW */}
       {previewingFiberImage && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[1600] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => setPreviewingFiberImage(null)}
         >
           <div

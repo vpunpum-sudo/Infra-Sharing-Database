@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
@@ -124,6 +124,20 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [enclosuresExpanded, setEnclosuresExpanded] = useState(false);
   const [loopsExpanded, setLoopsExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // The approval document needs the full width: fold the sidebar while it is
+  // open and put it back the way it was afterwards.
+  const sidebarBeforeApproval = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (approvalModalOpen) {
+      if (sidebarBeforeApproval.current === null) {
+        sidebarBeforeApproval.current = sidebarCollapsed;
+        setSidebarCollapsed(true);
+      }
+    } else if (sidebarBeforeApproval.current !== null) {
+      setSidebarCollapsed(sidebarBeforeApproval.current);
+      sidebarBeforeApproval.current = null;
+    }
+  }, [approvalModalOpen]);
 
   useEffect(() => {
     if (!sidebarFocusTarget || sidebarCollapsed) return;
