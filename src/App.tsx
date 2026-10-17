@@ -17,7 +17,9 @@ import { ProfileSettings } from './components/ProfileSettings';
 import { ForceChangePassword } from './components/ForceChangePassword';
 import SystemManual from './components/SystemManual';
 import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, SegmentTubePriorityUpdate, User as AppUser } from './types';
-import { generateCores, DEFAULT_PERMISSIONS } from './constants';
+import { generateCores } from './constants';
+import { getRolePermissions, useRolePermissions } from './services/rolePermissionsStore';
+import { startRolePermissionsSync } from './services/rolePermissionsService';
 import { getClosestPointOnRoute, getDistance, insertPointOnRoute, splitRoutePath } from './utils/geo';
 import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from './utils/splitRoute';
 import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdates } from './utils/tubeOwnership';
@@ -35,6 +37,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const { projectId } = useParams<{ projectId: string }>();
   const activeProjectId = projectId;
   const navigate = useNavigate();
+  useRolePermissions();
 
   const [enclosures, setEnclosures] = useState<FiberEnclosure[]>([]);
   const [routes, setRoutes] = useState<RouteType[]>([]);
@@ -197,7 +200,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   }, [user, activeProjectId]);
 
   const handleMapClick = (point: Point) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
 
     if (drawingMode === 'enclosure') {
       if (!permissions.createEnclosures) {
@@ -323,7 +326,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const startEditRoute = (route: RouteType) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.editRoutes) {
       setErrorModalOpen('You do not have permission to edit routes.');
       return;
@@ -343,7 +346,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const openSplitRoute = (route: RouteType) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.editRoutes || !permissions.createRoutes) {
       setErrorModalOpen('You do not have permission to split Fiber routes.');
       return;
@@ -368,7 +371,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const openCutRoute = (route: RouteType, clickedPoint: Point) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.editRoutes || !permissions.createRoutes) {
       setErrorModalOpen('You do not have permission to cut Fiber routes.');
       return;
@@ -392,7 +395,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
   const confirmCutRoute = async () => {
     const route = routes.find(item => item.id === cutRouteId);
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!route || !cutPoint || !activeProjectId || !user || !permissions.editRoutes || !permissions.createRoutes) return;
     setSplittingRoute(true);
     try {
@@ -442,7 +445,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const confirmSplitRoute = async () => {
     const route = routes.find(item => item.id === splitRouteId);
     const enclosure = enclosures.find(item => item.id === splitEnclosureId);
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!route || !enclosure || !activeProjectId || !user || !permissions.editRoutes || !permissions.createRoutes) return;
     setSplittingRoute(true);
     try {
@@ -501,7 +504,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const handleSaveEnclosure = async () => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     const lat = parseFloat(enclosureLatInput);
     const lng = parseFloat(enclosureLngInput);
 
@@ -712,7 +715,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const handleSaveRoute = async () => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!user) return;
     const selectedFiberType = fiberTypes.find(ft => ft.name === routeCapacityInput);
     
@@ -845,7 +848,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [originalEnclosurePosition, setOriginalEnclosurePosition] = useState<Point | null>(null);
 
   const handleDeleteRoute = (routeId: string) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.deleteRoutes) {
       setErrorModalOpen('You do not have permission to delete routes.');
       return;
@@ -870,7 +873,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const startEditEnclosure = (enclosure: FiberEnclosure) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.editEnclosures) {
       setErrorModalOpen('You do not have permission to edit enclosures.');
       return;
@@ -888,7 +891,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const handleDeleteEnclosure = (enclosureId: string) => {
-    const permissions = appUser ? DEFAULT_PERMISSIONS[appUser.role] : DEFAULT_PERMISSIONS['Viewer'];
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
     if (!permissions.deleteEnclosures) {
       setErrorModalOpen('You do not have permission to delete enclosures.');
       return;
@@ -973,7 +976,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const handleUpdateCore = async (routeId: string, coreId: number, data: Partial<Core>): Promise<boolean> => {
-    if (!user || !activeProjectId || !appUser || !DEFAULT_PERMISSIONS[appUser.role].editRoutes) {
+    if (!user || !activeProjectId || !appUser || !getRolePermissions()[appUser.role].editRoutes) {
       setErrorModalOpen('You do not have permission to edit Fiber routes.');
       return false;
     }
@@ -988,7 +991,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         if (!routeSnapshot.exists()) throw new Error('The Fiber route is no longer available. Please reload the project.');
         if (!userSnapshot.exists()) throw new Error('Your account permissions are no longer available. Please sign in again.');
         const latestUser = userSnapshot.data() as AppUser;
-        if (!DEFAULT_PERMISSIONS[latestUser.role]?.editRoutes) {
+        if (!getRolePermissions()[latestUser.role]?.editRoutes) {
           throw new Error('You do not have permission to edit Fiber routes.');
         }
         const latestRoute = routeSnapshot.data() as RouteType;
@@ -1034,7 +1037,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   };
 
   const handleUpdateCores = async (routeId: string, updates: { coreId: number, data: Partial<Core> }[], segmentUpdates: SegmentTubePriorityUpdate[] = []): Promise<boolean> => {
-    if (!user || !activeProjectId || !appUser || !DEFAULT_PERMISSIONS[appUser.role].editRoutes) {
+    if (!user || !activeProjectId || !appUser || !getRolePermissions()[appUser.role].editRoutes) {
       setErrorModalOpen('You do not have permission to edit Fiber routes.');
       return false;
     }
@@ -1050,7 +1053,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         if (!snapshot.exists()) throw new Error('The Fiber route is no longer available. Please reload the project.');
         if (!userSnapshot.exists()) throw new Error('Your account permissions are no longer available. Please sign in again.');
         const latestUser = userSnapshot.data() as AppUser;
-        if (!DEFAULT_PERMISSIONS[latestUser.role]?.editRoutes) {
+        if (!getRolePermissions()[latestUser.role]?.editRoutes) {
           throw new Error('You do not have permission to edit Fiber routes.');
         }
         const latestRoute = snapshot.data() as RouteType;
@@ -1599,7 +1602,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
           <div className="p-3.5 flex flex-col gap-2 border-b border-slate-800 bg-slate-900/20">
             <div className="grid grid-cols-2 gap-2">
-              {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
+              {(!appUser || getRolePermissions()[appUser.role].editMap) && (
                 <>
                   <button
                     onClick={() => { 
@@ -1741,7 +1744,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                   <span className="text-xs px-2 py-0.5 bg-slate-800 rounded-lg text-slate-300 font-black tracking-wider">{route.capacity}F</span>
                                   {route.totalLength !== undefined && <span className="text-xs text-brand-400 font-black mt-1">{route.totalLength}m</span>}
                                 </div>
-                                {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
+                                {(!appUser || getRolePermissions()[appUser.role].editMap) && (
                                   <>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); openSplitRoute(route); }}
@@ -1823,7 +1826,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                 <span className="text-xs text-slate-500 font-black uppercase mt-0.5 tracking-wider">{enclosure.locationType || 'Enclosure'}</span>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
+                                {(!appUser || getRolePermissions()[appUser.role].editMap) && (
                                   <>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); startEditEnclosure(enclosure); }}
@@ -1888,7 +1891,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                 <span className="text-xs text-slate-500 font-black uppercase mt-0.5 tracking-wider">Length: {loop.length}m</span>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
+                                {(!appUser || getRolePermissions()[appUser.role].editMap) && (
                                   <>
                                     <button
                                       onClick={(e) => { 
@@ -2118,7 +2121,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <button className="btn-secondary px-5" onClick={() => setCutEnclosurePrompt(null)}>No, finish</button>
                 <button
                   className="btn-primary px-5"
-                  disabled={quotaExceeded || !(appUser && DEFAULT_PERMISSIONS[appUser.role].createEnclosures)}
+                  disabled={quotaExceeded || !(appUser && getRolePermissions()[appUser.role].createEnclosures)}
                   onClick={() => {
                     const cut = cutEnclosurePrompt;
                     setPendingCutEnclosure(cut);
@@ -2659,6 +2662,13 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const { theme, setTheme } = useTheme();
+  useRolePermissions();
+
+  // Saved role permissions (Permission Management page) override DEFAULT_PERMISSIONS once signed in.
+  useEffect(() => {
+    if (!user) return;
+    return startRolePermissionsSync();
+  }, [user?.uid]);
 
   useEffect(() => {
     return onQuotaExceeded((exceeded) => {
@@ -2820,8 +2830,8 @@ export default function App() {
           ) : <Navigate to="/login" />
         } />
         
-        <Route path="/settings" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && DEFAULT_PERMISSIONS[appUser.role]?.viewSettings ? <SettingsManager user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
-        <Route path="/user-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && DEFAULT_PERMISSIONS[appUser.role]?.viewUsers ? <UserManagement user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
+        <Route path="/settings" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && getRolePermissions()[appUser.role]?.viewSettings ? <SettingsManager user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
+        <Route path="/user-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && getRolePermissions()[appUser.role]?.viewUsers ? <UserManagement user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
         <Route path="/logs" element={user && appUser && appUser.role === 'Admin' ? <LogViewer /> : <Navigate to="/" />} />
         <Route path="/permission-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && appUser.role === 'Admin' ? <PermissionManagement appUser={appUser} /> : <Navigate to="/" />} />
         <Route path="/profile" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange ? <ProfileSettings user={user} appUser={appUser} onBack={() => window.history.back()} theme={theme} setTheme={setTheme} /> : <Navigate to="/" />} />

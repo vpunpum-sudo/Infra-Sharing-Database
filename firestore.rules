@@ -318,6 +318,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Role permission overrides saved from the Permission Management page.
+    // Every signed-in user reads them; only Admins may change them.
+    match /rolePermissions/{role} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() &&
+        role in ['Admin', 'Management', 'Planning', 'Design', 'Viewer', 'Sub-contract'] &&
+        request.resource.data.keys().hasOnly(['permissions', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.permissions is map &&
+        request.resource.data.permissions.keys().hasOnly([
+          'viewProjects', 'createProjects', 'editProjects', 'deleteProjects',
+          'viewUsers', 'manageUsers', 'viewSettings', 'editSettings',
+          'viewMap', 'editMap',
+          'viewEnclosures', 'createEnclosures', 'editEnclosures', 'deleteEnclosures',
+          'viewRoutes', 'createRoutes', 'editRoutes', 'deleteRoutes',
+          'manageSplices', 'viewSpliceTrays', 'editSpliceTrays',
+          'viewReports', 'exportData', 'viewHistory',
+          'requestApproval', 'approvePlanning', 'approveOM', 'approveDesign', 'viewApprovalDocs'
+        ]) &&
+        request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     match /projects/{projectId} {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
       allow create: if isAuthenticated() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
