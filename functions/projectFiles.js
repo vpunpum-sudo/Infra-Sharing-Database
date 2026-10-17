@@ -56,8 +56,10 @@ async function validFolderId(folders, folderId) {
 }
 
 function decodeFile(base64) {
+  // A repeated group like (?:[A-Za-z0-9+/]{4})* overflows the regex stack on
+  // inputs of a few hundred KB, so check the alphabet and length separately.
   if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_FILE_BYTES * 4 / 3) + 4 ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) {
+      base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
     throw new HttpsError('invalid-argument', 'ไฟล์ไม่ถูกต้องหรือมีขนาดเกิน 5 MB');
   }
   const bytes = Buffer.from(base64, 'base64');
@@ -202,3 +204,4 @@ exports.getProjectCreatedDates = onCall({ region }, async request => {
 });
 
 exports.MAX_FILE_BYTES = MAX_FILE_BYTES;
+exports.decodeFile = decodeFile;
