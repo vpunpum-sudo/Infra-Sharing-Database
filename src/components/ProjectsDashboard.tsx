@@ -92,7 +92,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       { label: 'โลโก้ Owner', title: 'จัดการรูปภาพโลโก้ของแต่ละ Owner', path: '/settings', icon: ImageIcon, color: 'text-pink-400' },
       { label: 'ตั้งค่า', title: 'ตั้งค่าระบบ', path: '/settings', icon: SlidersHorizontal, color: 'text-sky-400' }
     ] : []),
-    { label: 'คู่มือ (PDF)', title: 'คู่มือการใช้งานระบบ (นำเสนอและ PDF)', path: '/manual', icon: FileText, color: 'text-brand-400', primary: true }
+    { label: 'WI การใช้งาน', title: 'วิธีปฏิบัติงาน (Work Instruction) การใช้งานระบบทั้งหมด', path: '/manual', icon: FileText, color: 'text-brand-400', primary: true }
   ];
   const missingCreatedDateIds = projects.filter(project => !project.createdAt).map(project => project.id).sort().join('|');
 

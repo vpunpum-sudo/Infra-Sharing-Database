@@ -1165,3 +1165,42 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 .light-theme #root .schedule-row:hover { background-color: #f1f5f9 !important; }
 .light-theme #root .schedule-row-selected { background-color: #e0f2fe !important; box-shadow: inset 0 0 0 1px #7dd3fc; }
 .light-theme #root .schedule-plan { border-color: #94a3b8; background-color: #f1f5f9 !important; }
+
+/* Work Instruction page: always a white A4 sheet so it reads and prints like a document. */
+.wi-page { background: #e2e8f0; color: #0f172a; }
+html:not(.light-theme) .wi-page { background: #0b1220; }
+.wi-toolbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #cbd5e1; color: #0f172a; }
+html:not(.light-theme) .wi-toolbar { background: #0f172a; border-color: #1e293b; color: #f1f5f9; }
+.wi-doc { max-width: 210mm; margin: 24px auto; padding: 18mm 16mm; background: #ffffff !important; color: #0f172a !important; font-size: 14px; line-height: 1.7; box-shadow: 0 4px 24px rgba(15, 23, 42, 0.15); }
+.wi-doc :is(h2, h3, h4, p, li, td, th, b, a, span) { color: #0f172a !important; }
+.wi-doc h2 { font-size: 18px; font-weight: 800; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #0369a1; }
+.wi-doc h3 { font-size: 16px; font-weight: 800; margin: 18px 0 6px; color: #075985 !important; }
+.wi-doc h4 { font-size: 14.5px; font-weight: 700; margin: 14px 0 2px; }
+.wi-doc ul { list-style: disc; padding-left: 22px; }
+.wi-steps { list-style: decimal; padding-left: 24px; }
+.wi-steps ul { list-style: circle; padding-left: 20px; }
+.wi-who { font-size: 13px; margin: 0 0 4px; }
+.wi-who, .wi-who b { color: #334155 !important; }
+.wi-note { font-size: 13px; margin-top: 6px; }
+.wi-caution { margin: 6px 0 4px; padding: 6px 10px; border-left: 4px solid #f59e0b; background: #fffbeb !important; font-size: 13px; border-radius: 0; }
+.wi-table, .wi-control, .wi-sign { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.wi-table :is(th, td), .wi-control td, .wi-sign :is(th, td) { border: 1px solid #94a3b8; padding: 6px 8px; vertical-align: top; text-align: left; }
+.wi-table th, .wi-sign th { background: #f1f5f9 !important; font-weight: 700; }
+.wi-control-brand { width: 26%; text-align: center !important; vertical-align: middle !important; font-weight: 900; color: #0369a1 !important; font-size: 15px; }
+.wi-control-title { text-align: center !important; font-size: 15px; }
+.wi-sign td { text-align: center !important; font-size: 13px; }
+.wi-sign-line { height: 44px; }
+.wi-toc { margin-top: 14px; }
+.wi-toc ol { list-style: none; padding-left: 0; }
+.wi-toc ol ol { padding-left: 22px; }
+.wi-toc a { text-decoration: none; }
+.wi-toc a:hover { text-decoration: underline; }
+.wi-footer { margin-top: 28px; padding-top: 8px; border-top: 1px solid #cbd5e1; font-size: 12px; text-align: center; color: #475569 !important; }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  .wi-page { background: #ffffff !important; }
+  .wi-doc { max-width: none; margin: 0; padding: 0; box-shadow: none; font-size: 12.5px; }
+  .wi-doc section#wi-procedures, .wi-chapter + .wi-chapter, #wi-records { break-before: page; }
+  .wi-procedure, .wi-table tr, .wi-sign, .wi-control { break-inside: avoid; }
+  .wi-doc h2, .wi-doc h3, .wi-doc h4 { break-after: avoid; }
+}

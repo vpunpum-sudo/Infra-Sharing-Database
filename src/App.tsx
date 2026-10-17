@@ -15,7 +15,7 @@ import { LogViewer } from './components/LogViewer';
 import { PendingApproval } from './components/PendingApproval';
 import { ProfileSettings } from './components/ProfileSettings';
 import { ForceChangePassword } from './components/ForceChangePassword';
-import SystemManual from './components/SystemManual';
+import WorkInstruction from './components/WorkInstruction';
 import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, SegmentTubePriorityUpdate, User as AppUser } from './types';
 import { generateCores } from './constants';
 import { getRolePermissions, useRolePermissions } from './services/rolePermissionsStore';
@@ -1554,7 +1554,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <button 
                   onClick={() => navigate('/manual')} 
                   className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all" 
-                  title="คู่มือระบบ (PDF)" aria-label="คู่มือระบบ (PDF)"
+                  title="WI การใช้งานระบบ" aria-label="WI การใช้งานระบบ"
                 >
                   <FileText size={16} />
                 </button>
@@ -2860,8 +2860,8 @@ export default function App() {
         <Route path="/logs" element={user && appUser && appUser.role === 'Admin' ? <LogViewer /> : <Navigate to="/" />} />
         <Route path="/permission-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && appUser.role === 'Admin' ? <PermissionManagement appUser={appUser} /> : <Navigate to="/" />} />
         <Route path="/profile" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange ? <ProfileSettings user={user} appUser={appUser} onBack={() => window.history.back()} theme={theme} setTheme={setTheme} /> : <Navigate to="/" />} />
-        <Route path="/manual" element={<SystemManual />} />
-        <Route path="/system-summary" element={<SystemManual />} />
+        <Route path="/manual" element={<WorkInstruction />} />
+        <Route path="/system-summary" element={<WorkInstruction />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
