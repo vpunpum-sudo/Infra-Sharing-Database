@@ -2,11 +2,13 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updatePassword } from 'firebase/auth';
 export { sendPasswordResetEmail, createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword, updateProfile, updatePassword };
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const functions = getFunctions(app, 'asia-southeast1');
 export const auth = getAuth(app);
 export const secondaryAuth = getAuth(secondaryApp);
 
