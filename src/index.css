@@ -1316,3 +1316,7 @@ html:not(.light-theme) .wi-toolbar { background: #0f172a; border-color: #1e293b;
 .wf-slide > b, .wf-slide > small { display: block; }
 .wf-body { min-height: 0 !important; }
 .wf-menu .wf-anchor.wf-block > .wf-mark { left: -24px; top: 2px; }
+
+/* Map legend: top-right beside the search bar; below it on phones where the bar is full width. */
+.map-legend-control { margin-top: 10px !important; margin-right: 10px !important; }
+@media (max-width: 639px) { .map-legend-control { margin-top: 56px !important; } }

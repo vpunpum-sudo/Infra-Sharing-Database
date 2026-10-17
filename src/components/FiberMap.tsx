@@ -527,11 +527,10 @@ function MapLegend({
   return (
     <div 
       ref={containerRef}
-      className="leaflet-top leaflet-right leaflet-control" 
-      // Sits below the full-width search bar.
-      style={{ marginTop: '56px', marginRight: '10px', zIndex: 999, pointerEvents: 'auto' }}
+      className="leaflet-top leaflet-right leaflet-control map-legend-control" 
+      style={{ zIndex: 999, pointerEvents: 'auto' }}
     >
-      <div className="bg-slate-900 rounded-lg shadow-xl border border-slate-800 overflow-hidden min-w-[140px] max-w-[220px]">
+      <div className="bg-slate-900 rounded-lg shadow-xl border border-slate-800 overflow-hidden w-[210px]">
         <button 
           ref={buttonRef}
           type="button"
@@ -692,8 +691,10 @@ function MapSearchControl({
   enclosureTypes,
   onEnclosureClick,
   onRouteClick,
-  setSearchPin
+  setSearchPin,
+  hasPin = false
 }: {
+  hasPin?: boolean;
   enclosures: FiberEnclosure[];
   routes: Route[];
   loops: FiberLoop[];
@@ -710,6 +711,9 @@ function MapSearchControl({
   const [placesState, setPlacesState] = useState<'idle' | 'loading' | 'error'>('idle');
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const cancelRef = useRef<() => void>(() => {});
 
   // Global hotkey: Ctrl+K, Cmd+K, or / to focus search
   useEffect(() => {
@@ -722,9 +726,9 @@ function MapSearchControl({
         e.preventDefault();
         inputRef.current?.focus();
         setIsOpen(true);
-      } else if (e.key === 'Escape') {
-        setIsOpen(false);
-        inputRef.current?.blur();
+      } else if (e.key === 'Escape' && document.activeElement === inputRef.current) {
+        if (isOpenRef.current) setIsOpen(false);
+        else cancelRef.current();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -814,6 +818,17 @@ function MapSearchControl({
 
   const totalResultsCount = (parsedCoord ? 1 : 0) + places.length + matchingEnclosures.length + matchingRoutes.length + matchingLoops.length + matchingCores.length;
 
+  const cancelSearch = () => {
+    setQuery('');
+    setPlaces([]);
+    setPlacesState('idle');
+    setFilterType('all');
+    setSearchPin(null);
+    setIsOpen(false);
+  };
+
+  cancelRef.current = cancelSearch;
+
   const handleSelectPlace = (place: PlaceResult) => {
     map.flyTo([place.lat, place.lng], 17, { animate: true, duration: 1.2 });
     setSearchPin({ lat: place.lat, lng: place.lng, label: place.detail ? `${place.name} · ${place.detail}` : place.name });
@@ -855,7 +870,7 @@ function MapSearchControl({
   return (
     <div 
       ref={containerRef}
-      className="absolute top-2.5 left-28 sm:left-32 right-2.5 z-[1000]"
+      className="absolute top-2.5 left-28 sm:left-32 right-2.5 sm:right-[236px] z-[1000]"
     >
       {/* Search Input Bar */}
       <div className="relative group">
@@ -867,7 +882,7 @@ function MapSearchControl({
           <input 
             ref={inputRef}
             type="text"
-            className="w-full bg-transparent py-2 pr-14 text-xs text-slate-100 placeholder-slate-400 outline-none font-medium"
+            className="w-full bg-transparent py-2 pr-24 text-xs text-slate-100 placeholder-slate-400 outline-none font-medium"
             placeholder="ค้นหาสถานที่ พิกัด (13.738, 100.531), Enclosure, เส้นทาง, Loop หรือ Core..."
             aria-label="ค้นหาสถานที่และข้อมูลบนแผนที่"
             value={query}
@@ -879,17 +894,14 @@ function MapSearchControl({
           />
 
           <div className="absolute right-2 flex items-center gap-1">
-            {query ? (
+            {query || hasPin ? (
               <button 
-                onClick={() => {
-                  setQuery('');
-                  setIsOpen(false);
-                  inputRef.current?.focus();
-                }}
-                className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-                title="Clear" aria-label="Clear"
+                type="button"
+                onClick={() => { cancelSearch(); inputRef.current?.focus(); }}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
+                title="ยกเลิกการค้นหา (ล้างคำค้นและหมุด)" aria-label="ยกเลิกการค้นหา"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" /> ยกเลิก
               </button>
             ) : (
               <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[8.5px] font-mono text-slate-400 bg-slate-800 border border-slate-700 rounded-md shadow-inner">
@@ -1725,6 +1737,7 @@ export default function FiberMap({
         onEnclosureClick={onEnclosureClick}
         onRouteClick={onRouteClick}
         setSearchPin={setSearchPin}
+        hasPin={!!searchPin}
       />
       <MapLegend 
         enclosureTypes={enclosureTypes} 
