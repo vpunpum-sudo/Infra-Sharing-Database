@@ -310,9 +310,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Owner logos and branding appear in approval documents; only Admins
+    // (the only role with editSettings) change them.
     match /ownerConfigs/{ownerId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /fiberTypes/{typeId} {
