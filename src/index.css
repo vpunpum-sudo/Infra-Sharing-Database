@@ -1147,3 +1147,21 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 .light-theme #root .card-action-primary:hover { background-color: #0284c7 !important; border-color: #0284c7 !important; color: #ffffff !important; }
 .light-theme #root .card-action-primary:active { background-color: #0369a1 !important; }
 .light-theme #root .card-action-primary:hover svg { color: #ffffff !important; }
+
+/* Schedule plan */
+.schedule-chip {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.schedule-row { transition: background-color 0.15s; }
+.schedule-row:hover { background-color: rgba(148, 163, 184, 0.1); }
+.schedule-row-selected { background-color: rgba(14, 165, 233, 0.12); box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.5); }
+.schedule-plan { border: 1px solid rgba(148, 163, 184, 0.6); background-color: rgba(148, 163, 184, 0.15); }
+.light-theme #root .schedule-row:hover { background-color: #f1f5f9 !important; }
+.light-theme #root .schedule-row-selected { background-color: #e0f2fe !important; box-shadow: inset 0 0 0 1px #7dd3fc; }
+.light-theme #root .schedule-plan { border-color: #94a3b8; background-color: #f1f5f9 !important; }

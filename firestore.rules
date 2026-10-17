@@ -363,6 +363,29 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Schedule plan: anyone who can open the project reads it; project editors
+      // (including Sub-contract operators) keep it up to date.
+      match /schedule/{taskId} {
+        allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow delete: if isAuthenticated() && canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create, update: if isAuthenticated() &&
+          canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
+          request.resource.data.id == taskId &&
+          request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 &&
+          request.resource.data.start is string && request.resource.data.end is string &&
+          request.resource.data.progress is number && request.resource.data.progress >= 0 && request.resource.data.progress <= 100;
+      }
+
+      // Progress history is append-only.
+      match /scheduleLogs/{logId} {
+        allow read: if isAuthenticated() && canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAuthenticated() &&
+          canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
+          request.resource.data.id == logId && request.resource.data.byUid == request.auth.uid &&
+          request.resource.data.text is string && request.resource.data.text.size() <= 300;
+        allow update, delete: if false;
+      }
+
       match /folders/{folderId} {
         allow read: if isAuthenticated() &&
           canAccessProjectFiles(get(/databases/$(database)/documents/projects/$(projectId)).data);

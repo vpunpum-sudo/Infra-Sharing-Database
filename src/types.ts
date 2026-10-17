@@ -90,9 +90,43 @@ export type DesignApproval = {
   finalApprovedBy?: string;
 };
 
+/** One step of a project's schedule plan. Dates are YYYY-MM-DD. */
+export type ScheduleTask = {
+  id: string;
+  name: string;
+  start: string;
+  end: string;
+  progress: number;
+  assignee?: string;
+  order: number;
+  milestone?: boolean;
+  /** Progress follows the design approval instead of being entered. */
+  approvalLinked?: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+export type ScheduleLogEntry = {
+  id: string;
+  taskId: string;
+  taskName: string;
+  text: string;
+  progress: number;
+  at: string;
+  byUid: string;
+  byName: string;
+};
+
+/** Compact copy of the plan on the project document, for the dashboard card. */
+export type ScheduleSummary = {
+  items: Pick<ScheduleTask, 'start' | 'end' | 'progress' | 'milestone' | 'approvalLinked'>[];
+  updatedAt: string;
+};
+
 export type Project = {
   id: string;
   name: string;
+  scheduleSummary?: ScheduleSummary;
   routeCode?: string;
   uid: string;
   createdAt?: string;
