@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const {
   notificationForTransition, notificationRecipients, deliveryId, emailContent
 } = require('./approvalNotifications');
+const { finalDocumentFileIds, fitAttachments, attachmentNote } = require('./finalDocuments');
 
 const DATABASE_ID = 'ai-studio-0f13f204-a764-4677-a292-7476ef7d2ece';
 const gmailAppPassword = defineSecret('fiberinfrasharing');
@@ -37,6 +38,40 @@ exports.cleanupProjectFiles = onDocumentDeleted({
   await db.recursiveDelete(project);
 });
 
+/**
+ * The signed PDF and KMZ for a completed approval. The last signer's browser
+ * saves them shortly after the approval completes, so wait up to ~2.5 minutes
+ * for designApproval.finalDocuments; send without them if they never arrive.
+ */
+async function finalDocumentAttachments(db, projectId, approvalId) {
+  const project = db.collection('projects').doc(projectId);
+  let finalDocuments;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const approval = (await project.get()).data()?.designApproval;
+    if (approval?.id !== approvalId) break;
+    finalDocuments = approval.finalDocuments;
+    if (finalDocuments) break;
+    await new Promise(resolve => setTimeout(resolve, 10000));
+  }
+  const bucket = getStorage().bucket('gen-lang-client-0942355314.firebasestorage.app');
+  const files = [];
+  for (const fileId of finalDocumentFileIds(finalDocuments)) {
+    const record = (await project.collection('files').doc(fileId).get()).data();
+    if (!record?.storagePath) continue;
+    try {
+      const [content] = await bucket.file(record.storagePath).download();
+      files.push({ filename: record.name, content, contentType: record.contentType, name: record.name, size: content.length });
+    } catch (error) {
+      logger.warn('Final document not attached', { projectId, fileId, message: String(error?.message || error) });
+    }
+  }
+  const { attached, skipped } = fitAttachments(files);
+  return {
+    attachments: attached.map(({ filename, content, contentType }) => ({ filename, content, contentType })),
+    note: attachmentNote(attached.map(file => file.name), skipped)
+  };
+}
+
 async function claimDelivery(db, id, details) {
   const ref = db.collection('approvalEmailDeliveries').doc(id);
   const now = Date.now();
@@ -63,7 +98,9 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   region: 'asia-southeast1',
   retry: true,
   secrets: [gmailAppPassword],
-  timeoutSeconds: 120
+  // Room to wait for the signed documents on the completion email.
+  timeoutSeconds: 300,
+  memory: '512MiB'
 }, async event => {
   if (!event.data) return;
   const notification = notificationForTransition(
@@ -82,7 +119,10 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   const users = await db.collection('users').get();
   const recipients = notificationRecipients(users.docs.map(user => user.data()), notification);
   const projectId = event.params.projectId;
-  const content = emailContent(notification, url, projectId);
+  const final = notification.kind === 'approval-completed'
+    ? await finalDocumentAttachments(db, projectId, notification.approvalId)
+    : { attachments: [], note: undefined };
+  const content = emailContent(notification, url, projectId, final.note);
   const transport = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: from, pass: password }
@@ -102,6 +142,7 @@ exports.sendApprovalNotifications = onDocumentUpdated({
     try {
       sent = await transport.sendMail({
         from, to: email, ...content,
+        ...(final.attachments.length ? { attachments: final.attachments } : {}),
         messageId: `<approval-${id}@gmail.com>`
       });
     } catch (error) {
