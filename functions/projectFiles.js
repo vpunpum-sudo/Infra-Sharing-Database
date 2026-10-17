@@ -69,6 +69,14 @@ function decodeFile(base64) {
   return bytes;
 }
 
+function validContentType(value) {
+  return typeof value === 'string' && value.length <= 100 ? value : 'application/octet-stream';
+}
+
+function contentDisposition(name) {
+  return `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
 // Unexpected errors otherwise reach the client as a bare "INTERNAL", so log
 // the cause and map the common Storage/Firestore setup failures to a message.
 function toHttpsError(error, context) {
@@ -96,8 +104,9 @@ exports.manageProjectFile = onCall({ region, timeoutSeconds: 120, memory: '512Mi
 
 async function handleProjectFile(request) {
   const { action, projectId, fileId } = request.data || {};
-  const write = ['upload', 'replace', 'rename', 'delete', 'createFolder', 'renameFolder', 'deleteFolder'].includes(action);
-  if (!write && action !== 'download') throw new HttpsError('invalid-argument', 'คำสั่งไม่ถูกต้อง');
+  const write = ['upload', 'replace', 'startUpload', 'finishUpload', 'rename', 'delete',
+    'createFolder', 'renameFolder', 'deleteFolder'].includes(action);
+  if (!write && action !== 'download' && action !== 'downloadUrl') throw new HttpsError('invalid-argument', 'คำสั่งไม่ถูกต้อง');
   const { db } = await authorize(request.auth, projectId, write);
   const files = db.collection('projects').doc(projectId).collection('files');
   const folders = db.collection('projects').doc(projectId).collection('folders');
@@ -129,6 +138,70 @@ async function handleProjectFile(request) {
     return { ok: true };
   }
 
+  // Large files: the browser uploads straight to Storage through a resumable
+  // session, because callable requests are capped at a few MB. startUpload
+  // reserves a path; finishUpload records the file once the object exists.
+  if (action === 'startUpload') {
+    const fileId = request.data.fileId;
+    let id = randomUUID();
+    if (fileId !== undefined) {
+      if (typeof fileId !== 'string' || !/^[\w-]{1,100}$/.test(fileId) || !(await files.doc(fileId).get()).exists) {
+        throw new HttpsError('not-found', 'ไม่พบไฟล์');
+      }
+      id = fileId;
+    } else {
+      validFileName(request.data.name);
+      await validFolderId(folders, request.data.folderId);
+    }
+    const storagePath = `project-files/${projectId}/${id}/${randomUUID()}`;
+    const origin = request.rawRequest?.headers?.origin;
+    const [uploadUrl] = await bucket.file(storagePath).createResumableUpload({
+      metadata: { contentType: validContentType(request.data.contentType) },
+      ...(typeof origin === 'string' && /^https?:\/\/[^/]+$/.test(origin) ? { origin } : {})
+    });
+    return { id, storagePath, uploadUrl };
+  }
+  if (action === 'finishUpload') {
+    const { storagePath } = request.data;
+    const id = request.data.fileId ?? request.data.id;
+    if (typeof id !== 'string' || !/^[\w-]{1,100}$/.test(id) || typeof storagePath !== 'string' ||
+        !new RegExp(`^project-files/${projectId}/${id}/[\\w-]{1,100}$`).test(storagePath)) {
+      throw new HttpsError('invalid-argument', 'ข้อมูลการอัปโหลดไม่ถูกต้อง');
+    }
+    const object = bucket.file(storagePath);
+    const [exists] = await object.exists();
+    if (!exists) throw new HttpsError('failed-precondition', 'อัปโหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่');
+    const [metadata] = await object.getMetadata();
+    const size = Number(metadata.size) || 0;
+    const contentType = validContentType(metadata.contentType);
+    const now = new Date().toISOString();
+    if (request.data.fileId !== undefined) {
+      const fileRef = files.doc(id);
+      const fileDoc = await fileRef.get();
+      if (!fileDoc.exists) {
+        await object.delete({ ignoreNotFound: true });
+        throw new HttpsError('not-found', 'ไม่พบไฟล์');
+      }
+      const previous = fileDoc.data().storagePath;
+      await fileRef.update({ storagePath, size, contentType, updatedAt: now, uploadedBy: request.auth.uid });
+      if (previous && previous !== storagePath) {
+        try { await bucket.file(previous).delete({ ignoreNotFound: true }); }
+        catch (error) { console.error('Old project file cleanup failed', error); }
+      }
+      return { ok: true };
+    }
+    const name = validFileName(request.data.name);
+    const folderId = await validFolderId(folders, request.data.folderId);
+    try {
+      await files.doc(id).set({ id, name, folderId, contentType, size, storagePath,
+        createdAt: now, updatedAt: now, uploadedBy: request.auth.uid });
+    } catch (error) {
+      await object.delete({ ignoreNotFound: true });
+      throw error;
+    }
+    return { id };
+  }
+
   if (action === 'upload') {
     const name = validFileName(request.data.name);
     const folderId = await validFolderId(folders, request.data.folderId);
@@ -157,6 +230,19 @@ async function handleProjectFile(request) {
   if (!fileDoc.exists) throw new HttpsError('not-found', 'ไม่พบไฟล์');
   const current = fileDoc.data();
 
+  if (action === 'downloadUrl') {
+    // A fresh Firebase download token per request, so an earlier link stops
+    // working once someone downloads the file again.
+    const token = randomUUID();
+    await bucket.file(current.storagePath).setMetadata({
+      contentDisposition: contentDisposition(current.name),
+      metadata: { firebaseStorageDownloadTokens: token }
+    });
+    return {
+      name: current.name,
+      url: `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodeURIComponent(current.storagePath)}?alt=media&token=${token}`
+    };
+  }
   if (action === 'download') {
     const [bytes] = await bucket.file(current.storagePath).download();
     return { name: current.name, contentType: current.contentType, base64: bytes.toString('base64') };
