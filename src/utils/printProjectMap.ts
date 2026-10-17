@@ -94,45 +94,89 @@ export function renderPrintableProjectMap(
     return `<polyline points="${points}" fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" opacity="0.95" /><polyline points="${points}" fill="none" stroke="${color}" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />`;
   }).join('');
 
+  type Box = { x: number; y: number; width: number; height: number };
   const legendHeight = 24 + drawableRoutes.length * 48;
-  const occupied: { x: number; y: number; width: number; height: number }[] = [
-    { x: MAP_WIDTH - 300, y: 0, width: 300, height: legendHeight }
-  ];
-  const overlaps = (box: { x: number; y: number; width: number; height: number }) =>
-    occupied.some(other => box.x < other.x + other.width + 6 && box.x + box.width + 6 > other.x &&
-      box.y < other.y + other.height + 6 && box.y + box.height + 6 > other.y);
+  const screenRoutes = drawableRoutes.map(route => route.points.map(toScreen));
+  const iconBoxes = visibleEnclosures.map(enclosure => {
+    const point = toScreen(enclosure.position);
+    return { x: point.x - 10, y: point.y - 10, width: 20, height: 20 };
+  });
+  // Legend, every enclosure icon and route pin are off limits for labels.
+  const occupied: Box[] = [{ x: MAP_WIDTH - 300, y: 0, width: 300, height: legendHeight }, ...iconBoxes];
+  const intersects = (a: Box, b: Box, gap = 4) =>
+    a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
+  const overlaps = (box: Box, ignore?: Box) => occupied.some(other => other !== ignore && intersects(box, other));
+
+  // Route pins first, so labels steer around them too.
+  const routePinPoints = drawableRoutes.map(route => {
+    const candidates = [0.5, 0.35, 0.65, 0.2, 0.8].map(fraction =>
+      toScreen(route.points[Math.round((route.points.length - 1) * fraction)]));
+    const point = candidates.find(candidate => candidate.x > 16 && candidate.x < MAP_WIDTH - 16 &&
+      candidate.y > 16 && candidate.y < MAP_HEIGHT - 16 &&
+      !overlaps({ x: candidate.x - 13, y: candidate.y - 13, width: 26, height: 26 }));
+    if (point) occupied.push({ x: point.x - 13, y: point.y - 13, width: 26, height: 26 });
+    return point;
+  });
+
+  /** Length of route line inside the box (sampled), so labels prefer empty map. */
+  const lineCover = (box: Box) => {
+    let covered = 0;
+    for (const points of screenRoutes) {
+      for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1], b = points[i];
+        const length = Math.hypot(b.x - a.x, b.y - a.y);
+        const steps = Math.max(1, Math.ceil(length / 4));
+        for (let step = 0; step <= steps; step++) {
+          const x = a.x + (b.x - a.x) * step / steps, y = a.y + (b.y - a.y) * step / steps;
+          if (x >= box.x - 5 && x <= box.x + box.width + 5 && y >= box.y - 5 && y <= box.y + box.height + 5) covered += length / steps;
+        }
+      }
+    }
+    return covered;
+  };
+
   const endpointLines: string[] = [];
-  const markers = visibleEnclosures.map(enclosure => {
+  const markers = visibleEnclosures.map((enclosure, index) => {
     const screen = toScreen(enclosure.position);
     const x = (screen.x / MAP_WIDTH * 100).toFixed(3);
     const y = (screen.y / MAP_HEIGHT * 100).toFixed(3);
     const icon = enclosure.iconUrl
       ? `<img src="${escapeHtml(enclosure.iconUrl)}" alt="" style="width: 16px; height: 16px; object-fit: contain; background: white; border: 1px solid #0f172a; border-radius: 3px;" />`
       : `<span style="display: block; width: 12px; height: 12px; background: ${safeColor(enclosure.color, '#3b82f6')}; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px #0f172a;"></span>`;
-    const width = 174, height = 29;
-    const candidates = [[12, -height - 12], [12, 12], [-width - 12, -height - 12], [-width - 12, 12]];
-    const boxes = candidates.map(([dx, dy]) => ({
-      x: Math.max(6, Math.min(MAP_WIDTH - width - 6, screen.x + dx)),
-      y: Math.max(6, Math.min(MAP_HEIGHT - height - 6, screen.y + dy)), width, height
-    }));
-    const fallbackBoxes = Array.from({ length: 12 }, (_, row) =>
-      Array.from({ length: 5 }, (_, col) => ({ x: 8 + col * 196, y: 8 + row * 44, width, height }))).flat();
-    const box = [...boxes, ...fallbackBoxes].find(candidate => !overlaps(candidate)) || boxes[0];
+    // Size the label to its text (9px bold) instead of a fixed wide box.
+    const width = Math.max(70, Math.min(230, Math.round(enclosure.label.length * 5.2) + 12));
+    const height = width >= 230 && enclosure.label.length * 5.2 > 218 ? 29 : 18;
+    const own = iconBoxes[index];
+    // Ring of positions around the icon at growing distances; pick the one
+    // that hides the least route line and stays close to its enclosure.
+    const candidates: Box[] = [];
+    for (const distance of [14, 34, 58, 86, 120]) {
+      for (let angle = 0; angle < 360; angle += 30) {
+        const radians = angle * Math.PI / 180;
+        const cx = screen.x + Math.cos(radians) * (distance + width / 2);
+        const cy = screen.y + Math.sin(radians) * (distance + height / 2);
+        candidates.push({
+          x: Math.max(6, Math.min(MAP_WIDTH - width - 6, cx - width / 2)),
+          y: Math.max(6, Math.min(MAP_HEIGHT - height - 6, cy - height / 2)), width, height
+        });
+      }
+    }
+    const scored = candidates
+      .filter(candidate => !overlaps(candidate, own) && !intersects(candidate, own, 2))
+      .map(candidate => ({ candidate, score: lineCover(candidate) * 4 +
+        Math.hypot(candidate.x + width / 2 - screen.x, candidate.y + height / 2 - screen.y) }))
+      .sort((a, b) => a.score - b.score);
+    const box = scored[0]?.candidate || candidates[0];
     occupied.push(box);
     const endX = Math.max(box.x, Math.min(box.x + width, screen.x));
     const endY = Math.max(box.y, Math.min(box.y + height, screen.y));
-    endpointLines.push(`<line x1="${screen.x.toFixed(1)}" y1="${screen.y.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}" stroke="#334155" stroke-width="1.5" />`);
-    return `<div style="position:absolute; left:${x}%; top:${y}%; transform:translate(-50%,-50%); z-index:6;">${icon}</div><div style="position:absolute; left:${(box.x / MAP_WIDTH * 100).toFixed(3)}%; top:${(box.y / MAP_HEIGHT * 100).toFixed(3)}%; width:${(width / MAP_WIDTH * 100).toFixed(3)}%; box-sizing:border-box; padding:3px 5px; background:rgba(255,255,255,.96); border:1px solid #94a3b8; border-radius:4px; color:#0f172a; font-size:9px; font-weight:700; line-height:1.2; overflow-wrap:anywhere; z-index:5;">${escapeHtml(enclosure.label)}</div>`;
+    endpointLines.push(`<line x1="${screen.x.toFixed(1)}" y1="${screen.y.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}" stroke="#334155" stroke-width="1.2" stroke-dasharray="3 2" />`);
+    return `<div style="position:absolute; left:${x}%; top:${y}%; transform:translate(-50%,-50%); z-index:6;">${icon}</div><div style="position:absolute; left:${(box.x / MAP_WIDTH * 100).toFixed(3)}%; top:${(box.y / MAP_HEIGHT * 100).toFixed(3)}%; width:${(width / MAP_WIDTH * 100).toFixed(3)}%; box-sizing:border-box; padding:2px 5px; background:rgba(255,255,255,.96); border:1px solid #94a3b8; border-radius:4px; color:#0f172a; font-size:9px; font-weight:700; line-height:1.2; overflow-wrap:anywhere; z-index:5;">${escapeHtml(enclosure.label)}</div>`;
   }).join('');
 
   const routePins = drawableRoutes.map((route, index) => {
-    const candidates = [0.5, 0.35, 0.65, 0.2, 0.8].map(fraction =>
-      toScreen(route.points[Math.round((route.points.length - 1) * fraction)]));
-    const point = candidates.find(candidate => candidate.x > 16 && candidate.x < MAP_WIDTH - 16 &&
-      candidate.y > 16 && candidate.y < MAP_HEIGHT - 16 &&
-      !overlaps({ x: candidate.x - 13, y: candidate.y - 13, width: 26, height: 26 }));
+    const point = routePinPoints[index];
     if (!point) return '';
-    occupied.push({ x: point.x - 13, y: point.y - 13, width: 26, height: 26 });
     return `<div style="position:absolute; left:${(point.x / MAP_WIDTH * 100).toFixed(3)}%; top:${(point.y / MAP_HEIGHT * 100).toFixed(3)}%; transform:translate(-50%,-50%); width:23px; height:23px; border:2px solid white; border-radius:50%; background:${safeColor(route.color, '#0284c7')}; color:#0f172a; font-size:12px; font-weight:900; line-height:19px; text-align:center; box-shadow:0 0 0 1px #334155; z-index:4;">${index + 1}</div>`;
   }).join('');
 
