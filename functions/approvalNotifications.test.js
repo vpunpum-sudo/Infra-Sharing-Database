@@ -11,10 +11,10 @@ const project = (stage, planning = signOffs('Pending'), om = signOffs('Pending')
     planningSignOffs: planning, omSignOffs: om }
 });
 
-test('submission targets Design for participating owners', () => {
+test('submission targets Design and Planning for participating owners', () => {
   const notice = notificationForTransition({ status: 'Draft' }, project('Planning'));
   assert.equal(notice.kind, 'planning-requested');
-  assert.deepEqual(notice.roles, ['Design']);
+  assert.deepEqual(notice.roles, ['Design', 'Planning']);
   assert.deepEqual(notice.owners, ['ITEL', 'UIH']);
 });
 
@@ -26,13 +26,13 @@ test('Management notice requires all Planning approvals', () => {
   assert.deepEqual(notice.roles, ['Management']);
 });
 
-test('completion requires both approval levels and targets both roles', () => {
+test('completion requires both approval levels and targets Design, Planning and Management', () => {
   const before = project('OM', signOffs('Approved'));
   assert.equal(notificationForTransition(before, project('Completed', signOffs('Approved'))), null);
   const notice = notificationForTransition(before,
     project('Completed', signOffs('Approved'), signOffs('Approved')));
   assert.equal(notice.kind, 'approval-completed');
-  assert.deepEqual(notice.roles, ['Design', 'Management']);
+  assert.deepEqual(notice.roles, ['Design', 'Planning', 'Management']);
 });
 
 test('recipient emails are unique, approved and limited to owner and role', () => {
@@ -60,4 +60,15 @@ test('projects without explicitly participating owners do not notify every compa
   const after = project('Planning');
   delete after.owners;
   assert.equal(notificationForTransition({ status: 'Draft' }, after), null);
+});
+
+test('Planning users receive the Planning-stage request', () => {
+  const notice = notificationForTransition({ status: 'Draft' }, project('Planning'));
+  const users = [
+    { email: 'planner@example.com', role: 'Planning', owner: 'UIH', isApproved: true },
+    { email: 'designer@example.com', role: 'Design', owner: 'ITEL', isApproved: true },
+    { email: 'manager@example.com', role: 'Management', owner: 'UIH', isApproved: true }
+  ];
+  assert.deepEqual(notificationRecipients(users, notice),
+    ['designer@example.com', 'planner@example.com']);
 });

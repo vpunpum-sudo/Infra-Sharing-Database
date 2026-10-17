@@ -34,7 +34,7 @@ function notificationForTransition(before, after) {
   if (stage === 'Planning' && after.status === 'Pending Approval' &&
       (previous?.id !== approval.id || before?.status !== 'Pending Approval')) {
     kind = 'planning-requested';
-    roles = ['Design'];
+    roles = ['Design', 'Planning'];
   } else if (stage === 'OM' && previous?.id === approval.id &&
       previous.approvalStage !== 'OM' &&
       allApproved(approval.planningSignOffs, owners)) {
@@ -45,7 +45,7 @@ function notificationForTransition(before, after) {
       allApproved(approval.planningSignOffs, owners) &&
       allApproved(approval.omSignOffs, owners)) {
     kind = 'approval-completed';
-    roles = ['Design', 'Management'];
+    roles = ['Design', 'Planning', 'Management'];
   } else {
     return null;
   }
