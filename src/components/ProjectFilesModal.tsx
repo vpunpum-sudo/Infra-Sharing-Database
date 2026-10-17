@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { db, functions } from '../firebase';
 import { Project, ProjectFile, ProjectFolder } from '../types';
+import { useToast } from './Toast';
 
 const manageProjectFile = httpsCallable(functions, 'manageProjectFile');
 
@@ -47,6 +48,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   const [editingName, setEditingName] = useState('');
   const [replaceId, setReplaceId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const notify = useToast();
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, `projects/${project.id}/files`), snapshot => {
@@ -83,11 +85,13 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  async function run(action: string, values: Record<string, unknown> = {}) {
+  async function run(action: string, values: Record<string, unknown> = {}, success?: string) {
     setBusy(true);
     setError('');
     try {
-      return (await manageProjectFile({ action, projectId: project.id, ...values })).data as Record<string, string>;
+      const result = (await manageProjectFile({ action, projectId: project.id, ...values })).data as Record<string, string>;
+      if (success) notify(success);
+      return result;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'ดำเนินการกับไฟล์ไม่สำเร็จ');
       return null;
@@ -120,7 +124,8 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     } finally {
       setProgress(null);
     }
-    await run('finishUpload', { ...target, id: session.id, storagePath: session.storagePath });
+    await run('finishUpload', { ...target, id: session.id, storagePath: session.storagePath },
+      fileId ? 'แทนที่ไฟล์แล้ว' : `อัปโหลด “${chosen.name}” แล้ว`);
   }
 
   async function download(item: ProjectFile) {
@@ -136,29 +141,29 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   async function rename(item: ProjectFile) {
     const name = editingName.trim();
     if (!name || name === item.name) { setEditingId(null); return; }
-    if (await run('rename', { fileId: item.id, name })) setEditingId(null);
+    if (await run('rename', { fileId: item.id, name }, 'เปลี่ยนชื่อไฟล์แล้ว')) setEditingId(null);
   }
 
   async function createFolder() {
     const name = (newFolderName || '').trim();
     if (!name) { setNewFolderName(null); return; }
-    if (await run('createFolder', { name, parentId: folderId })) setNewFolderName(null);
+    if (await run('createFolder', { name, parentId: folderId }, `สร้างโฟลเดอร์ “${name}” แล้ว`)) setNewFolderName(null);
   }
 
   async function renameFolder(folder: ProjectFolder) {
     const name = editingName.trim();
     if (!name || name === folder.name) { setEditingFolderId(null); return; }
-    if (await run('renameFolder', { folderId: folder.id, name })) setEditingFolderId(null);
+    if (await run('renameFolder', { folderId: folder.id, name }, 'เปลี่ยนชื่อโฟลเดอร์แล้ว')) setEditingFolderId(null);
   }
 
   async function removeFolder(folder: ProjectFolder) {
     if (!window.confirm(`ลบโฟลเดอร์ “${folder.name}”? (ลบได้เฉพาะโฟลเดอร์ว่าง)`)) return;
-    await run('deleteFolder', { folderId: folder.id });
+    await run('deleteFolder', { folderId: folder.id }, 'ลบโฟลเดอร์แล้ว');
   }
 
   async function remove(item: ProjectFile) {
     if (!window.confirm(`ลบไฟล์ “${item.name}” ออกจากโครงการ?`)) return;
-    await run('delete', { fileId: item.id });
+    await run('delete', { fileId: item.id }, 'ลบไฟล์แล้ว');
   }
 
   return (
@@ -207,7 +212,10 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
             <button type="button" onClick={createFolder} disabled={busy} className="text-sm font-bold text-sky-300">สร้าง</button>
             <button type="button" onClick={() => setNewFolderName(null)} className="text-sm text-slate-300">ยกเลิก</button>
           </div>}
-          {error && <p role="alert" className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-sm text-rose-100">{error}</p>}
+          {error && <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-sm text-rose-100">
+            <p className="flex-1">{error}</p>
+            <button type="button" onClick={() => setError('')} aria-label="ปิดข้อความ" className="rounded p-0.5 hover:bg-rose-900/60"><X size={16} /></button>
+          </div>}
           {childFolders.length > 0 && <ul className="mb-2 space-y-2">{childFolders.map(folder => <li key={folder.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               {editingFolderId === folder.id ? <div className="flex min-w-0 flex-1 items-center gap-3">

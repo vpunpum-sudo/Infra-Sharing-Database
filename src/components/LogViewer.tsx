@@ -95,20 +95,20 @@ export const LogViewer = () => {
                             </h4>
                             <div className="bg-slate-950/50 rounded-xl p-4 space-y-3 border border-slate-800/50">
                               <div>
-                                <span className="text-[10px] text-slate-500 uppercase tracking-widest block mb-1">Path</span>
+                                <span className="text-xs text-slate-500 uppercase tracking-widest block mb-1">Path</span>
                                 <span className="text-sm text-slate-300 font-mono bg-slate-900 px-2 py-0.5 rounded">{log.path || 'N/A'}</span>
                               </div>
                               <div>
-                                <span className="text-[10px] text-slate-500 uppercase tracking-widest block mb-1">User Agent</span>
+                                <span className="text-xs text-slate-500 uppercase tracking-widest block mb-1">User Agent</span>
                                 <span className="text-xs text-slate-400 break-all">{log.userAgent || 'N/A'}</span>
                               </div>
                               <div className="flex gap-6">
                                 <div>
-                                  <span className="text-[10px] text-slate-500 uppercase tracking-widest block mb-1">Resolution</span>
+                                  <span className="text-xs text-slate-500 uppercase tracking-widest block mb-1">Resolution</span>
                                   <span className="text-sm text-slate-300">{log.screenResolution || 'N/A'}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] text-slate-500 uppercase tracking-widest block mb-1">Language</span>
+                                  <span className="text-xs text-slate-500 uppercase tracking-widest block mb-1">Language</span>
                                   <span className="text-sm text-slate-300">{log.language || 'N/A'}</span>
                                 </div>
                               </div>

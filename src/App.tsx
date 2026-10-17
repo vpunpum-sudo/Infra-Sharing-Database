@@ -1468,12 +1468,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               <span>Daily Write Limit Reached (Firestore Quota Exceeded)</span>
             </div>
             <div className="flex items-center gap-4">
-              <p className="text-[10px] font-bold opacity-90 hidden sm:block">
+              <p className="text-xs font-bold opacity-90 hidden sm:block">
                 The free tier daily write limit has been reached. Saving is disabled until the quota resets (usually at midnight PST).
               </p>
               <button 
                 onClick={() => window.location.reload()}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-600 rounded-lg text-xs font-black uppercase tracking-widest transition-all"
               >
                 Retry
               </button>
@@ -1496,7 +1496,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 </div>
                 <div className="min-w-0">
                   <h1 className="text-sm font-black text-slate-100 tracking-tight leading-tight font-display truncate">FIBER SHARING DATABASE</h1>
-                  <p className="text-[10px] text-brand-400 font-black uppercase tracking-widest truncate">Network Infra</p>
+                  <p className="text-xs text-brand-400 font-black uppercase tracking-widest truncate">Network Infra</p>
                 </div>
               </div>
             </div>
@@ -1541,7 +1541,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             <div className="flex items-center justify-between">
               <button 
                 onClick={() => navigate('/')}
-                className="btn-secondary text-[11px] font-semibold flex items-center justify-center gap-1.5 py-1.5 px-3"
+                className="btn-secondary text-xs font-semibold flex items-center justify-center gap-1.5 py-1.5 px-3"
               >
                 <ChevronLeft size={13} /> Back to Projects
               </button>
@@ -1549,7 +1549,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               {currentProject && (() => {
                 const status = currentProject.status || currentProject.designApproval?.status || 'Draft';
                 return (
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border flex items-center gap-1 ${
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black uppercase tracking-wider border flex items-center gap-1 ${
                     status === 'Approved'
                       ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                       : status === 'Pending Approval'
@@ -1568,14 +1568,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             {currentProject && (
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2 shadow-inner">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-bold text-slate-200 truncate">{currentProject.name}</p>
-                  <p className="text-[9px] text-slate-500 font-mono truncate">
+                  <p className="text-xs font-bold text-slate-200 truncate">{currentProject.name}</p>
+                  <p className="text-xs text-slate-500 font-mono truncate">
                     {currentProject.owners?.join(', ') || currentProject.owner || 'Participating Owners'}
                   </p>
                 </div>
                 <button
                   onClick={() => setApprovalModalOpen(true)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 border ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 border ${
                     (currentProject.status || currentProject.designApproval?.status) === 'Approved'
                       ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
                       : (currentProject.status || currentProject.designApproval?.status) === 'Pending Approval'
@@ -1621,7 +1621,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all gap-1.5 ${enclosureModalOpen ? 'bg-brand-600/10 border-brand-500 text-brand-400 shadow-md shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <MapPin size={18} className={enclosureModalOpen ? 'text-brand-400' : 'text-slate-500'} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Enclosure</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Enclosure</span>
                   </button>
                   <button
                     onClick={() => { setDrawingMode('route'); setDraftRoute([]); setSelectedRouteId(undefined); setEditingRouteId(null); }}
@@ -1629,7 +1629,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all gap-1.5 ${drawingMode === 'route' ? 'bg-brand-600/10 border-brand-500 text-brand-400 shadow-md shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <RouteIcon size={18} className={drawingMode === 'route' ? 'text-brand-400' : 'text-slate-500'} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Route</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Route</span>
                   </button>
                   <button
                     onClick={() => { setDrawingMode('loop'); setDraftRoute([]); setSelectedRouteId(undefined); setEditingRouteId(null); }}
@@ -1637,7 +1637,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all gap-1.5 ${drawingMode === 'loop' ? 'bg-brand-600/10 border-brand-500 text-brand-400 shadow-md shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <GitMerge size={18} className={drawingMode === 'loop' ? 'text-brand-400' : 'text-slate-500'} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Loop</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Loop</span>
                   </button>
                 </>
               )}
@@ -1646,14 +1646,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all gap-1.5 ${drawingMode === 'none' ? 'bg-slate-800 border-slate-600 text-slate-200 shadow-sm' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'}`}
               >
                 <Layers size={18} className="text-slate-500" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Select</span>
+                <span className="text-xs font-bold uppercase tracking-wider">Select</span>
               </button>
             </div>
           </div>
 
           {(drawingMode === 'route' || drawingMode === 'edit-route' || drawingMode === 'edit-enclosure') && (
             <div className="p-5 bg-brand-600/10 border-b border-brand-500/20">
-              <p className="text-[11px] text-brand-400 mb-4 font-black uppercase tracking-widest leading-relaxed">
+              <p className="text-xs text-brand-400 mb-4 font-black uppercase tracking-widest leading-relaxed">
                 {drawingMode === 'edit-route' 
                   ? 'Edit route path. Drag points to move, click to remove, click map to add.' 
                   : drawingMode === 'edit-enclosure'
@@ -1700,8 +1700,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               >
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-brand-500 rounded-full shadow-lg shadow-brand-500/50"></div>
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Routes</span>
-                  <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{routes.length}</span>
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Routes</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{routes.length}</span>
                 </div>
                 {routesExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1734,12 +1734,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
                                 <span className="font-bold text-slate-200 truncate">{route.name}</span>
-                                {(route.fiberType || route.tier) && <span className="text-[10px] text-slate-500 font-black uppercase mt-0.5 tracking-wider">{route.fiberType || route.tier}</span>}
+                                {(route.fiberType || route.tier) && <span className="text-xs text-slate-500 font-black uppercase mt-0.5 tracking-wider">{route.fiberType || route.tier}</span>}
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <div className="flex flex-col items-end mr-1">
-                                  <span className="text-[10px] px-2 py-0.5 bg-slate-800 rounded-lg text-slate-300 font-black tracking-wider">{route.capacity}F</span>
-                                  {route.totalLength !== undefined && <span className="text-[9px] text-brand-400 font-black mt-1">{route.totalLength}m</span>}
+                                  <span className="text-xs px-2 py-0.5 bg-slate-800 rounded-lg text-slate-300 font-black tracking-wider">{route.capacity}F</span>
+                                  {route.totalLength !== undefined && <span className="text-xs text-brand-400 font-black mt-1">{route.totalLength}m</span>}
                                 </div>
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
                                   <>
@@ -1782,8 +1782,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               >
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-rose-500 rounded-full shadow-lg shadow-rose-500/50"></div>
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Enclosures</span>
-                  <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{enclosures.length}</span>
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Enclosures</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{enclosures.length}</span>
                 </div>
                 {enclosuresExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1820,7 +1820,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
                                 <span className="font-bold text-slate-200 truncate">{enclosure.name}</span>
-                                <span className="text-[10px] text-slate-500 font-black uppercase mt-0.5 tracking-wider">{enclosure.locationType || 'Enclosure'}</span>
+                                <span className="text-xs text-slate-500 font-black uppercase mt-0.5 tracking-wider">{enclosure.locationType || 'Enclosure'}</span>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
@@ -1857,8 +1857,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               >
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-amber-500 rounded-full shadow-lg shadow-amber-500/50"></div>
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Loops</span>
-                  <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{loops.length}</span>
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Loops</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{loops.length}</span>
                 </div>
                 {loopsExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1885,7 +1885,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
                                 <span className="font-bold text-slate-200 truncate">{loop.name}</span>
-                                <span className="text-[10px] text-slate-500 font-black uppercase mt-0.5 tracking-wider">Length: {loop.length}m</span>
+                                <span className="text-xs text-slate-500 font-black uppercase mt-0.5 tracking-wider">Length: {loop.length}m</span>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 {(!appUser || DEFAULT_PERMISSIONS[appUser.role].editMap) && (
@@ -2154,7 +2154,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               </h2>
               <div className="space-y-6">
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enclosure Name</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enclosure Name</label>
                   <input
                     type="text"
                     autoFocus
@@ -2193,7 +2193,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 )}
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enclosure Type</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enclosure Type</label>
                     <select
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all appearance-none"
                       value={enclosureTypeId}
@@ -2206,7 +2206,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Location Type</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Location Type</label>
                     <select
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all appearance-none"
                       value={enclosureLocationType}
@@ -2220,7 +2220,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Location Name</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Location Name</label>
                   <input
                     type="text"
                     placeholder="e.g., MH-123"
@@ -2231,7 +2231,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Latitude</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Latitude</label>
                     <input
                       type="number"
                       step="any"
@@ -2244,7 +2244,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Longitude</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Longitude</label>
                     <input
                       type="number"
                       step="any"
@@ -2306,14 +2306,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               <div className="p-6 bg-slate-950 flex gap-3">
                 <button 
                   onClick={() => setDeleteEnclosureId(null)}
-                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
+                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={confirmDeleteEnclosure}
                   disabled={quotaExceeded}
-                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Delete
                 </button>
@@ -2337,7 +2337,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               </h2>
               <div className="space-y-6">
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Route Name</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Route Name</label>
                   <input
                     type="text"
                     autoFocus
@@ -2349,7 +2349,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Capacity / Fiber Type</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Capacity / Fiber Type</label>
                     <select
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all appearance-none"
                       value={routeCapacityInput}
@@ -2368,11 +2368,11 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       const cap = ft?.cores || (routeCapacityInput.match(/\d+/) ? parseInt(routeCapacityInput.match(/\d+/)![0], 10) : 0);
                       return cap < (routes.find(r => r.id === editingRouteId)?.capacity || 0);
                     })() && (
-                      <p className="text-[10px] text-rose-400 mt-2 font-bold uppercase tracking-wider">Warning: Reducing capacity will delete cores from the end.</p>
+                      <p className="text-xs text-rose-400 mt-2 font-bold uppercase tracking-wider">Warning: Reducing capacity will delete cores from the end.</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tier</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tier</label>
                     <select
                       className="w-full bg-slate-800/50 border border-slate-700 p-4 rounded-2xl text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all appearance-none"
                       value={routeTierInput}
@@ -2394,7 +2394,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
                 {routeTierInput === 'Tier 2' && (
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Select 2 Owners</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Select 2 Owners</label>
                     <div className="flex gap-4">
                       {['ITEL', 'SYMC', 'UIH'].map((owner) => (
                         <label key={owner} className="flex items-center gap-3 cursor-pointer group">
@@ -2421,16 +2421,16 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       ))}
                     </div>
                     {routeOwnersInput.length !== 2 && (
-                      <p className="text-[10px] text-rose-400 mt-2 font-bold uppercase tracking-wider">Please select exactly 2 owners.</p>
+                      <p className="text-xs text-rose-400 mt-2 font-bold uppercase tracking-wider">Please select exactly 2 owners.</p>
                     )}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Mark Length (Meters)</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Mark Length (Meters)</label>
                   <div className="grid grid-cols-2 gap-6 mb-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Start</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Start</label>
                       <input
                         type="number"
                         placeholder="0"
@@ -2440,7 +2440,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">End</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">End</label>
                       <input
                         type="number"
                         placeholder="0"
@@ -2451,7 +2451,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     </div>
                   </div>
                   <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex justify-between items-center">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Length:</span>
+                    <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total Length:</span>
                     <span className="text-sm font-black text-brand-400">
                       {Math.abs((parseFloat(routeMarkEnd) || 0) - (parseFloat(routeMarkStart) || 0)).toLocaleString()} m
                     </span>
@@ -2487,7 +2487,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               </h2>
               <div className="space-y-6">
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Loop Name</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Loop Name</label>
                   <input
                     type="text"
                     autoFocus
@@ -2498,7 +2498,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Loop Length (Meters)</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Loop Length (Meters)</label>
                   <input
                     type="number"
                     placeholder="e.g., 50"
@@ -2509,7 +2509,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Latitude</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Latitude</label>
                     <input
                       type="text"
                       placeholder="Latitude"
@@ -2519,7 +2519,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Longitude</label>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Longitude</label>
                     <input
                       type="text"
                       placeholder="Longitude"
@@ -2570,14 +2570,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               <div className="p-6 bg-slate-950 flex gap-3">
                 <button 
                   onClick={() => setDeleteLoopId(null)}
-                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
+                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={() => handleDeleteLoop(deleteLoopId!)}
                   disabled={quotaExceeded}
-                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Delete
                 </button>
@@ -2605,7 +2605,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               <div className="p-6 bg-slate-950">
                 <button 
                   onClick={() => setErrorModalOpen(null)}
-                  className="w-full py-4 bg-brand-600 text-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all"
+                  className="w-full py-4 bg-brand-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-brand-700 shadow-lg shadow-brand-900/20 transition-all"
                 >
                   OK
                 </button>
@@ -2633,14 +2633,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
               <div className="p-6 bg-slate-950 flex gap-3">
                 <button 
                   onClick={() => setDeleteRouteId(null)}
-                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
+                  className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={confirmDeleteRoute}
                   disabled={quotaExceeded}
-                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Delete
                 </button>
@@ -2788,7 +2788,7 @@ export default function App() {
             <div className="w-8 h-8 bg-brand-500/10 rounded-full blur-xl animate-pulse" />
           </div>
         </div>
-        <p className="mt-8 text-slate-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Initializing Network</p>
+        <p className="mt-8 text-slate-500 font-black uppercase tracking-[0.3em] text-xs animate-pulse">Initializing Network</p>
       </div>
     );
   }

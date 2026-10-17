@@ -269,9 +269,9 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
-              <span className="px-2 py-0.5 text-[9px] font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
+              <span className="px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Telecom Optical Infrastructure Manager</p>
+            <p className="text-xs text-slate-400 font-medium">Telecom Optical Infrastructure Manager</p>
           </div>
         </div>
 
@@ -279,7 +279,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           {userPermissions.viewUsers && (
             <button 
               onClick={() => navigate('/user-management')}
-              className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-semibold border border-transparent hover:border-slate-700"
+              className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
               title="User Management"
             >
               <Users className="w-3.5 h-3.5 text-brand-400" />
@@ -291,7 +291,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <>
               <button 
                 onClick={() => navigate('/logs')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-semibold border border-transparent hover:border-slate-700"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
                 title="System Logs"
               >
                 <Activity className="w-3.5 h-3.5 text-amber-400" />
@@ -299,7 +299,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
               </button>
               <button 
                 onClick={() => navigate('/permission-management')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-semibold border border-transparent hover:border-slate-700"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
                 title="Permissions"
               >
                 <Shield className="w-3.5 h-3.5 text-emerald-400" />
@@ -312,7 +312,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <>
               <button 
                 onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-semibold border border-transparent hover:border-slate-700"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
                 title="จัดการรูปภาพ Logo ของแต่ละ Owner"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
@@ -320,7 +320,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
               </button>
               <button 
                 onClick={() => navigate('/settings')}
-                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-semibold border border-transparent hover:border-slate-700"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700"
                 title="System Settings"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
@@ -331,7 +331,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
 
           <button 
             onClick={() => navigate('/manual')}
-            className="px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-[11px] font-bold shadow-sm"
+            className="px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
             title="System Manual (Presentation & PDF)"
           >
             <FileText className="w-3.5 h-3.5 text-brand-400" />
@@ -348,10 +348,10 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             title="Profile Settings"
           >
             <div className="flex flex-col items-end">
-              <span className="text-[11px] font-bold text-slate-200 group-hover:text-white transition-colors">{appUser?.displayName || user.email?.split('@')[0]}</span>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{appUser?.displayName || user.email?.split('@')[0]}</span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-[9px] text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
+                <span className="text-xs text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
               </div>
             </div>
             <div className="w-7 h-7 bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all overflow-hidden border border-slate-600">
@@ -390,7 +390,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2.5 py-0.5 text-[11px] font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full flex items-center gap-1.5">
+                  <span className="px-2.5 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full flex items-center gap-1.5">
                     <Sparkles size={12} /> Workspaces Overview
                   </span>
                 </div>
@@ -436,12 +436,12 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
               </div>
 
               <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                <span className="text-[11px] font-bold text-slate-300 mr-1.5 whitespace-nowrap">Filter Owner:</span>
+                <span className="text-xs font-bold text-slate-300 mr-1.5 whitespace-nowrap">Filter Owner:</span>
                 {(['All', 'ITEL', 'SYMC', 'UIH'] as const).map((owner) => (
                   <button
                     key={owner}
                     onClick={() => setSelectedOwnerFilter(owner)}
-                    className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                       selectedOwnerFilter === owner
                         ? 'bg-brand-600 text-white shadow-md shadow-brand-500/25 ring-1 ring-brand-400'
                         : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
@@ -732,12 +732,12 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                             setProjectOwnersInput(['ITEL', 'SYMC', 'UIH']);
                           }
                         }}
-                        className="text-[11px] text-brand-400 hover:text-brand-300 font-bold transition-colors cursor-pointer"
+                        className="text-xs text-brand-400 hover:text-brand-300 font-bold transition-colors cursor-pointer"
                       >
                         {projectOwnersInput.length === 3 ? 'เลือกเฉพาะ ITEL' : 'เลือกทั้งหมด (Select All)'}
                       </button>
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                    <p className="text-xs text-slate-400 leading-relaxed">
                       ผู้ใช้งานในสังกัด Operator ที่ถูกเลือก จะสามารถมองเห็นและเข้าถึงข้อมูลโครงสร้างสายและอุปกรณ์ในโครงการนี้ได้
                     </p>
                     <div className="grid grid-cols-3 gap-3 pt-1">
@@ -769,7 +769,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                       })}
                     </div>
                     {projectOwnersInput.length === 0 && (
-                      <p className="text-[11px] text-rose-400 mt-1 font-semibold">
+                      <p className="text-xs text-rose-400 mt-1 font-semibold">
                         * ต้องเลือกอย่างน้อย 1 Operator เพื่อให้มีสิทธิ์เข้าถึงโครงการ
                       </p>
                     )}

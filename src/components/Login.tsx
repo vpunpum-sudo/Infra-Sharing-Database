@@ -126,7 +126,7 @@ export default function Login() {
                   <button 
                     type="button" 
                     onClick={handleForgotPassword} 
-                    className="text-[10px] text-brand-400 hover:text-brand-300 font-semibold transition-colors"
+                    className="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors"
                   >
                     Forgot Password?
                   </button>
@@ -179,7 +179,7 @@ export default function Login() {
             </form>
             
             <div className="pt-2 text-center border-t border-slate-800">
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 Fiber Sharing Database Platform &bull; Multi-Tenant GIS
               </p>
             </div>

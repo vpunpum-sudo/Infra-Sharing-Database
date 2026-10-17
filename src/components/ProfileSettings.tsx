@@ -163,7 +163,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
 
                   <div className="flex-1 w-full space-y-6">
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Display Name</label>
+                      <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Display Name</label>
                       <input 
                         type="text" 
                         value={displayName}
@@ -173,7 +173,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Profile Image URL</label>
+                      <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Profile Image URL</label>
                       <input 
                         type="text" 
                         value={photoURL}
@@ -183,7 +183,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Email Address</label>
+                      <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Email Address</label>
                       <div className="relative">
                         <input 
                           type="email" 
@@ -191,7 +191,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                           disabled
                           className="w-full bg-slate-800/30 border border-slate-800 p-4 rounded-2xl text-slate-500 font-bold cursor-not-allowed"
                         />
-                        <p className="text-[10px] text-slate-500 mt-2 ml-1 font-black uppercase tracking-widest italic">Email cannot be changed</p>
+                        <p className="text-xs text-slate-500 mt-2 ml-1 font-black uppercase tracking-widest italic">Email cannot be changed</p>
                       </div>
                     </div>
                   </div>
@@ -249,7 +249,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
 
                 <form onSubmit={handleUpdatePassword} className="space-y-6 max-w-md">
                   <div className="space-y-2">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">New Password</label>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">New Password</label>
                     <input 
                       type="password" 
                       value={newPassword}
@@ -260,7 +260,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Confirm New Password</label>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Confirm New Password</label>
                     <input 
                       type="password" 
                       value={confirmPassword}
