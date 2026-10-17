@@ -2,6 +2,7 @@ const { randomUUID } = require('node:crypto');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getStorage } = require('firebase-admin/storage');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const logger = require('firebase-functions/logger');
 const { canAccessProjectFiles } = require('./projectFilePolicy');
 
 const DATABASE_ID = 'ai-studio-0f13f204-a764-4677-a292-7476ef7d2ece';
@@ -49,7 +50,32 @@ function decodeFile(base64) {
   return bytes;
 }
 
+// Unexpected errors otherwise reach the client as a bare "INTERNAL", so log
+// the cause and map the common Storage/Firestore setup failures to a message.
+function toHttpsError(error, context) {
+  if (error instanceof HttpsError) return error;
+  const code = error?.code;
+  const message = String(error?.message || error);
+  logger.error('Project file operation failed', { ...context, code, message, stack: error?.stack });
+  if (code === 404 && /bucket/i.test(message)) {
+    return new HttpsError('failed-precondition', 'ยังไม่ได้เปิดใช้งาน Firebase Storage สำหรับโครงการนี้');
+  }
+  if (code === 403 || code === 7 || code === 'PERMISSION_DENIED') {
+    return new HttpsError('failed-precondition', 'บัญชีบริการของ Cloud Functions ไม่มีสิทธิ์เข้าถึง Storage หรือ Firestore');
+  }
+  if (code === 5 || code === 404) return new HttpsError('not-found', 'ไม่พบไฟล์ในพื้นที่จัดเก็บ');
+  return new HttpsError('internal', 'ดำเนินการกับไฟล์ไม่สำเร็จ กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ');
+}
+
 exports.manageProjectFile = onCall({ region, timeoutSeconds: 120, memory: '512MiB' }, async request => {
+  try {
+    return await handleProjectFile(request);
+  } catch (error) {
+    throw toHttpsError(error, { action: request.data?.action, projectId: request.data?.projectId, uid: request.auth?.uid });
+  }
+});
+
+async function handleProjectFile(request) {
   const { action, projectId, fileId } = request.data || {};
   const write = ['upload', 'replace', 'rename', 'delete'].includes(action);
   if (!write && action !== 'download') throw new HttpsError('invalid-argument', 'คำสั่งไม่ถูกต้อง');
@@ -113,15 +139,19 @@ exports.manageProjectFile = onCall({ region, timeoutSeconds: 120, memory: '512Mi
   try { await bucket.file(current.storagePath).delete({ ignoreNotFound: true }); }
   catch (error) { console.error('Deleted project file cleanup failed', error); }
   return { ok: true };
-});
+}
 
 exports.getProjectCreatedDates = onCall({ region }, async request => {
   const ids = request.data?.projectIds;
   if (!Array.isArray(ids) || ids.length > 50) throw new HttpsError('invalid-argument', 'รายการโครงการไม่ถูกต้อง');
   const result = {};
-  for (const projectId of ids) {
-    const { createdAt } = await authorize(request.auth, projectId, false, true);
-    result[projectId] = createdAt;
+  try {
+    for (const projectId of ids) {
+      const { createdAt } = await authorize(request.auth, projectId, false, true);
+      result[projectId] = createdAt;
+    }
+  } catch (error) {
+    throw toHttpsError(error, { action: 'getProjectCreatedDates', uid: request.auth?.uid });
   }
   return result;
 });
