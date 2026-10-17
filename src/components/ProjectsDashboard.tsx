@@ -3,8 +3,9 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, or } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, logout, handleFirestoreError, OperationType } from '../firebase';
-import { Project, User as AppUser, CoreOwner, ProjectStatus, Route, FiberEnclosure, FiberLoop } from '../types';
-import { buildProjectKml, kmlFileName } from '../utils/kml';
+import { Project, User as AppUser, CoreOwner, ProjectStatus, Route, FiberEnclosure, FiberLoop, EnclosureType, FiberType, FiberColorConfig } from '../types';
+import { exportFileName } from '../utils/kml';
+import { buildProjectKmz } from '../utils/kmz';
 import { useToast } from './Toast';
 import { getRolePermissions, useRolePermissions } from '../services/rolePermissionsStore';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,26 +52,28 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const exportKml = async (project: Project) => {
     setExportingKmlId(project.id);
     try {
-      const read = async <T,>(name: string) =>
-        (await getDocs(collection(db, `projects/${project.id}/${name}`))).docs.map(item => item.data() as T);
-      const [routes, enclosures, loops] = await Promise.all([
-        read<Route>('routes'), read<FiberEnclosure>('enclosures'), read<FiberLoop>('loops')
+      const read = async <T,>(path: string) =>
+        (await getDocs(collection(db, path))).docs.map(item => ({ ...item.data(), id: item.id }) as T);
+      const [routes, enclosures, loops, enclosureTypes, fiberTypes, fiberColorConfigs] = await Promise.all([
+        read<Route>(`projects/${project.id}/routes`), read<FiberEnclosure>(`projects/${project.id}/enclosures`),
+        read<FiberLoop>(`projects/${project.id}/loops`), read<EnclosureType>('enclosureTypes'),
+        read<FiberType>('fiberTypes'), read<FiberColorConfig>('fiberColorConfigs')
       ]);
       if (!routes.length && !enclosures.length && !loops.length) {
         notify('โครงการนี้ยังไม่มีเส้นทางหรือจุดบนแผนที่', 'info');
         return;
       }
-      const blob = new Blob([buildProjectKml({ project, routes, enclosures, loops })], { type: 'application/vnd.google-earth.kml+xml' });
+      const blob = await buildProjectKmz({ project, routes, enclosures, loops, enclosureTypes, fiberTypes, fiberColorConfigs });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = kmlFileName(project);
+      link.download = exportFileName(project, 'kmz');
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       notify(`ดาวน์โหลด ${link.download} แล้ว`);
     } catch (error) {
-      console.error('KML export failed', error);
-      notify('Export KML ไม่สำเร็จ กรุณาลองใหม่', 'error');
+      console.error('KMZ export failed', error);
+      notify('Export KMZ ไม่สำเร็จ กรุณาลองใหม่', 'error');
     } finally {
       setExportingKmlId(null);
     }
@@ -699,10 +702,10 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           </button>}
                           {userPermissions.viewMap && <button type="button" disabled={exportingKmlId === project.id}
                             onClick={event => { event.stopPropagation(); exportKml(project); }}
-                            title="ดาวน์โหลดเส้นทาง Enclosure และ Fiber Loop เป็นไฟล์ KML สำหรับ Google Earth"
+                            title="ดาวน์โหลดเส้น Fiber Optic, Enclosure และ Fiber Loop พร้อมสี ไอคอน และรายละเอียด เป็นไฟล์ KMZ สำหรับ Google Earth / My Maps"
                             className={cardActionClass}>
                             {exportingKmlId === project.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                            {exportingKmlId === project.id ? 'กำลังสร้างไฟล์...' : 'Export KML'}
+                            {exportingKmlId === project.id ? 'กำลังสร้างไฟล์...' : 'Export KMZ'}
                           </button>}
                           {userPermissions.viewMap && <button type="button" onClick={event => { event.stopPropagation(); navigate(`/project/${project.id}`); }}
                             className="card-action card-action-primary">
