@@ -9,7 +9,7 @@ import { doc, setDoc, updateDoc, deleteField, collection, onSnapshot } from 'fir
 import { db } from '../firebase';
 import { logActivity } from '../services/logService';
 import { 
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, FileText,
   Send, PenTool, X, Download, AlertTriangle, 
   Layers, Box, Cable, MapPin, Check, ChevronRight, 
   RotateCcw, Sparkles, Network, Compass, ShieldAlert,
@@ -26,7 +26,10 @@ import { renderPrintableProjectMap } from '../utils/printProjectMap';
 import { normalizePrintLogo } from '../utils/printLogo';
 import { getApprovalAllocation } from '../utils/approvalAllocation';
 import { createFiberLoopIcon } from '../utils/fiberLoopIcon';
-import { exportApprovalPdf } from '../utils/exportApprovalPdf';
+import { createApprovalPdf, exportApprovalPdf } from '../utils/exportApprovalPdf';
+import { buildProjectKmz } from '../utils/kmz';
+import { exportFileName } from '../utils/kml';
+import { ensureProjectFolder, uploadProjectFile } from '../utils/projectFileUpload';
 import { buildApprovalDocumentNumber } from '../utils/approvalDocumentNumber';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
@@ -148,6 +151,9 @@ export function DesignApprovalModal({
   const [actionError, setActionError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // Signed PDF + KMZ for the completion email, made once the last sign-off lands.
+  const [pendingFinalDocuments, setPendingFinalDocuments] = useState(false);
+  const [finalDocumentsState, setFinalDocumentsState] = useState<'idle' | 'working' | 'error'>('idle');
   const [exportError, setExportError] = useState<string | null>(null);
 
   // Loaded subcollections from Firestore
@@ -1495,6 +1501,7 @@ export function DesignApprovalModal({
       if (onProjectUpdated) {
         onProjectUpdated(updatedProject);
       }
+      if (allOMApproved && project.designApproval.approvalStage !== 'Completed') setPendingFinalDocuments(true);
 
       setSigningModalOpen(false);
       setSigningTarget(null);
@@ -1507,16 +1514,58 @@ export function DesignApprovalModal({
   };
 
   // Render the printable presentation and download an actual PDF file.
+  const buildPrintDocument = async () => {
+    const printLogos = Object.fromEntries(await Promise.all(participatingOwners.map(async owner => {
+      const fallback = owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg';
+      return [owner, await normalizePrintLogo(getEffectiveOwnerLogo(owner) || fallback, fallback)];
+    }))) as Partial<Record<CoreOwner, string>>;
+    return generatePrintableHtml(printLogos);
+  };
+
+  /** Builds the fully signed PDF and the KMZ, saves both to the project files
+   *  ("เอกสารอนุมัติ") and records them on the approval for the completion email. */
+  const createFinalDocuments = async () => {
+    if (!appUser || !project.designApproval || finalDocumentsState === 'working') return;
+    setFinalDocumentsState('working');
+    try {
+      const pdf = (await createApprovalPdf(await buildPrintDocument())).output('blob');
+      const folderId = await ensureProjectFolder(project.id, 'เอกสารอนุมัติ');
+      const baseName = exportFileName(project, 'pdf').replace(/\.pdf$/, '');
+      const docNo = (project.designApproval.documentNumber || '').replace(/[\\/:*?"<>|]+/g, '-');
+      const pdfName = `${docNo ? `${docNo} ` : ''}${baseName} (ลงนามครบ).pdf`;
+      const pdfFileId = await uploadProjectFile(project.id, pdf, pdfName, folderId);
+      let kmz: { kmzFileId: string; kmzName: string } | {} = {};
+      try {
+        const kmzName = exportFileName(project, 'kmz');
+        const kmzBlob = await buildProjectKmz({ project, routes: effectiveRoutes, enclosures: effectiveEnclosures, loops: loadedLoops,
+          enclosureTypes, fiberTypes, fiberColorConfigs });
+        kmz = { kmzFileId: await uploadProjectFile(project.id, kmzBlob, kmzName, folderId), kmzName };
+      } catch (error) {
+        console.error('Final KMZ failed', error);
+      }
+      await updateDoc(doc(db, `projects/${project.id}`), {
+        'designApproval.finalDocuments': { pdfFileId, pdfName, ...kmz, createdAt: new Date().toISOString(), createdBy: appUser.id }
+      });
+      setFinalDocumentsState('idle');
+    } catch (error) {
+      console.error('Final documents failed', error);
+      setFinalDocumentsState('error');
+    }
+  };
+
+  // Runs once the completed approval (with the last signature) is in the props.
+  useEffect(() => {
+    if (!pendingFinalDocuments || isLoadingData || project.designApproval?.approvalStage !== 'Completed') return;
+    setPendingFinalDocuments(false);
+    if (!project.designApproval.finalDocuments) createFinalDocuments();
+  }, [pendingFinalDocuments, isLoadingData, project.designApproval?.approvalStage]);
+
   const handleExportDocument = async () => {
     if (isExporting || !permissions?.exportData) return;
     setIsExporting(true);
     setExportError(null);
     try {
-      const printLogos = Object.fromEntries(await Promise.all(participatingOwners.map(async owner => {
-        const fallback = owner === 'SYMC' ? '/logos/logo-symphony.svg' : owner === 'UIH' ? '/logos/logo-uih.svg' : '/logos/logo-itel.svg';
-        return [owner, await normalizePrintLogo(getEffectiveOwnerLogo(owner) || fallback, fallback)];
-      }))) as Partial<Record<CoreOwner, string>>;
-      const printDoc = generatePrintableHtml(printLogos);
+      const printDoc = await buildPrintDocument();
       const projectName = project.name.replace(/[\\/:*?"<>|\s]+/g, '_');
       await exportApprovalPdf(printDoc, `Fiber_Infra_Sharing_Approval_${projectName}_${new Date().toISOString().split('T')[0]}.pdf`);
       setExportSuccess(true);
@@ -2306,6 +2355,26 @@ export function DesignApprovalModal({
               <Presentation size={13} />
               <span>สไลด์นำเสนอ</span>
             </button>
+
+            {/* Signed documents for the completion email */}
+            {project.designApproval?.approvalStage === 'Completed' && (
+              finalDocumentsState === 'working' ? (
+                <span className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-sky-500/10 border border-sky-500/30 text-sky-300">
+                  <Loader2 size={13} className="animate-spin" /> กำลังสร้างเอกสารฉบับลงนามครบ…
+                </span>
+              ) : project.designApproval.finalDocuments ? (
+                <span className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+                  title={`บันทึกในไฟล์โครงการ › เอกสารอนุมัติ: ${[project.designApproval.finalDocuments.pdfName, project.designApproval.finalDocuments.kmzName].filter(Boolean).join(', ')}`}>
+                  <CheckCircle2 size={13} /> แนบ PDF ลงนามครบ{project.designApproval.finalDocuments.kmzFileId ? ' + KMZ' : ''} แล้ว
+                </span>
+              ) : (
+                <button type="button" onClick={createFinalDocuments}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300"
+                  title="สร้าง PDF ฉบับลงนามครบและ KMZ แล้วบันทึกในไฟล์โครงการ">
+                  <FileText size={13} /> {finalDocumentsState === 'error' ? 'สร้างเอกสารไม่สำเร็จ ลองใหม่' : 'สร้างเอกสารฉบับลงนามครบ'}
+                </button>
+              )
+            )}
 
             {/* Export HTML / Print */}
             {permissions?.exportData && <button

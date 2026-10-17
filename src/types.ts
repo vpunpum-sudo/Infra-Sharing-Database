@@ -88,6 +88,8 @@ export type DesignApproval = {
   rejectionReason?: string;
   finalApprovedAt?: string;
   finalApprovedBy?: string;
+  /** Signed approval PDF and KMZ saved to the project files after final sign-off; attached to the completion email. */
+  finalDocuments?: { pdfFileId: string; pdfName: string; kmzFileId?: string; kmzName?: string; createdAt: string; createdBy: string };
 };
 
 /** One step of a project's schedule plan. Dates are YYYY-MM-DD. */

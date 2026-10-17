@@ -6,6 +6,7 @@ import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Loade
 import { db, functions } from '../firebase';
 import { Project, ProjectFile, ProjectFolder } from '../types';
 import { useToast } from './Toast';
+import { uploadToStorage } from '../utils/projectFileUpload';
 
 const manageProjectFile = httpsCallable(functions, 'manageProjectFile');
 
@@ -19,19 +20,6 @@ function formatSize(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   return `${(bytes / 1024).toFixed(1)} KB`;
-}
-
-// Sends the file straight to the Storage resumable session from startUpload.
-function uploadToStorage(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open('PUT', url);
-    request.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
-    request.onload = () => request.status >= 200 && request.status < 300
-      ? resolve() : reject(new Error(`อัปโหลดไฟล์ไม่สำเร็จ (${request.status})`));
-    request.onerror = () => reject(new Error('อัปโหลดไฟล์ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่'));
-    request.send(file);
-  });
 }
 
 export function ProjectFilesModal({ project, canManage, onClose }: {

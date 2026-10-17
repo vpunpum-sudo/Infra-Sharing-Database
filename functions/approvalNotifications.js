@@ -187,7 +187,8 @@ function signOffCell(signOff) {
     `</td>`;
 }
 
-function emailContent(notification, appUrl, projectId) {
+/** `attachmentNote` (optional) is one line about the attached documents. */
+function emailContent(notification, appUrl, projectId, attachmentNote) {
   const copy = KIND_COPY[notification.kind];
   const link = projectLink(appUrl, projectId);
   const rows = summaryRows(notification, copy);
@@ -199,6 +200,7 @@ function emailContent(notification, appUrl, projectId) {
     ...rows.map(([label, value]) => `${label}: ${value}`),
     ...(signOffs.length ? ['', 'สถานะการลงนาม',
       ...signOffs.map(s => `- ${s.owner}: Planning ${signOffText(s.planning)} | Management ${signOffText(s.management)}`)] : []),
+    ...(attachmentNote ? ['', attachmentNote] : []),
     '', `${copy.action}: ${link}`, '',
     'อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ'
   ].join('\n');
@@ -234,6 +236,7 @@ function emailContent(notification, appUrl, projectId) {
     `<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(copy.intro)}</p>` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">${summaryHtml}</table>` +
     signOffHtml +
+    (attachmentNote ? `<p style="margin:24px 0 0;padding:10px 14px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:14px;color:#166534;">📎 ${escapeHtml(attachmentNote)}</p>` : '') +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px;"><tr>` +
     `<td style="border-radius:8px;background:${copy.accent};">` +
     `<a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">${escapeHtml(copy.action)}</a>` +
