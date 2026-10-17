@@ -405,7 +405,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-slate-100 tracking-tight font-display">Enclosure Types</h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">Physical Hardware Standards</p>
+                    <p className="text-xs text-slate-500 font-black uppercase tracking-[0.2em]">Physical Hardware Standards</p>
                   </div>
                 </div>
                 {editingId !== 'new-enclosure' && (
@@ -445,11 +445,11 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         <div className="flex flex-wrap items-center gap-2 mt-3">
                           <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
                             <Zap className="w-3.5 h-3.5 text-brand-400" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">{t.capacity || 60} Cores</span>
+                            <span className="text-xs font-black uppercase tracking-widest">{t.capacity || 60} Cores</span>
                           </div>
                           <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
                             <Layers className="w-3.5 h-3.5 text-blue-400" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">{t.spliceTrays || 1} Trays</span>
+                            <span className="text-xs font-black uppercase tracking-widest">{t.spliceTrays || 1} Trays</span>
                           </div>
                         </div>
                       </div>
@@ -487,7 +487,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-slate-100 tracking-tight font-display">Fiber Specs</h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">Cable Standards</p>
+                    <p className="text-xs text-slate-500 font-black uppercase tracking-[0.2em]">Cable Standards</p>
                   </div>
                 </div>
                 {editingId !== 'new-fiber' && (
@@ -523,13 +523,13 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         <div className="flex flex-wrap items-center gap-2 mt-3">
                           <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">{t.tubes || 1} Tubes</span>
+                            <span className="text-xs font-black uppercase tracking-widest">{t.tubes || 1} Tubes</span>
                           </div>
                           <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
                             <div className="w-2.5 h-2.5 rounded-full bg-brand-500 shadow-lg shadow-brand-500/50" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">{t.cores || 12} Cores</span>
+                            <span className="text-xs font-black uppercase tracking-widest">{t.cores || 12} Cores</span>
                           </div>
-                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 shrink-0">
+                          <div className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-2 shrink-0">
                             Total: {(t.tubes || 1) * (t.cores || 12)}
                           </div>
                         </div>
@@ -576,7 +576,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-slate-100 tracking-tight font-display">Fiber Color Management</h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">Visual Styles & Tiers</p>
+                    <p className="text-xs text-slate-500 font-black uppercase tracking-[0.2em]">Visual Styles & Tiers</p>
                   </div>
                 </div>
                 {editingId !== 'new-color-config' && (
@@ -618,10 +618,10 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                           <h4 className="text-lg sm:text-xl font-black text-slate-100 truncate tracking-tight">{fiberType?.name || 'Unknown Fiber Type'}</h4>
                           <div className="flex flex-wrap items-center gap-2 mt-3">
                             <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
-                              <span className="text-[11px] font-black uppercase tracking-widest">{config.tier}</span>
+                              <span className="text-xs font-black uppercase tracking-widest">{config.tier}</span>
                             </div>
                             <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-slate-300 rounded-xl border border-slate-800 shrink-0">
-                              <span className="text-[11px] font-black uppercase tracking-widest">{config.color}</span>
+                              <span className="text-xs font-black uppercase tracking-widest">{config.color}</span>
                             </div>
                           </div>
                         </div>
@@ -681,7 +681,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     <h3 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight font-display">
                       {editingId.startsWith('new') ? 'Create New' : 'Edit Specification'}
                     </h3>
-                    <p className="text-[10px] sm:text-xs text-slate-500 font-black uppercase tracking-[0.2em] mt-1">
+                    <p className="text-xs sm:text-xs text-slate-500 font-black uppercase tracking-[0.2em] mt-1">
                       {editingType === 'enclosure' ? 'Enclosure Type' : editingType === 'fiber' ? 'Fiber Specification' : 'Fiber Color Config'}
                     </p>
                   </div>
@@ -696,7 +696,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
 
               <div className="p-8 sm:p-10 space-y-8 sm:space-y-10 overflow-y-auto flex-1 custom-scrollbar relative z-10">
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Specification Name</label>
+                  <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Specification Name</label>
                   <input 
                     value={editName} 
                     onChange={e => setEditName(e.target.value)} 
@@ -710,7 +710,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Capacity (Cores)</label>
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Capacity (Cores)</label>
                         <div className="relative">
                           <input 
                             type="number"
@@ -722,7 +722,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         </div>
                       </div>
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Splice Trays</label>
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Splice Trays</label>
                         <div className="relative">
                           <input 
                             type="number"
@@ -737,7 +737,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
 
                     {/* Map Icon / Symbol */}
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Map Icon Symbol (ไอคอนสัญลักษณ์บนแผนที่)</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Map Icon Symbol (ไอคอนสัญลักษณ์บนแผนที่)</label>
                       <div className="group relative flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8 p-6 sm:p-8 bg-slate-950/30 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-brand-500/50 transition-all">
                         <div className="w-16 h-16 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
                           {editIcon ? (
@@ -755,13 +755,13 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             id="icon-upload"
                           />
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <label htmlFor="icon-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                            <label htmlFor="icon-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
                               <Plus className="w-4 h-4" />
                               Choose Map Icon
                             </label>
                           </div>
                           {editIcon && (
-                            <button type="button" onClick={() => setEditIcon(null)} className="text-[10px] text-rose-500 font-black mt-2 uppercase tracking-widest hover:underline block">
+                            <button type="button" onClick={() => setEditIcon(null)} className="text-xs text-rose-500 font-black mt-2 uppercase tracking-widest hover:underline block">
                               Remove Map Icon
                             </button>
                           )}
@@ -771,7 +771,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
 
                     {/* Approval Report Illustration Image */}
                     <div className="space-y-4 pt-4 border-t border-slate-800">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Approval Report Illustration Image (รูปภาพประกอบรายงาน / แบบขออนุมัติ)</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Approval Report Illustration Image (รูปภาพประกอบรายงาน / แบบขออนุมัติ)</label>
                       <div className="group relative flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8 p-6 sm:p-8 bg-slate-950/30 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-brand-500/50 transition-all">
                         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
                           {editImageUrl ? (
@@ -789,28 +789,28 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             id="image-upload"
                           />
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <label htmlFor="image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                            <label htmlFor="image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
                               <Plus className="w-4 h-4" />
                               Choose Report Illustration
                             </label>
                             <button
                               type="button"
                               onClick={() => handlePasteFromClipboard('enclosure-image')}
-                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
                               title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
                             >
                               <ClipboardPaste className="w-4 h-4" />
                               Paste from Clipboard
                             </button>
                           </div>
-                          <p className="text-[10px] text-slate-500 font-black mt-3 uppercase tracking-tight">
+                          <p className="text-xs text-slate-500 font-black mt-3 uppercase tracking-tight">
                             {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB • สำหรับแสดงในรายงานและแบบขออนุมัติ'}
                           </p>
                           {editImageUrl && (
                             <button 
                               type="button" 
                               onClick={() => setEditImageUrl(null)} 
-                              className="text-[10px] text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block"
+                              className="text-xs text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block"
                             >
                               Remove Report Image
                             </button>
@@ -822,7 +822,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                 ) : editingType === 'fiber' ? (
                   <div className="space-y-8 sm:space-y-10">
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Core Capacity</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Core Capacity</label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         {[60, 144, 216, 312].map(cap => (
                           <button
@@ -846,7 +846,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Tube Count (Calculated)</label>
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Tube Count (Calculated)</label>
                         <div className="relative">
                           <input 
                             type="number"
@@ -862,7 +862,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                         </div>
                       </div>
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Cores per Tube</label>
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Cores per Tube</label>
                         <div className="relative">
                           <input 
                             type="number"
@@ -880,7 +880,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     </div>
 
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Cable Spec Image</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Cable Spec Image</label>
                       <div className="group relative flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8 p-6 sm:p-8 bg-slate-950/30 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-brand-500/50 transition-all">
                         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-900 shadow-2xl border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
                           {editImageUrl ? (
@@ -898,25 +898,25 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                             id="fiber-image-upload"
                           />
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <label htmlFor="fiber-image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
+                            <label htmlFor="fiber-image-upload" className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 text-brand-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-brand-500/20 hover:bg-brand-500/10 cursor-pointer transition-all shadow-xl">
                               <Plus className="w-4 h-4" />
                               Choose Cable Image
                             </label>
                             <button
                               type="button"
                               onClick={() => handlePasteFromClipboard('fiber')}
-                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-emerald-400 text-xs sm:text-xs font-black uppercase tracking-widest rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer transition-all shadow-xl"
                               title="วางรูปภาพจากคลิปบอร์ด หรือกดปุ่ม Ctrl+V (Cmd+V)"
                             >
                               <ClipboardPaste className="w-4 h-4" />
                               Paste from Clipboard
                             </button>
                           </div>
-                          <p className="text-[10px] text-slate-500 font-black mt-3 uppercase tracking-tight">
+                          <p className="text-xs text-slate-500 font-black mt-3 uppercase tracking-tight">
                             {uploadError ? <span className="text-rose-500">{uploadError}</span> : 'PNG or JPG, Max 20MB • หรือกด Ctrl+V เพื่อวางรูป'}
                           </p>
                           {editImageUrl && (
-                            <button onClick={() => setEditImageUrl(null)} className="text-[10px] text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block">
+                            <button onClick={() => setEditImageUrl(null)} className="text-xs text-rose-500 font-black mt-3 uppercase tracking-widest hover:underline block">
                               Remove Image
                             </button>
                           )}
@@ -927,7 +927,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                 ) : (
                   <div className="space-y-8 sm:space-y-10">
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Fiber Type</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Fiber Type</label>
                       <select
                         value={editFiberTypeId}
                         onChange={e => setEditFiberTypeId(e.target.value)}
@@ -941,7 +941,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     </div>
 
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Tier</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Tier</label>
                       <div className="grid grid-cols-2 gap-4">
                         {['Tier 1', 'Tier 2'].map(tier => (
                           <button
@@ -960,7 +960,7 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
                     </div>
 
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Display Color</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Display Color</label>
                       <div className="flex items-center gap-6 p-5 bg-slate-950/50 rounded-2xl border border-slate-800">
                         <input 
                           type="color"
@@ -985,14 +985,14 @@ export const SettingsManager = ({ user, appUser, quotaExceeded = false }: { user
               <div className="p-6 sm:p-10 bg-slate-800/50 border-t border-slate-800 flex flex-col sm:flex-row gap-4 sm:gap-6 shrink-0 relative z-10">
                 <button 
                   onClick={() => { setEditingId(null); setEditingType(null); }}
-                  className="order-2 sm:order-1 flex-1 py-4 sm:py-5 px-6 sm:px-8 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-slate-500 hover:text-slate-100 hover:bg-slate-800 transition-all"
+                  className="order-2 sm:order-1 flex-1 py-4 sm:py-5 px-6 sm:px-8 rounded-2xl text-xs sm:text-xs font-black uppercase tracking-[0.2em] text-slate-500 hover:text-slate-100 hover:bg-slate-800 transition-all"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={() => handleSave(editingType, editingId.startsWith('new') ? undefined : editingId)}
                   disabled={quotaExceeded}
-                  className={`order-1 sm:order-2 flex-[2] py-4 sm:py-5 px-8 sm:px-10 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] bg-brand-600 text-slate-100 hover:bg-brand-500 shadow-2xl shadow-brand-500/20 transition-all flex items-center justify-center gap-3 ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`order-1 sm:order-2 flex-[2] py-4 sm:py-5 px-8 sm:px-10 rounded-2xl text-xs sm:text-xs font-black uppercase tracking-[0.2em] bg-brand-600 text-slate-100 hover:bg-brand-500 shadow-2xl shadow-brand-500/20 transition-all flex items-center justify-center gap-3 ${quotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Save className="w-5 h-5" />
                   Save Specification

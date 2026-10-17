@@ -147,7 +147,7 @@ export const ForceChangePassword: React.FC<ForceChangePasswordProps> = ({ user, 
 
                   <form onSubmit={handleUpdatePassword} className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสผ่านใหม่</label>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">รหัสผ่านใหม่</label>
                       <input 
                         type="password" 
                         value={newPassword}
@@ -158,7 +158,7 @@ export const ForceChangePassword: React.FC<ForceChangePasswordProps> = ({ user, 
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ยืนยันรหัสผ่านใหม่</label>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">ยืนยันรหัสผ่านใหม่</label>
                       <input 
                         type="password" 
                         value={confirmPassword}

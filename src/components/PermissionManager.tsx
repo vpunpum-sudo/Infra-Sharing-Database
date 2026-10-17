@@ -162,7 +162,7 @@ export const PermissionManager: React.FC = () => {
                     <td className="px-6 py-3.5">
                       <div className="flex flex-col">
                         <span className="text-xs font-bold text-white uppercase tracking-wider">{category.name}</span>
-                        <span className="text-[11px] text-slate-400 font-medium">{category.description}</span>
+                        <span className="text-xs text-slate-400 font-medium">{category.description}</span>
                       </div>
                     </td>
                     {roles.map(role => {

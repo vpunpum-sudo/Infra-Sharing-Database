@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, XCircle, Info, X } from 'lucide-react';
 
@@ -43,12 +43,13 @@ export const Toast: React.FC<ToastProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-[9999] flex flex-col gap-3">
+        <div role={type === 'error' ? 'alert' : 'status'} aria-live={type === 'error' ? 'assertive' : 'polite'}
+          className="fixed inset-x-4 bottom-4 z-[9999] flex flex-col gap-3 sm:inset-x-auto sm:bottom-8 sm:right-8">
           <motion.div
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.9 }}
-            className={`flex items-center gap-5 px-6 py-5 rounded-[1.5rem] shadow-2xl backdrop-blur-xl border ${backgrounds[type]} min-w-[320px] max-w-md relative overflow-hidden group`}
+            className={`flex items-center gap-5 px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${backgrounds[type]} sm:min-w-[320px] max-w-md relative overflow-hidden group`}
           >
             {/* Progress bar background */}
             <div className="absolute bottom-0 left-0 h-1 bg-slate-800 w-full"></div>
@@ -60,8 +61,10 @@ export const Toast: React.FC<ToastProps> = ({
             ></motion.div>
 
             <div className="shrink-0">{icons[type]}</div>
-            <p className="font-black text-sm tracking-tight flex-1">{message}</p>
+            <p className="font-semibold text-sm flex-1">{message}</p>
             <button
+              type="button"
+              aria-label="ปิดการแจ้งเตือน"
               onClick={onClose}
               className="p-2 hover:bg-slate-700 rounded-xl transition-all text-slate-500 hover:text-slate-100"
             >
@@ -73,3 +76,22 @@ export const Toast: React.FC<ToastProps> = ({
     </AnimatePresence>
   );
 };
+
+type Notify = (message: string, type?: ToastType) => void;
+const ToastContext = createContext<Notify>(() => {});
+
+// App-wide toast: call useToast()('บันทึกแล้ว') from any screen.
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toast, setToast] = useState<{ message: string; type: ToastType; key: number } | null>(null);
+  const notify = useCallback<Notify>((message, type = 'success') => setToast({ message, type, key: Date.now() }), []);
+  const close = useCallback(() => setToast(null), []);
+  return (
+    <ToastContext.Provider value={notify}>
+      {children}
+      <Toast key={toast?.key} isOpen={!!toast} message={toast?.message || ''} type={toast?.type}
+        duration={toast?.type === 'error' ? 6000 : 3000} onClose={close} />
+    </ToastContext.Provider>
+  );
+}
+
+export const useToast = () => useContext(ToastContext);

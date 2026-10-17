@@ -62,8 +62,8 @@ export const OwnerLogo: React.FC<OwnerLogoProps> = ({
   };
 
   const textSizes = {
-    xs: 'text-[9px]',
-    sm: 'text-[11px]',
+    xs: 'text-xs',
+    sm: 'text-xs',
     md: 'text-xs',
     lg: 'text-sm',
     xl: 'text-base',

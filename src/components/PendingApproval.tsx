@@ -28,8 +28,8 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ email }) => {
           <div className="flex items-start gap-2.5">
             <ShieldAlert className="text-amber-500 w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <p className="text-[10px] font-bold text-slate-100 uppercase tracking-wider mb-1">Next Steps</p>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
+              <p className="text-xs font-bold text-slate-100 uppercase tracking-wider mb-1">Next Steps</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 An administrator will review your request, assign your role, and set your organizational owner. You will be able to log in once your account is approved.
               </p>
             </div>

@@ -310,7 +310,7 @@ export const OwnerLogoSettings: React.FC = () => {
                   {code}
                 </span>
                 <div className="flex items-center gap-1">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
                     ownerZoom > 100 
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
                       : ownerZoom < 100
@@ -320,13 +320,13 @@ export const OwnerLogoSettings: React.FC = () => {
                     {ownerZoom}%
                   </span>
                   {isCustom && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
                       Custom
                     </span>
                   )}
                 </div>
               </div>
-              <p className="text-[11px] font-medium text-slate-400 truncate">
+              <p className="text-xs font-medium text-slate-400 truncate">
                 {cfg.name || code}
               </p>
             </button>
@@ -342,7 +342,7 @@ export const OwnerLogoSettings: React.FC = () => {
               <span className="text-lg font-black text-white">{currentConfig.code}</span>
               <span className="text-sm text-slate-400">&bull; {currentConfig.name}</span>
               {selectedOwner === 'UIH' && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
                   ขยายขนาด {currentZoom}%
                 </span>
               )}
@@ -397,12 +397,12 @@ export const OwnerLogoSettings: React.FC = () => {
                 <span className="text-xs font-black text-slate-200 uppercase tracking-wider">
                   การซูมและปรับขนาด Logo (Zoom & Scale Level)
                 </span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-300 border border-brand-500/30">
                   {currentConfig.code}: {currentZoom}%
                   {currentZoom > 100 ? ` (+${currentZoom - 100}%)` : currentZoom < 100 ? ` (${currentZoom - 100}%)` : ' (100% ปกติ)'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 เลื่อนแถบหรือพิมพ์ตัวเลขเปอร์เซ็นต์เพื่อซูมขยาย Logo ของ {currentConfig.code} ได้สูงสุด 400%+ เพื่อปรับให้มีขนาดใหญ่เท่ากันทุกตำแหน่ง
               </p>
             </div>
@@ -473,7 +473,7 @@ export const OwnerLogoSettings: React.FC = () => {
           {/* Slider with expanded range 30% - 400% */}
           <div className="space-y-2.5">
             <div className="flex items-center gap-4">
-              <span className="text-[11px] font-mono text-slate-500">30%</span>
+              <span className="text-xs font-mono text-slate-500">30%</span>
               <input 
                 type="range" 
                 min="30" 
@@ -483,12 +483,12 @@ export const OwnerLogoSettings: React.FC = () => {
                 onChange={(e) => handleZoomChange(Number(e.target.value))}
                 className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500 focus:outline-none"
               />
-              <span className="text-[11px] font-mono text-slate-500">400%</span>
+              <span className="text-xs font-mono text-slate-500">400%</span>
             </div>
 
             {/* Expanded Quick Preset Buttons */}
             <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase mr-1">ระดับซูมด่วน:</span>
+              <span className="text-xs font-bold text-slate-500 uppercase mr-1">ระดับซูมด่วน:</span>
               {[
                 { label: '50%', val: 50 },
                 { label: '75%', val: 75 },
@@ -507,7 +507,7 @@ export const OwnerLogoSettings: React.FC = () => {
                 <button
                   key={preset.val}
                   onClick={() => handleZoomChange(preset.val)}
-                  className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                  className={`text-xs font-bold px-2 py-1 rounded-lg border transition-all ${
                     currentZoom === preset.val 
                       ? 'bg-brand-500 text-white border-brand-400 shadow-sm shadow-brand-500/20' 
                       : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
@@ -525,19 +525,19 @@ export const OwnerLogoSettings: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Scale size={16} className="text-emerald-400" />
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                 การเปรียบเทียบความสมดุลขนาดจริง (Side-by-Side Scale Balance & Verification)
               </span>
             </div>
             
             {/* Preview Size Selector */}
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
-              <span className="text-[10px] font-bold text-slate-500 px-1.5 uppercase">Size:</span>
+              <span className="text-xs font-bold text-slate-500 px-1.5 uppercase">Size:</span>
               {(['xs', 'sm', 'md', 'lg', 'xl', 'banner'] as const).map(s => (
                 <button
                   key={s}
                   onClick={() => setPreviewSize(s)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                  className={`px-2 py-0.5 rounded text-xs font-bold uppercase transition-all ${
                     previewSize === s 
                       ? 'bg-brand-500 text-white shadow-sm' 
                       : 'text-slate-400 hover:text-slate-200'
@@ -549,7 +549,7 @@ export const OwnerLogoSettings: React.FC = () => {
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             คลิกที่ Logo ด้านล่างเพื่อเลือกและปรับซูมได้โดยตรง ทุก Logo จะแสดงผลตามขนาดและอัตราการซูมจริงที่บันทึกไว้ในระบบ
           </p>
 
@@ -565,7 +565,7 @@ export const OwnerLogoSettings: React.FC = () => {
               <div className="flex items-center justify-center overflow-visible py-1">
                 <OwnerLogo owner="SYMC" size={previewSize} />
               </div>
-              <span className="text-[10px] font-bold text-slate-500 font-mono mt-1">
+              <span className="text-xs font-bold text-slate-500 font-mono mt-1">
                 SYMC ({configs['SYMC']?.zoom ?? 100}%)
               </span>
             </div>
@@ -582,7 +582,7 @@ export const OwnerLogoSettings: React.FC = () => {
               <div className="flex items-center justify-center overflow-visible py-1">
                 <OwnerLogo owner="UIH" size={previewSize} />
               </div>
-              <span className="text-[10px] font-bold text-blue-600 font-mono mt-1">
+              <span className="text-xs font-bold text-blue-600 font-mono mt-1">
                 UIH ({configs['UIH']?.zoom ?? 120}%)
               </span>
             </div>
@@ -599,7 +599,7 @@ export const OwnerLogoSettings: React.FC = () => {
               <div className="flex items-center justify-center overflow-visible py-1">
                 <OwnerLogo owner="ITEL" size={previewSize} />
               </div>
-              <span className="text-[10px] font-bold text-slate-500 font-mono mt-1">
+              <span className="text-xs font-bold text-slate-500 font-mono mt-1">
                 ITEL ({configs['ITEL']?.zoom ?? 100}%)
               </span>
             </div>
@@ -615,7 +615,7 @@ export const OwnerLogoSettings: React.FC = () => {
             
             {/* 1. On Light Background (Documents, Cover Pills, Tables) */}
             <div className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col items-center justify-center min-h-[160px] text-center relative group overflow-visible">
-              <span className="absolute top-2 left-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <span className="absolute top-2 left-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
                 พื้นหลังสว่าง (White / Paper & Covers)
               </span>
               <div className="py-4 flex items-center justify-center overflow-visible">
@@ -625,7 +625,7 @@ export const OwnerLogoSettings: React.FC = () => {
 
             {/* 2. On Dark Background (Dark Theme, App Header, Slide Background) */}
             <div className="p-6 rounded-xl bg-slate-950 border border-slate-800 shadow-sm flex flex-col items-center justify-center min-h-[160px] text-center relative group overflow-visible">
-              <span className="absolute top-2 left-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <span className="absolute top-2 left-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
                 พื้นหลังมืด (Dark / UI & Banners)
               </span>
               <div className="py-4 flex items-center justify-center overflow-visible">

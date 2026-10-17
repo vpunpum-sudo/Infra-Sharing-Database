@@ -354,7 +354,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                         <div className="col-span-12 grid grid-cols-12 gap-4 items-center">
                           <div className="col-span-4 font-bold text-white text-xs truncate">{u.email}</div>
                           <div className="col-span-2">
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${u.isApproved ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${u.isApproved ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
                               {u.isApproved ? 'Approved' : 'Pending'}
                             </span>
                           </div>
@@ -404,13 +404,13 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             </div>
                             <div className="truncate">
                               <p className="font-bold text-white text-xs truncate">{u.email}</p>
-                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">UID: {u.id.substring(0, 8)}</p>
+                              <p className="text-xs text-slate-400 font-mono mt-0.5">UID: {u.id.substring(0, 8)}</p>
                             </div>
                           </div>
                           <div className="col-span-2">
                             <button 
                               onClick={() => toggleApproval(u)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-extrabold border transition-all ${
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-extrabold border transition-all ${
                                 u.isApproved 
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
                                   : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 animate-pulse'
@@ -421,7 +421,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             </button>
                           </div>
                           <div className="col-span-2">
-                            <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase border ${
+                            <span className={`px-2.5 py-0.5 rounded-md text-xs font-extrabold uppercase border ${
                               u.role === 'Admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
                               u.role === 'Management' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
                               u.role === 'Design' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
