@@ -185,6 +185,17 @@ export function DesignApprovalModal({
   const [rewindTarget, setRewindTarget] = useState<'Draft' | 'Planning' | 'OM'>('Draft');
   const [targetInstallDate, setTargetInstallDate] = useState(project.designApproval?.estimatedInstallationDate || project.approvalDraft?.estimatedInstallationDate || '');
 
+  // What the slide shows is what the PDF prints: both read the form values,
+  // which follow the saved approval (or draft). Empty fields show "-".
+  const contractorView = {
+    name: contractorInput.trim() || '-',
+    contact: contractorContactInput.trim() || '-',
+    phone: contractorPhoneInput.trim() || '-',
+    po: contractorPoInput.trim() || '-',
+    scope: contractorScopeInput.trim(),
+    installDate: targetInstallDate || '-'
+  };
+
   // Sync contractor inputs if project designApproval updates
   useEffect(() => {
     if (project?.designApproval) {
@@ -1520,9 +1531,8 @@ export function DesignApprovalModal({
 
   // Generate complete printable HTML
   const generatePrintableHtml = (printLogos: Partial<Record<CoreOwner, string>>) => {
-    const docNum = designApproval?.documentNumber || `APP-2026-${projectTierName.replace('Tier ', 'T')}-01`;
+    const docNum = designApproval?.documentNumber || '-';
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const contractor = designApproval?.contractorName || 'United Telecommunication Services Co., Ltd.';
 
     const printMapRoutes = effectiveRoutes.map(route => {
       const routeSummary = fiberRouteSchedule.find(item => item.id === route.id);
@@ -2130,10 +2140,10 @@ export function DesignApprovalModal({
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
         <div>
           <strong style="font-size: 14px; color: #0f172a;">สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')}): ${project.name}</strong>
-          <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: ${designApproval?.documentNumber || 'APP-2026-FIBER'} | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
+          <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: ${escapePrintText(docNum)} | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
         </div>
         <div style="text-align: right; font-size: 11px; color: #475569;">
-          <strong>กำหนดการติดตั้ง:</strong> ${designApproval?.estimatedInstallationDate || targetInstallDate || '-'}
+          <strong>กำหนดการติดตั้ง:</strong> ${escapePrintText(contractorView.installDate)}
         </div>
       </div>
 
@@ -2187,11 +2197,11 @@ export function DesignApprovalModal({
       <div style="margin-bottom: 12px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">
         <strong style="color: #0f172a; font-size: 13px;">2. ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):</strong>
         <div style="margin-top: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 11px;">
-          <div><strong>ชื่อบริษัทผู้รับจ้าง:</strong> ${contractor}</div>
-          <div><strong>ผู้ควบคุมงาน / ผู้ประสานงาน:</strong> ${(designApproval as any)?.contractorContact || contractorContactInput || '-'}</div>
-          <div><strong>เบอร์โทรศัพท์ติดต่อ:</strong> ${(designApproval as any)?.contractorPhone || contractorPhoneInput || '-'}</div>
-          <div><strong>เลขที่สัญญา / PO:</strong> ${(designApproval as any)?.contractorPoNumber || contractorPoInput || '-'}</div>
-          ${((designApproval as any)?.contractorScope || contractorScopeInput) ? `<div style="grid-column: span 2;"><strong>ขอบเขตงาน:</strong> ${(designApproval as any)?.contractorScope || contractorScopeInput}</div>` : ''}
+          <div><strong>ชื่อบริษัทผู้รับจ้าง:</strong> ${escapePrintText(contractorView.name)}</div>
+          <div><strong>ผู้ควบคุมงาน / ผู้ประสานงาน:</strong> ${escapePrintText(contractorView.contact)}</div>
+          <div><strong>เบอร์โทรศัพท์ติดต่อ:</strong> ${escapePrintText(contractorView.phone)}</div>
+          <div><strong>เลขที่สัญญา / PO:</strong> ${escapePrintText(contractorView.po)}</div>
+          ${contractorView.scope ? `<div style="grid-column: span 2;"><strong>ขอบเขตงาน:</strong> ${escapePrintText(contractorView.scope)}</div>` : ''}
         </div>
       </div>
 
@@ -3556,33 +3566,33 @@ export function DesignApprovalModal({
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">ชื่อบริษัทผู้รับจ้าง:</span>
-                              <strong className="text-white truncate block" title={contractorInput}>
-                                {contractorInput || 'United Telecommunication Services Co., Ltd.'}
+                              <strong className="text-white truncate block" title={contractorView.name}>
+                                {contractorView.name}
                               </strong>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">ผู้ควบคุมงาน / ประสานงาน:</span>
                               <span className="text-slate-200 truncate block">
-                                {contractorContactInput || '-'}
+                                {contractorView.contact}
                               </span>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">เบอร์ติดต่อ:</span>
                               <span className="text-slate-200 truncate block">
-                                {contractorPhoneInput || '-'}
+                                {contractorView.phone}
                               </span>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">เลขที่สัญญา / PO:</span>
                               <span className="text-amber-300 truncate block font-mono">
-                                {contractorPoInput || '-'}
+                                {contractorView.po}
                               </span>
                             </div>
                           </div>
 
-                          {contractorScopeInput && (
+                          {contractorView.scope && (
                             <div className="text-[10px] text-slate-400 px-2 py-1 bg-slate-950/60 rounded border border-slate-800/60">
-                              <span className="text-slate-300 font-bold mr-1">ขอบเขตงาน:</span> {contractorScopeInput}
+                              <span className="text-slate-300 font-bold mr-1">ขอบเขตงาน:</span> {contractorView.scope}
                             </div>
                           )}
                         </div>
