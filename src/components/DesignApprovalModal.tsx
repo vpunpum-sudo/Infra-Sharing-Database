@@ -27,6 +27,7 @@ import { normalizePrintLogo } from '../utils/printLogo';
 import { getApprovalAllocation } from '../utils/approvalAllocation';
 import { createFiberLoopIcon } from '../utils/fiberLoopIcon';
 import { exportApprovalPdf } from '../utils/exportApprovalPdf';
+import { buildApprovalDocumentNumber } from '../utils/approvalDocumentNumber';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -1244,7 +1245,7 @@ export function DesignApprovalModal({
     setActionError(null);
 
     try {
-      const docNumber = `APP-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${project.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase() || 'PROJ'}`;
+      const docNumber = buildApprovalDocumentNumber(project);
       
       const initialPlanningSignOffs: Record<string, OwnerSignOff> = {};
       const initialOMSignOffs: Record<string, OwnerSignOff> = {};
