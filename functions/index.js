@@ -104,7 +104,7 @@ exports.sendApprovalNotifications = onDocumentUpdated({
 }, async event => {
   if (!event.data) return;
   const notification = notificationForTransition(
-    event.data.before.data(), event.data.after.data()
+    event.data.before.data(), event.data.after.data(), event.time
   );
   if (!notification) return;
 
@@ -119,7 +119,7 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   const users = await db.collection('users').get();
   const recipients = notificationRecipients(users.docs.map(user => user.data()), notification);
   const projectId = event.params.projectId;
-  const final = notification.kind === 'approval-completed'
+  const final = notification.kind === 'approval-completed' || notification.kind === 'final-documents'
     ? await finalDocumentAttachments(db, projectId, notification.approvalId)
     : { attachments: [], note: undefined };
   const content = emailContent(notification, url, projectId, final.note);
@@ -129,7 +129,7 @@ exports.sendApprovalNotifications = onDocumentUpdated({
   });
 
   for (const email of recipients) {
-    const id = deliveryId(projectId, notification, email);
+    const id = deliveryId(projectId, notification, email, event.id);
     const { ref, result } = await claimDelivery(db, id, {
       projectId, approvalId: notification.approvalId,
       kind: notification.kind, email

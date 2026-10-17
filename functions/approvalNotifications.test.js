@@ -53,6 +53,9 @@ test('same event has stable delivery key; HTML is escaped', () => {
     deliveryId('p1', notice, 'a@example.com'));
   assert.notEqual(deliveryId('p1', notice, 'a@example.com'),
     deliveryId('p1', { ...notice, kind: 'approval-completed' }, 'a@example.com'));
+  // Same change retried: same id. Same transition again later (new event): new id.
+  assert.equal(deliveryId('p1', notice, 'a@example.com', 'event-1'), deliveryId('p1', notice, 'a@example.com', 'event-1'));
+  assert.notEqual(deliveryId('p1', notice, 'a@example.com', 'event-1'), deliveryId('p1', notice, 'a@example.com', 'event-2'));
   assert.match(emailContent(notice, 'https://example.com').html, /&lt;Project&gt;/);
 });
 
@@ -97,3 +100,18 @@ test('approval email lists project details, sign-off status and a direct project
   assert.match(html, /อนุมัติแล้ว/);
   assert.doesNotMatch(html, /<Project>/);
 });
+
+test('signed documents saved after the completion email trigger a follow-up email', () => {
+  const owners = ['ITEL'];
+  const signed = { ITEL: { status: 'Approved' } };
+  const approval = { id: 'a1', documentNumber: 'D-1', approvalStage: 'Completed', status: 'Approved',
+    planningSignOffs: signed, omSignOffs: signed, finalApprovedAt: '2026-10-17T13:30:00.000Z' };
+  const before = { name: 'P', owners, status: 'Approved', designApproval: approval };
+  const after = { ...before, designApproval: { ...approval, finalDocuments: { pdfFileId: 'f1' } } };
+  assert.equal(notificationForTransition(before, after, '2026-10-17T13:40:00.000Z')?.kind, 'final-documents');
+  // Within the completion email's wait the documents ride along with it instead.
+  assert.equal(notificationForTransition(before, after, '2026-10-17T13:31:00.000Z'), null);
+  // Already recorded before: nothing new.
+  assert.equal(notificationForTransition(after, after, '2026-10-17T13:40:00.000Z'), null);
+});
+
