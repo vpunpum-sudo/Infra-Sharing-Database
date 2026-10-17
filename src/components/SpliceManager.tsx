@@ -2574,7 +2574,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                 >
                   Auto Fit
                 </button>
-                <button 
+                {permissions.exportData && <button 
                   onClick={handleExportPDF}
                   disabled={isExporting}
                   className="text-[10px] px-3 py-1.5 bg-brand-600 border border-brand-500 hover:bg-brand-500 rounded-xl text-slate-100 font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2582,7 +2582,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                 >
                   <Download className="w-3 h-3" />
                   {isExporting ? 'Exporting...' : 'Export PDF'}
-                </button>
+                </button>}
                 <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-xl p-1 shadow-sm ml-2">
                   <button 
                     onClick={() => setDiagramScale(prev => Math.max(0.1, prev - 0.1))}

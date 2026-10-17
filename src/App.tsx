@@ -1576,7 +1576,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     {currentProject.owners?.join(', ') || currentProject.owner || 'Participating Owners'}
                   </p>
                 </div>
-                <button
+                {getRolePermissions()[appUser?.role || 'Viewer']?.viewApprovalDocs && <button
                   onClick={() => setApprovalModalOpen(true)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 border ${
                     (currentProject.status || currentProject.designApproval?.status) === 'Approved'
@@ -1595,7 +1595,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       ? 'ลงนามอนุมัติ'
                       : 'ขออนุมัติ Design'}
                   </span>
-                </button>
+                </button>}
               </div>
             )}
           </div>
@@ -1981,7 +1981,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       </div>
 
       {/* Right Panel: Core Manager */}
-      {panelRoute && drawingMode === 'none' && (
+      {panelRoute && drawingMode === 'none' && getRolePermissions()[appUser?.role || 'Viewer']?.viewRoutes && (
         <CoreManager
           route={panelRoute}
           enclosures={enclosures}
@@ -1994,7 +1994,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       )}
 
       {/* Right Panel: Splice Manager */}
-      {panelEnclosure && drawingMode === 'none' && (
+      {panelEnclosure && drawingMode === 'none' && getRolePermissions()[appUser?.role || 'Viewer']?.viewEnclosures && (
         <SpliceManager
           enclosure={panelEnclosure}
           routes={routes}
@@ -2825,6 +2825,7 @@ export default function App() {
             appUser ? (
               (appUser.isApproved === false && appUser.role !== 'Admin') ? <Navigate to="/pending-approval" /> :
               needsPasswordChange ? <Navigate to="/change-password" /> :
+              !(getRolePermissions()[appUser.role]?.viewMap && getRolePermissions()[appUser.role]?.viewProjects) ? <Navigate to="/" /> :
               <ProjectWorkspace user={user} appUser={appUser} quotaExceeded={quotaExceeded} />
             ) : <div className="h-screen w-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
           ) : <Navigate to="/login" />
