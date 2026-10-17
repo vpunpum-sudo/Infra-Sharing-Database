@@ -6,10 +6,12 @@ import { db, functions, logout, handleFirestoreError, OperationType } from '../f
 import { Project, User as AppUser, CoreOwner, ProjectStatus, Route, FiberEnclosure, FiberLoop, EnclosureType, FiberType, FiberColorConfig } from '../types';
 import { exportFileName } from '../utils/kml';
 import { buildProjectKmz } from '../utils/kmz';
+import { overallProgress, todayIso } from '../utils/schedule';
+import { ProjectScheduleModal, StatusChip } from './ProjectScheduleModal';
 import { useToast } from './Toast';
 import { getRolePermissions, useRolePermissions } from '../services/rolePermissionsStore';
 import { v4 as uuidv4 } from 'uuid';
-import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu, Download, Loader2 } from 'lucide-react';
+import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu, Download, Loader2, CalendarRange } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
@@ -46,6 +48,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const userPermissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportingKmlId, setExportingKmlId] = useState<string | null>(null);
+  const [scheduleProject, setScheduleProject] = useState<Project | null>(null);
   const notify = useToast();
   const cardActionClass = 'card-action';
 
@@ -696,6 +699,15 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                           <span className="text-xs font-semibold text-slate-300">พร้อมใช้งาน</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {userPermissions.viewMap && (() => {
+                            const summary = project.scheduleSummary?.items?.length
+                              ? overallProgress(project.scheduleSummary.items, todayIso(), project) : null;
+                            return <button type="button" onClick={event => { event.stopPropagation(); setScheduleProject(project); }}
+                              title="ติดตามความคืบหน้าตามแผนงาน" className={cardActionClass}>
+                              <CalendarRange size={14} /> แผนงาน
+                              {summary && <StatusChip status={summary.status} label={`${summary.actual}%`} />}
+                            </button>;
+                          })()}
                           {canAccessFiles && <button type="button" onClick={event => { event.stopPropagation(); setFilesModalProject(project); }}
                             className={cardActionClass}>
                             <Folder size={14} /> ไฟล์โครงการ
@@ -740,6 +752,16 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
         canManage={!!appUser?.isApproved && (appUser.role === 'Admin' || (appUser.role !== 'Viewer' && !!appUser.owner &&
           (filesModalProject.owners || (filesModalProject.owner ? [filesModalProject.owner] : [])).includes(appUser.owner)))}
         onClose={() => setFilesModalProject(null)} />}
+
+      {scheduleProject && (() => {
+        // Read the live project so approval-linked progress follows sign-offs while the plan is open.
+        const live = projects.find(item => item.id === scheduleProject.id) || scheduleProject;
+        const owners = live.owners || (live.owner ? [live.owner] : []);
+        // Mirrors canEditProject in firestore.rules, plus the role's editProjects permission.
+        const canEdit = !!appUser && (appUser.role === 'Admin' || (userPermissions.editProjects &&
+          (live.uid === user.uid || (['Design', 'Sub-contract'].includes(appUser.role) && !!appUser.owner && owners.includes(appUser.owner)))));
+        return <ProjectScheduleModal project={live} appUser={appUser} canEdit={canEdit} onClose={() => setScheduleProject(null)} />;
+      })()}
 
       {/* Project Modal */}
       {projectModalOpen && (
