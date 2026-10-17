@@ -306,6 +306,22 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     setSidebarFocusTarget({ type: 'loop', id: loop.id });
   };
 
+  const startEditLoop = (loop: FiberLoop) => {
+    const permissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
+    if (!permissions.editMap) {
+      setErrorModalOpen('You do not have permission to edit loops.');
+      return;
+    }
+    setEditingLoopId(loop.id);
+    setLoopNameInput(loop.name);
+    setLoopLengthInput(loop.length.toString());
+    setLoopLatInput(loop.position.lat.toFixed(6));
+    setLoopLngInput(loop.position.lng.toFixed(6));
+    setPendingLoopPoint(loop.position);
+    setPendingLoopRouteId(loop.routeId);
+    setLoopModalOpen(true);
+  };
+
   const handleMarkerDragEnd = (index: number, point: Point) => {
     const newDraft = [...draftRoute];
     newDraft[index] = point;
@@ -1896,14 +1912,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                     <button type="button" aria-label="แก้ไข" title="แก้ไข"
                                       onClick={(e) => { 
                                         e.stopPropagation(); 
-                                        setEditingLoopId(loop.id);
-                                        setLoopNameInput(loop.name);
-                                        setLoopLengthInput(loop.length.toString());
-                                        setLoopLatInput(loop.position.lat.toFixed(6));
-                                        setLoopLngInput(loop.position.lng.toFixed(6));
-                                        setPendingLoopPoint(loop.position);
-                                        setPendingLoopRouteId(loop.routeId);
-                                        setLoopModalOpen(true);
+                                        startEditLoop(loop);
                                       }}
                                       className="p-1.5 hover:bg-amber-500/20 rounded-lg text-amber-400 transition-colors"
                                     >
@@ -1962,6 +1971,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             onSplitRoute={openSplitRoute}
             onCutRoute={openCutRoute}
             onEditEnclosure={startEditEnclosure}
+            onEditLoop={startEditLoop}
             onEnclosureDragEnd={(enclosure, point) => {
               setEnclosureLatInput(point.lat.toString());
               setEnclosureLngInput(point.lng.toString());
