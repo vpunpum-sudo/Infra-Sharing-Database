@@ -145,7 +145,7 @@ export default function SystemManual() {
                 ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                 : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border-slate-700'
             }`}
-            title="สลับโหมดสีสว่าง/มืด"
+            title="สลับโหมดสีสว่าง/มืด" aria-label="สลับโหมดสีสว่าง/มืด"
           >
             {themeMode === 'light' ? '🌙 โหมดมืด' : '☀️ โหมดสว่าง'}
           </button>
@@ -232,7 +232,7 @@ export default function SystemManual() {
                     ? 'bg-slate-50 hover:bg-slate-100 disabled:opacity-30 border-slate-200 text-slate-700'
                     : 'bg-slate-800 hover:bg-slate-700 disabled:opacity-30 border-slate-700 text-white'
                 }`}
-                title="สไลด์ก่อนหน้า"
+                title="สไลด์ก่อนหน้า" aria-label="สไลด์ก่อนหน้า"
               >
                 <ChevronLeft size={16} />
               </button>
@@ -247,7 +247,7 @@ export default function SystemManual() {
                     ? 'bg-slate-50 hover:bg-slate-100 disabled:opacity-30 border-slate-200 text-slate-700'
                     : 'bg-slate-800 hover:bg-slate-700 disabled:opacity-30 border-slate-700 text-white'
                 }`}
-                title="สไลด์ถัดไป"
+                title="สไลด์ถัดไป" aria-label="สไลด์ถัดไป"
               >
                 <ChevronRight size={16} />
               </button>

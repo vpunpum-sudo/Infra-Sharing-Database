@@ -12,7 +12,7 @@ export default function Login() {
 
   const handleForgotPassword = async () => {
     if (!email) {
-      setError("Please enter your email address first to reset password.");
+      setError("กรุณากรอกอีเมลก่อน แล้วกด “ลืมรหัสผ่าน?” อีกครั้ง");
       setResetMessage(null);
       return;
     }
@@ -21,9 +21,9 @@ export default function Login() {
     setResetMessage(null);
     try {
       await sendPasswordResetEmail(auth, email);
-      setResetMessage("Password reset link sent! Please check your email inbox.");
+      setResetMessage("ส่งลิงก์ตั้งรหัสผ่านใหม่แล้ว กรุณาตรวจสอบอีเมล");
     } catch (err: any) {
-      setError(err.message || "Failed to send password reset email.");
+      setError(err.message || "ส่งอีเมลตั้งรหัสผ่านใหม่ไม่สำเร็จ");
     } finally {
       setLoading(false);
     }
@@ -42,11 +42,11 @@ export default function Login() {
       const errorCode = err.code || (err.message?.includes('invalid-credential') ? 'auth/invalid-credential' : '');
       
       if (errorCode === 'auth/user-not-found' || errorCode === 'auth/wrong-password' || errorCode === 'auth/invalid-credential') {
-        setError("Invalid email or password. Please check your credentials and try again.");
+        setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่");
       } else if (errorCode === 'auth/too-many-requests') {
-        setError("Too many failed attempts. Please try again later.");
+        setError("ลองเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่");
       } else {
-        setError(err.message || "An error occurred during login.");
+        setError(err.message || "เข้าสู่ระบบไม่สำเร็จ");
       }
     } finally {
       setLoading(false);
@@ -92,7 +92,7 @@ export default function Login() {
           <h1 className="text-2xl font-extrabold tracking-tight font-display mb-1 text-white">FIBER SHARING DATABASE</h1>
           <div className="flex items-center justify-center gap-1.5 text-brand-200 text-xs font-semibold">
             <Activity size={13} className="text-brand-300 animate-pulse" />
-            <span>GIS Network Management System</span>
+            <span>ระบบจัดการโครงข่ายใยแก้วนำแสง</span>
           </div>
         </div>
         
@@ -100,13 +100,13 @@ export default function Login() {
         <div className="p-8 bg-slate-900/80 backdrop-blur-xl">
           <div className="space-y-6">
             <div className="text-center">
-              <h2 className="text-lg font-bold text-white tracking-tight font-display">Sign In to Workspace</h2>
-              <p className="text-slate-400 text-xs mt-1">Access optical routes, splice enclosures & core matrices</p>
+              <h2 className="text-lg font-bold text-white tracking-tight font-display">เข้าสู่ระบบ</h2>
+              <p className="text-slate-400 text-xs mt-1">ดูเส้นทาง จุด Splice และการจัดสรร Core</p>
             </div>
 
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 ml-1">Email Address</label>
+                <label htmlFor="login-email" className="text-xs font-semibold text-slate-300 ml-1">อีเมล</label>
                 <div className="relative group">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-brand-400 transition-colors" />
                   <input 
@@ -114,6 +114,8 @@ export default function Login() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    id="login-email"
+                    autoComplete="email"
                     placeholder="name@company.com"
                     className="w-full bg-slate-950/80 border border-slate-700/80 p-3 pl-10 rounded-xl focus:border-brand-500 focus:outline-none transition-all text-white text-xs placeholder:text-slate-500"
                   />
@@ -122,13 +124,13 @@ export default function Login() {
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center ml-1">
-                  <label className="text-xs font-semibold text-slate-300">Password</label>
+                  <label htmlFor="login-password" className="text-xs font-semibold text-slate-300">รหัสผ่าน</label>
                   <button 
                     type="button" 
                     onClick={handleForgotPassword} 
                     className="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors"
                   >
-                    Forgot Password?
+                    ลืมรหัสผ่าน?
                   </button>
                 </div>
                 <div className="relative group">
@@ -138,6 +140,8 @@ export default function Login() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    id="login-password"
+                    autoComplete="current-password"
                     placeholder="••••••••"
                     className="w-full bg-slate-950/80 border border-slate-700/80 p-3 pl-10 rounded-xl focus:border-brand-500 focus:outline-none transition-all text-white text-xs placeholder:text-slate-500"
                   />
@@ -174,7 +178,7 @@ export default function Login() {
                 className="w-full bg-brand-600 text-white p-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-brand-500 shadow-lg shadow-brand-600/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-xs"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-                <span>Sign In to System</span>
+                <span>เข้าสู่ระบบ</span>
               </button>
             </form>
             

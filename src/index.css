@@ -1087,3 +1087,13 @@ html:not(.light-theme) #root :is(.text-slate-500, .text-slate-600) {
 .light-theme :is(.text-orange-50, .text-orange-100, .text-orange-200) { color: #9a3412 !important; }
 /* `.light-theme p` forces slate text; inside alerts keep the alert's colour. */
 .light-theme [role="alert"] :is(p, span) { color: inherit !important; }
+
+/* Keyboard focus: a visible ring on anything focusable, without showing it
+   on mouse clicks. */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+.light-theme :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline-color: #0284c7;
+}

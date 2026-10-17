@@ -632,7 +632,7 @@ function MapControls({ enclosures, routes, loops }: {
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); map.zoomIn(); }}
           className="bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 flex items-center justify-center transition-colors border-r border-slate-700"
-          title="Zoom in"
+          title="Zoom in" aria-label="Zoom in"
           style={{ width: '28px', height: '28px', border: 'none', cursor: 'pointer' }}
         >
           <Plus size={14} />
@@ -640,7 +640,7 @@ function MapControls({ enclosures, routes, loops }: {
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); map.zoomOut(); }}
           className="bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 flex items-center justify-center transition-colors border-r border-slate-700"
-          title="Zoom out"
+          title="Zoom out" aria-label="Zoom out"
           style={{ width: '28px', height: '28px', border: 'none', cursor: 'pointer' }}
         >
           <Minus size={14} />
@@ -652,7 +652,7 @@ function MapControls({ enclosures, routes, loops }: {
             focusAll();
           }}
           className="bg-slate-900 hover:bg-slate-800 text-slate-300 p-1.5 flex items-center justify-center transition-colors"
-          title="Focus all objects"
+          title="Focus all objects" aria-label="Focus all objects"
           style={{ width: '28px', height: '28px', border: 'none', cursor: 'pointer' }}
         >
           <Maximize size={14} />
@@ -840,7 +840,7 @@ function MapSearchControl({
                   inputRef.current?.focus();
                 }}
                 className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-                title="Clear"
+                title="Clear" aria-label="Clear"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

@@ -442,7 +442,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             <button 
                               onClick={() => startEdit(u)} 
                               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                              title="Edit User"
+                              title="Edit User" aria-label="Edit User"
                             >
                               <Edit2 size={14} />
                             </button>
@@ -450,7 +450,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                               onClick={() => handleDeleteUser(u.id)} 
                               disabled={quotaExceeded}
                               className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors disabled:opacity-50"
-                              title="Delete User"
+                              title="Delete User" aria-label="Delete User"
                             >
                               <Trash2 size={14} />
                             </button>

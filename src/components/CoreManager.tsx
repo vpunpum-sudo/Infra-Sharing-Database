@@ -238,11 +238,11 @@ export default function CoreManager({ route, appUser, enclosures, selectedPoint,
           <button 
             onClick={() => setIsFullscreen(!isFullscreen)} 
             className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 transition-all active:scale-95"
-            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"} aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
-          <button 
+          <button type="button" aria-label="ปิด" 
             onClick={onClose} 
             className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 transition-all active:scale-95"
           >
@@ -664,7 +664,7 @@ export default function CoreManager({ route, appUser, enclosures, selectedPoint,
                         <Lock className="w-2 h-2 text-slate-500" /> Read-only ({selectedCore.owner})
                       </span>
                     )}
-                    <button onClick={() => { setSelectedCore(null); setActiveTab('details'); setIsEditing(false); }} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 transition-all">
+                    <button type="button" aria-label="ปิด" onClick={() => { setSelectedCore(null); setActiveTab('details'); setIsEditing(false); }} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 transition-all">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
