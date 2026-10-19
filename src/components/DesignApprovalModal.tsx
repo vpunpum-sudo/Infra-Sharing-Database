@@ -1797,11 +1797,25 @@ export function DesignApprovalModal({
     }
     .sig-card strong {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       min-height: 42px;
-      line-height: 1.2;
-      overflow-wrap: anywhere;
+      line-height: 1.25;
+      overflow-wrap: break-word;
+    }
+    .sig-role {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .slide-subtitle {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 2px;
     }
     .sig-mark {
       height: 72px;
@@ -2191,20 +2205,21 @@ export function DesignApprovalModal({
   <!-- Slide 6: Summary & 2-Level Approval -->
   <div class="slide-page pdf-portrait">
     <div class="slide-header">
-      <h2 class="slide-title">สรุปงานติดตั้ง & การลงนามอนุมัติ (2 ระดับ: Planning & O&M)</h2>
-      <div class="logos-bar" style="display: flex; align-items: center; gap: 14px; background: white; padding: 6px 14px; border-radius: 10px; border: 1px solid #cbd5e1; flex-wrap: wrap;">
+      <h2 class="slide-title">สรุปงานติดตั้ง & การลงนามอนุมัติ<span class="slide-subtitle">2 ระดับ: Planning &amp; O&amp;M</span></h2>
+      <div class="logos-bar" style="display: flex; align-items: center; gap: 14px; background: white; padding: 6px 14px; border-radius: 10px; border: 1px solid #cbd5e1; flex-wrap: nowrap; flex-shrink: 0;">
         ${headerLogosHtml}
       </div>
     </div>
     
     <div style="background: #f8fafc; padding: 16px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 12px; line-height: 1.6; margin-bottom: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
-        <div>
-          <strong style="font-size: 14px; color: #0f172a;">สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')}): ${project.name}</strong>
-          <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: ${escapePrintText(docNum)} | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
+        <div style="min-width: 0;">
+          <div style="font-size: 12px; color: #0369a1; font-weight: 700;">สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')})</div>
+          <strong style="display: block; font-size: 14px; color: #0f172a; line-height: 1.4;">${escapePrintText(project.name)}</strong>
+          <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: <span style="white-space: nowrap;">${escapePrintText(docNum)}</span> | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
         </div>
-        <div style="text-align: right; font-size: 11px; color: #475569;">
-          <strong>กำหนดการติดตั้ง:</strong> ${escapePrintText(contractorView.installDate)}
+        <div style="text-align: right; font-size: 11px; color: #475569; white-space: nowrap; flex-shrink: 0;">
+          <strong>กำหนดการติดตั้ง:</strong><br>${escapePrintText(contractorView.installDate)}
         </div>
       </div>
 
@@ -2213,8 +2228,8 @@ export function DesignApprovalModal({
         <strong style="color: #0369a1; font-size: 13px;">สรุปเส้น Fiber Optic และการใช้งานร่วมกัน</strong>
         <table style="table-layout: fixed; width: 100%; font-size: 10px; margin: 8px 0;">
           <colgroup>
-            <col style="width: 15%;" /><col style="width: 29%;" /><col style="width: 13%;" />
-            <col style="width: 22%;" /><col style="width: 21%;" />
+            <col style="width: 12%;" /><col style="width: 35%;" /><col style="width: 13%;" />
+            <col style="width: 21%;" /><col style="width: 19%;" />
           </colgroup>
           <thead>
             <tr>
@@ -2228,15 +2243,15 @@ export function DesignApprovalModal({
           <tbody>
             ${approvalSummaryRows.map(({ route, typeCounts }) => `
               <tr>
-                <td style="vertical-align: top; overflow-wrap: anywhere;"><strong>${escapePrintText(route.tier)}</strong></td>
-                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;"><strong>${escapePrintText(route.routeName)}</strong></td>
+                <td style="vertical-align: top; overflow-wrap: break-word;"><strong>${escapePrintText(route.tier)}</strong></td>
+                <td style="vertical-align: top; text-align: left; overflow-wrap: break-word;"><strong>${route.routeName.split(/\s+-\s+/).map(escapePrintText).join(' –<br>')}</strong></td>
                 <td style="vertical-align: top;">OFC ${route.capacity} Core<br><strong>${route.distanceKm} กม.</strong></td>
                 <td style="vertical-align: top; text-align: left;">
                   ${participatingOwners.map(owner => `
                     <div><strong style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner}:</strong> ${getCoreShareText(getOwnerCoreCount(route, owner), route.capacity)}</div>
                   `).join('')}
                 </td>
-                <td style="vertical-align: top; text-align: left; overflow-wrap: anywhere;">
+                <td style="vertical-align: top; text-align: left; overflow-wrap: break-word;">
                   ${typeCounts.length ? typeCounts.map(type => `<div>${escapePrintText(type.name)} <strong>(${type.count} หัว)</strong></div>`).join('') : '-'}
                 </td>
               </tr>
@@ -2282,7 +2297,7 @@ export function DesignApprovalModal({
           const s = planningSignOffs[o];
           return `
             <div class="sig-card">
-              <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (Planning)</strong>
+              <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'}<span class="sig-role">Planning</span></strong>
               <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" alt="ลายเซ็น" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
               <div class="sig-name">ชื่อ-นามสกุล: ${escapePrintText(s?.signedBy || '................................')}</div>
               <div class="sig-position">ตำแหน่ง: ${escapePrintText(s?.position || '................................')}</div>
@@ -2301,7 +2316,7 @@ export function DesignApprovalModal({
           const s = omSignOffs[o];
           return `
             <div class="sig-card">
-              <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'} (O&M Management)</strong>
+              <strong style="color: ${o === 'SYMC' ? '#db2777' : o === 'UIH' ? '#0038b8' : '#d97706'}">${o === 'SYMC' ? 'Symphony Communication PCL.' : o === 'UIH' ? 'United Information Highway Co., Ltd.' : 'Interlink Telecom PCL.'}<span class="sig-role">O&amp;M Management</span></strong>
               <div class="sig-mark">${s?.signatureDataUrl ? `<img src="${s.signatureDataUrl}" class="sig-img" alt="ลายเซ็น" />` : '<span style="color: #94a3b8;">[ยังไม่ได้ลงนาม]</span>'}</div>
               <div class="sig-name">ชื่อ-นามสกุล: ${escapePrintText(s?.signedBy || '................................')}</div>
               <div class="sig-position">ตำแหน่ง: ${escapePrintText(s?.position || '................................')}</div>
