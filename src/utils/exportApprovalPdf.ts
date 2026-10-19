@@ -50,14 +50,18 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
     if (slides.length === 0) throw new Error('ไม่พบหน้าเอกสารสำหรับส่งออก');
 
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-    const availableWidth = PAGE_WIDTH_MM - MARGIN_MM * 2;
-    const availableHeight = PAGE_HEIGHT_MM - MARGIN_MM * 2;
     let isFirstPage = true;
 
     for (const slide of slides) {
+      // Slides marked pdf-portrait (laid out ~780px wide) go on portrait pages.
+      const portrait = slide.classList.contains('pdf-portrait');
+      const availableWidth = (portrait ? PAGE_HEIGHT_MM : PAGE_WIDTH_MM) - MARGIN_MM * 2;
+      const availableHeight = (portrait ? PAGE_WIDTH_MM : PAGE_HEIGHT_MM) - MARGIN_MM * 2;
       const canvas = await toCanvas(slide, { pixelRatio: 1.5, backgroundColor: '#ffffff' });
       if (canvas.width === 0 || canvas.height === 0) throw new Error('ไม่สามารถสร้างภาพหน้าเอกสารได้');
       const pixelsPerPdfPage = Math.max(1, Math.floor(canvas.width * availableHeight / availableWidth));
+      // A portrait slide a little taller than the page is shrunk onto one page rather than split.
+      const onePage = portrait && canvas.height <= pixelsPerPdfPage * 1.3;
       const slideBounds = slide.getBoundingClientRect();
       const pixelsPerCssPixel = canvas.height / slideBounds.height;
       const pixelRange = (element: Element): PixelRange => {
@@ -128,7 +132,9 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         // starting a page for it (shrinking slightly if needed, or cropping a
         // long empty tail).
         const restIsBlank = limit < canvas.height && !nextPageStart && contentEnd <= limit + 2;
-        if (restIsBlank) {
+        if (onePage) {
+          bottom = canvas.height;
+        } else if (restIsBlank) {
           bottom = canvas.height - limit <= contentCapacity * 0.15
             ? canvas.height
             : Math.min(canvas.height, Math.max(limit, contentEnd + Math.round(12 * pixelsPerCssPixel)));
@@ -165,7 +171,7 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         }
         context.drawImage(canvas, 0, top, canvas.width, bottom - top, 0, offset, canvas.width, bottom - top);
 
-        if (!isFirstPage) pdf.addPage();
+        if (!isFirstPage) pdf.addPage('a4', portrait ? 'portrait' : 'landscape');
         isFirstPage = false;
         // A page that took its blank tail along may be a little taller than the
         // page; scale it down to fit instead of clipping.
@@ -174,7 +180,7 @@ export async function createApprovalPdf(html: string): Promise<jsPDF> {
         pdf.addImage(slice.toDataURL('image/png'), 'PNG', MARGIN_MM + availableWidth * (1 - fit) / 2, MARGIN_MM,
           availableWidth * fit, heightMm * fit);
         // Once only blank space is left, the slide is done.
-        top = restIsBlank ? canvas.height : bottom;
+        top = restIsBlank || onePage ? canvas.height : bottom;
       }
     }
 

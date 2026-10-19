@@ -1671,6 +1671,12 @@ export function DesignApprovalModal({
       min-height: 190mm;
       position: relative;
     }
+    /* Printed on a portrait A4 page: about A4's width at the PDF's scale. */
+    .slide-page.pdf-portrait {
+      width: 780px;
+      min-height: 0;
+      padding: 22px;
+    }
     .pdf-enclosure-table {
       table-layout: fixed;
     }
@@ -2183,7 +2189,7 @@ export function DesignApprovalModal({
   </div>
 
   <!-- Slide 6: Summary & 2-Level Approval -->
-  <div class="slide-page">
+  <div class="slide-page pdf-portrait">
     <div class="slide-header">
       <h2 class="slide-title">สรุปงานติดตั้ง & การลงนามอนุมัติ (2 ระดับ: Planning & O&M)</h2>
       <div class="logos-bar" style="display: flex; align-items: center; gap: 14px; background: white; padding: 6px 14px; border-radius: 10px; border: 1px solid #cbd5e1; flex-wrap: wrap;">
@@ -2264,13 +2270,9 @@ export function DesignApprovalModal({
         "โดยมีมติสรุปเห็นชอบร่วมกับดำเนินการ ตามรายละเอียดดังกล่าวข้างต้น"
       </div>
     </div>
-  </div>
 
-  <div class="slide-page pdf-signature-page">
-    <div class="slide-header">
-      <h2 class="slide-title">ผู้ลงนามอนุมัติโครงการ</h2>
-      <div class="logos-bar">${headerLogosHtml}</div>
-    </div>
+    <!-- Signatures share the summary page (portrait A4 in the PDF) -->
+    <h3 style="margin: 18px 0 8px; font-size: 15px; color: #0369a1; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">ผู้ลงนามอนุมัติโครงการ</h3>
 
     <!-- Level 1 Planning Signatures -->
     <div class="pdf-keep-together" style="margin-bottom: 16px;">
