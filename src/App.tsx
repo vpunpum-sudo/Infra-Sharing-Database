@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
+import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2, Search, ArrowUpDown } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import FiberMap from './components/FiberMap';
 import CoreManager from './components/CoreManager';
@@ -16,6 +16,7 @@ import { PendingApproval } from './components/PendingApproval';
 import { ProfileSettings } from './components/ProfileSettings';
 import { ForceChangePassword } from './components/ForceChangePassword';
 import WorkInstruction from './components/WorkInstruction';
+import { distinctValues, filterEnclosures, filterLoops, filterRoutes, routeTypeLabel, SidebarFilter, SidebarSort, SORT_LABELS } from './utils/sidebarList';
 import { Point, FiberEnclosure, Route as RouteType, CoreStatus, CoreOwner, Core, Project, EnclosureType, FiberType, FiberLoop, FiberColorConfig, SegmentTubePriorityUpdate, User as AppUser } from './types';
 import { generateCores } from './constants';
 import { getRolePermissions, useRolePermissions } from './services/rolePermissionsStore';
@@ -124,6 +125,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [enclosuresExpanded, setEnclosuresExpanded] = useState(false);
   const [loopsExpanded, setLoopsExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>({ query: '', sort: 'name-asc', routeType: '', locationType: '' });
+  const listedRoutes = filterRoutes(routes, sidebarFilter);
+  const listedEnclosures = filterEnclosures(enclosures, sidebarFilter);
+  const listedLoops = filterLoops(loops, sidebarFilter);
+  const sidebarFiltered = !!(sidebarFilter.query.trim() || sidebarFilter.routeType || sidebarFilter.locationType);
+  const countLabel = (shown: number, total: number) => sidebarFiltered ? `${shown}/${total}` : `${total}`;
   // The approval document needs the full width: fold the sidebar while it is
   // open and put it back the way it was afterwards.
   const sidebarBeforeApproval = useRef<boolean | null>(null);
@@ -1726,6 +1733,32 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           )}
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            {/* Filter and sort for the three lists below */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input type="text" value={sidebarFilter.query} aria-label="กรองรายการตามชื่อ"
+                  onChange={e => setSidebarFilter(f => ({ ...f, query: e.target.value }))}
+                  placeholder="กรองตามชื่อ สถานที่ ชนิดสาย…"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 py-2 pl-8 pr-8 text-xs text-slate-200 placeholder-slate-500 focus:border-brand-500 focus:outline-none" />
+                {sidebarFiltered && (
+                  <button type="button" aria-label="ล้างตัวกรอง" title="ล้างตัวกรอง"
+                    onClick={() => setSidebarFilter(f => ({ ...f, query: '', routeType: '', locationType: '' }))}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+                    <XIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                <ArrowUpDown className="w-3.5 h-3.5 shrink-0" /> เรียง
+                <select value={sidebarFilter.sort} aria-label="เรียงรายการ"
+                  onChange={e => setSidebarFilter(f => ({ ...f, sort: e.target.value as SidebarSort }))}
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5 text-xs text-slate-200 focus:border-brand-500 focus:outline-none">
+                  {(Object.keys(SORT_LABELS) as SidebarSort[]).map(key => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
+                </select>
+              </label>
+            </div>
+
             <div className="space-y-3">
               <button 
                 onClick={() => setRoutesExpanded(!routesExpanded)}
@@ -1734,7 +1767,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-brand-500 rounded-full shadow-lg shadow-brand-500/50"></div>
                   <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Routes</span>
-                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{routes.length}</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{countLabel(listedRoutes.length, routes.length)}</span>
                 </div>
                 {routesExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1747,11 +1780,21 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
+                    {routes.length > 0 && distinctValues(routes.map(routeTypeLabel)).length > 1 && (
+                      <select value={sidebarFilter.routeType} aria-label="กรองชนิดสาย"
+                        onChange={e => setSidebarFilter(f => ({ ...f, routeType: e.target.value }))}
+                        className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5 text-xs text-slate-200 focus:border-brand-500 focus:outline-none">
+                        <option value="">ทุกชนิดสาย</option>
+                        {distinctValues(routes.map(routeTypeLabel)).map(type => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    )}
                     {routes.length === 0 ? (
                       <p className="text-xs text-slate-500 italic px-3 py-2">No routes drawn yet.</p>
+                    ) : listedRoutes.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic px-3 py-2">ไม่พบเส้นทางที่ตรงกับตัวกรอง</p>
                     ) : (
                       <ul className="space-y-2">
-                        {routes.map(route => (
+                        {listedRoutes.map(route => (
                           <li
                             key={route.id}
                             id={`sidebar-route-${route.id}`}
@@ -1816,7 +1859,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-rose-500 rounded-full shadow-lg shadow-rose-500/50"></div>
                   <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Enclosures</span>
-                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{enclosures.length}</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{countLabel(listedEnclosures.length, enclosures.length)}</span>
                 </div>
                 {enclosuresExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1829,11 +1872,21 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
+                    {enclosures.length > 0 && distinctValues(enclosures.map(e => e.locationType)).length > 1 && (
+                      <select value={sidebarFilter.locationType} aria-label="กรองประเภทสถานที่"
+                        onChange={e => setSidebarFilter(f => ({ ...f, locationType: e.target.value }))}
+                        className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5 text-xs text-slate-200 focus:border-brand-500 focus:outline-none">
+                        <option value="">ทุกประเภทสถานที่</option>
+                        {distinctValues(enclosures.map(e => e.locationType)).map(type => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    )}
                     {enclosures.length === 0 ? (
                       <p className="text-xs text-slate-500 italic px-3 py-2">No enclosures added yet.</p>
+                    ) : listedEnclosures.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic px-3 py-2">ไม่พบ Enclosure ที่ตรงกับตัวกรอง</p>
                     ) : (
                       <ul className="space-y-2">
-                        {enclosures.map(enclosure => (
+                        {listedEnclosures.map(enclosure => (
                           <li 
                             key={enclosure.id} 
                             id={`sidebar-enclosure-${enclosure.id}`}
@@ -1891,7 +1944,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-4 bg-amber-500 rounded-full shadow-lg shadow-amber-500/50"></div>
                   <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Loops</span>
-                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{loops.length}</span>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-lg font-black">{countLabel(listedLoops.length, loops.length)}</span>
                 </div>
                 {loopsExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />}
               </button>
@@ -1906,9 +1959,11 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                   >
                     {loops.length === 0 ? (
                       <p className="text-xs text-slate-500 italic px-3 py-2">No loops added yet.</p>
+                    ) : listedLoops.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic px-3 py-2">ไม่พบ Loop ที่ตรงกับตัวกรอง</p>
                     ) : (
                       <ul className="space-y-2">
-                        {loops.map(loop => (
+                        {listedLoops.map(loop => (
                           <li 
                             key={loop.id} 
                             id={`sidebar-loop-${loop.id}`}
