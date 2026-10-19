@@ -94,7 +94,6 @@ const FEATURE_CATEGORIES = [
     features: [
       { id: 'viewApprovalDocs', label: 'View Approval Documents' },
       { id: 'requestApproval', label: 'Submit Approval Request' },
-      { id: 'approveDesign', label: 'Sign Approvals (any level)' },
       { id: 'approvePlanning', label: 'Sign Level 1: Planning' },
       { id: 'approveOM', label: 'Sign Level 2: O&M' }
     ] as { id: Feature; label: string }[]
