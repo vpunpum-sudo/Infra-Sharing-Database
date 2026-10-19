@@ -1,6 +1,6 @@
 # Claude + Codex delivery workflow
 
-Use this workflow for one shippable change in one Conductor workspace. Claude and Codex share the workspace, branch, working tree, and `.context` handoff files, but each artifact has one owner.
+Use this workflow when a change is delivered through the Claude + Codex flow (two chats or `agent-flow`), one shippable change per Conductor workspace. Claude and Codex share the workspace, branch, working tree, and `.context` handoff files, but each artifact has one owner.
 
 ## Roles and ownership
 
@@ -85,23 +85,16 @@ Mention `@todos` when handing a stage to an agent so it receives the current lis
 
 ## Single-chat mode
 
-`scripts/agent-flow.sh` (also `npm run flow --`) lets one chat or terminal drive both agents through their CLIs, so you do not need to switch between a Claude chat and a Codex chat. Ownership is unchanged:
-
-- Claude stages (`plan`, QA, `review`) run `claude -p` with read-only tools. The script writes Claude's answer to the handoff file and fails if repository files changed.
-- Codex challenge runs `codex exec --sandbox read-only`; implement and fix run with `--sandbox workspace-write`. If Codex edits `.context/plan.md` or `.context/review.md`, the script restores Claude's version.
-- Logs go to `.context/logs/`; fresh `npm run verify` output goes to `.context/verify.log`.
+The global `agent-flow` CLI (installed on the developer machine from `~/agent-flow`) drives both agents from one chat through their CLIs. In this repository it uses `docs/agent-templates/`, these rules, and `npm run verify` as the gate. Ownership is unchanged: Claude stages run read-only, Codex implements in a sandbox, plan approval stays with the human, and it never deploys.
 
 ```bash
-scripts/agent-flow.sh plan "<task>"       # Claude plan, then Codex challenge
-scripts/agent-flow.sh plan "<feedback>"   # revise the plan after human feedback
-scripts/agent-flow.sh approve             # human gate: run only on explicit human approval
-scripts/agent-flow.sh build               # implement + QA, then verify/review/fix loop
-scripts/agent-flow.sh spec                # save approved plan + review to docs/specs/
-scripts/agent-flow.sh status
-scripts/agent-flow.sh reset               # archive handoff files before the next feature
+agent-flow plan "<task>"       # Claude plan, then Codex challenge
+agent-flow approve             # human gate: run only on explicit human approval
+agent-flow build               # implement + QA, then verify/review/fix loop
+agent-flow status
 ```
 
-`build` repeats verify → Claude review → Codex fix up to `AGENT_FLOW_MAX_ROUNDS` (default 3) and stops when the review is `APPROVED` and `npm run verify` passes. It then saves the approved plan and review to `docs/specs/<feature>.md`, using the `Feature:` line in the plan. Commit that file with the change, because `.context/` is not tracked and is lost with the workspace. Run `spec` to save it again manually. It never commits, pushes, or deploys; stage 6 still applies. When an agent chat runs `build`, run it in the background because it can take longer than a tool-call timeout.
+After an approved `build`, commit `docs/specs/<feature>.md` with the change. `.context/` is not tracked and is lost with the workspace. Run `agent-flow help` for every command.
 
 ## Copy-paste prompts
 

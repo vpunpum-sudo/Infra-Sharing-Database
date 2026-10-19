@@ -11,8 +11,7 @@
     "lint": "tsc --noEmit",
     "test": "tsx --test src/**/*.test.ts",
     "test:functions": "npm --prefix functions test",
-    "verify": "npm run lint && npm test && npm run test:functions && npm run build",
-    "flow": "bash scripts/agent-flow.sh"
+    "verify": "npm run lint && npm test && npm run test:functions && npm run build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
