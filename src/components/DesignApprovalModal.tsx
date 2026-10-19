@@ -1187,9 +1187,11 @@ export function DesignApprovalModal({
   };
 
   // Check if current logged in user can sign for owner & level
+  // Signing depends only on the level's own permission. approveDesign used to be
+  // an extra master switch; with it off, roles allowed to sign a level could not.
   const canUserSign = (owner: CoreOwner, level: 'Planning' | 'OM') => {
-    if (!appUser || !permissions?.approveDesign) return false;
-    if (!(level === 'Planning' ? permissions.approvePlanning : permissions.approveOM)) return false;
+    if (!appUser) return false;
+    if (!(level === 'Planning' ? permissions?.approvePlanning : permissions?.approveOM)) return false;
     if (appUser.role === 'Admin') return true;
 
     return !(appUser.owner && appUser.owner !== 'None' && appUser.owner !== owner);
@@ -1845,6 +1847,10 @@ export function DesignApprovalModal({
     <h1 style="font-size: 42px; font-weight: 900; color: #0369a1; margin: 0 0 16px 0; text-transform: uppercase;">FIBER INFRA SHARING</h1>
     <h2 style="font-size: 26px; font-weight: 700; color: #334155; margin: 0 0 20px 0;">${project.name}</h2>
     <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center;">
+      ${project.routeCode?.trim() ? `<div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
+        <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">รหัสเส้นทาง (Route Code)</span>
+        <strong style="color: #047857; font-size: 15px; font-family: monospace;">${escapePrintText(project.routeCode.trim())}</strong>
+      </div>` : ''}
       <div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
         <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">Tier Classification</span>
         <strong style="color: #0369a1; font-size: 15px;">${projectTierLabel}</strong>
@@ -2553,7 +2559,13 @@ export function DesignApprovalModal({
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto pt-4 text-left">
+                      <div className={`grid grid-cols-1 gap-3 mx-auto pt-4 text-left ${project.routeCode?.trim() ? 'sm:grid-cols-4 max-w-3xl' : 'sm:grid-cols-3 max-w-2xl'}`}>
+                        {project.routeCode?.trim() && (
+                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">รหัสเส้นทาง (Route Code)</p>
+                            <p className="text-xs font-black text-emerald-400 font-mono break-all">{project.routeCode.trim()}</p>
+                          </div>
+                        )}
                         <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                           <p className="text-[10px] text-slate-400 font-bold uppercase">Tier Classification</p>
                           <p className="text-xs font-black text-sky-400">{projectTierLabel}</p>
