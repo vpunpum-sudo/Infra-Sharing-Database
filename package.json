@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "test:functions": "npm --prefix functions test",
+    "verify": "npm run lint && npm test && npm run test:functions && npm run build",
+    "flow": "bash scripts/agent-flow.sh"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

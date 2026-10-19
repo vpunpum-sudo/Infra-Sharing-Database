@@ -1,0 +1,19 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "./scripts/conductor-setup.sh"
+run_mode = "concurrent"
+
+[scripts.run.dev]
+available_in = [ "local" ]
+command = "npm exec vite -- --host 0.0.0.0 --port $CONDUCTOR_PORT"
+default = true
+icon = "play"
+
+[scripts.run.verify]
+command = "npm run verify"
+icon = "test-tube"
+
+[scripts.run.functions_test]
+command = "npm run test:functions"
+icon = "test-tube"
