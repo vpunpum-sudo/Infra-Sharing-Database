@@ -14,6 +14,16 @@ test('marks are centred, rounded to one decimal, clamped and fall back separatel
   assert.deepEqual(clampMark({ x: -5, y: 101 }), { x: 0, y: 100 });
 });
 
+test('marks can sit on the top-left corner or the middle of the left edge', () => {
+  const box = { x: 144, y: 90, width: 288, height: 180 };
+  const result = toPercentMarks([
+    { name: 'corner', box, anchor: 'top-left' },
+    { name: 'edge', box, anchor: 'left-center' },
+    { name: 'centre', box }
+  ], { width: 1440, height: 900 }, []);
+  assert.deepEqual(result.marks, [{ x: 10, y: 10 }, { x: 10, y: 20 }, { x: 20, y: 20 }]);
+});
+
 test('marks module formatting is stable in map then context-menu order', () => {
   const marks = { map: [{ x: 1.234, y: 9.96 }], 'context-menu': [{ x: 2, y: 3 }] };
   const first = formatMarksModule(marks);

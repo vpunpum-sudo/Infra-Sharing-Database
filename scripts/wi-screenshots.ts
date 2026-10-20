@@ -159,6 +159,8 @@ async function main(): Promise<void> {
     try { browser = await chromium.launch({ headless: true }); }
     catch { fail('Playwright Chromium is not installed. Run npx playwright install chromium.'); }
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'th-TH', colorScheme: 'light' });
+    // tsx compiles with keepNames, which wraps functions passed to page.evaluate in a __name() helper the page lacks.
+    await context.addInitScript('globalThis.__name = globalThis.__name || (fn => fn);');
     await context.addInitScript(() => localStorage.setItem('fiber_theme', 'light'));
     const page = await context.newPage();
     let dialogSeen = false;
@@ -232,11 +234,11 @@ async function main(): Promise<void> {
     await waitForTiles(page);
     await assertPanelsAbsent(page);
     const mapBoxes: MarkBox[] = [
-      { name: 'header', box: await box(page, '.glass-panel > div:first-child') },
-      { name: 'tools', box: await box(page, 'button[aria-label="Focus all objects"]') },
-      { name: 'lists', box: await section.boundingBox().then(value => value ?? undefined) },
+      { name: 'header', box: await box(page, '.glass-panel button:has-text("Back to Projects")'), anchor: 'top-left' },
+      { name: 'tools', box: await box(page, '.glass-panel div.grid.grid-cols-2:has(span:text-is("Enclosure"))'), anchor: 'top-left' },
+      { name: 'lists', box: await header().boundingBox().then(value => value ?? undefined), anchor: 'top-left' },
       { name: 'layers', box: await box(page, '.leaflet-control-layers') },
-      { name: 'popup', box: await box(page, '.fiber-detail-popup') },
+      { name: 'popup', box: await box(page, '.fiber-detail-popup .leaflet-popup-content-wrapper'), anchor: 'top-left' },
       { name: 'sidebar-toggle', box: await box(page, 'button[aria-label="Collapse Sidebar"]') }
     ];
     tempDir = await mkdtemp(join(ROOT, '.wi-screenshots-tmp-'));
@@ -261,7 +263,7 @@ async function main(): Promise<void> {
     guardDialog();
     const menuPoint = (await samplePoint(page, route.id, chosen.fraction)).point;
     const menuBoxes: MarkBox[] = [{ name: 'click point', box: { x: menuPoint.x, y: menuPoint.y, width: 0.1, height: 0.1 } }];
-    for (const item of REQUIRED_MENU_ITEMS) menuBoxes.push({ name: item, box: await menu.getByRole('button', { name: item }).boundingBox().then(value => value ?? undefined) });
+    for (const item of REQUIRED_MENU_ITEMS) menuBoxes.push({ name: item, box: await menu.getByRole('button', { name: item }).boundingBox().then(value => value ?? undefined), anchor: 'left-center' });
     await page.screenshot({ path: join(tempDir, OUTPUT_NAMES[1]), animations: 'disabled' });
     await act.pressEscape();
     guardDialog();

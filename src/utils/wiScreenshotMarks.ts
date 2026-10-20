@@ -1,7 +1,9 @@
 import type { Point, Rect } from './wiScreenshotPoint';
 
 export type Mark = Point;
-export type MarkBox = { name: string; box?: Rect };
+/** Where the marker sits on the measured box: its centre, its top-left corner, or the middle of its left edge. */
+export type MarkAnchor = 'center' | 'top-left' | 'left-center';
+export type MarkBox = { name: string; box?: Rect; anchor?: MarkAnchor };
 const round = (value: number) => Math.round(value * 10) / 10;
 
 export function clampMark(mark: Mark): Mark {
@@ -19,10 +21,10 @@ export function toPercentMarks(boxes: MarkBox[], viewport: { width: number; heig
       return clampMark(previous[index] ?? { x: 50, y: 50 });
     }
     measured.push(item.name);
-    return clampMark({
-      x: ((item.box.x + item.box.width / 2) / viewport.width) * 100,
-      y: ((item.box.y + item.box.height / 2) / viewport.height) * 100
-    });
+    const anchor = item.anchor ?? 'center';
+    const x = anchor === 'center' ? item.box.x + item.box.width / 2 : item.box.x;
+    const y = anchor === 'top-left' ? item.box.y : item.box.y + item.box.height / 2;
+    return clampMark({ x: (x / viewport.width) * 100, y: (y / viewport.height) * 100 });
   });
   return { marks, measured, kept };
 }
