@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { Key, Loader2, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
-import { db, auth, updatePassword, logout } from '../firebase';
+import { db, updatePassword, logout } from '../firebase';
 import { User as AppUser } from '../types';
+import { run, retryClearFlag } from '../utils/forceChangePassword';
 
 interface ForceChangePasswordProps {
   user: FirebaseUser;
@@ -16,44 +17,20 @@ export const ForceChangePassword: React.FC<ForceChangePasswordProps> = ({ user, 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      setMessage({ type: 'error', text: 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร' });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: 'รหัสผ่านไม่ตรงกัน' });
-      return;
-    }
-
     setLoading(true);
     setMessage(null);
-
-    try {
-      await updatePassword(user, newPassword);
-      
-      // Update Firestore IMMEDIATELY to clear the flag
-      // Use a surgical update to avoid overwriting other fields with potentially stale data
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, { requiresPasswordChange: false }, { merge: true });
-      
-      setMessage({ type: 'success', text: 'เปลี่ยนรหัสผ่านสำเร็จ! กำลังนำคุณเข้าสู่ระบบ...' });
-      
-      // The real-time listener in App.tsx will pick up the change and redirect the user automatically.
-      // We don't need a timeout for the DB update anymore, but we can keep a small delay 
-      // for the UI if we want, though the redirect will likely happen instantly.
-    } catch (error: any) {
-      console.error("Error updating password:", error);
-      let errorText = 'ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง';
-      if (error.code === 'auth/requires-recent-login') {
-        errorText = 'เซสชันของคุณหมดอายุ กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่อีกครั้งเพื่อเปลี่ยนรหัสผ่าน';
-      }
-      setMessage({ type: 'error', text: error.message || errorText });
-      setLoading(false);
-    }
+    const clearFlag = () => setDoc(doc(db, 'users', user.uid), { requiresPasswordChange: false }, { merge: true });
+    const result = passwordUpdated
+      ? await retryClearFlag({ clearFlag })
+      : await run(newPassword, confirmPassword, { updatePassword: value => updatePassword(user, value), clearFlag });
+    if (result.status === 'flag_failed_password_active') setPasswordUpdated(true);
+    setMessage({ type: result.status === 'done' ? 'success' : 'error', text: result.message });
+    setLoading(false);
   };
 
   return (
@@ -176,7 +153,7 @@ export const ForceChangePassword: React.FC<ForceChangePasswordProps> = ({ user, 
                         className="w-full bg-brand-600 text-slate-100 py-4 rounded-xl font-black text-base hover:bg-brand-700 shadow-xl shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-                        ยืนยันและเริ่มใช้งาน
+                        {passwordUpdated ? 'ลองบันทึกสถานะอีกครั้ง' : 'ยืนยันและเริ่มใช้งาน'}
                       </button>
                       
                       <button 
