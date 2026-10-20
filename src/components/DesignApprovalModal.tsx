@@ -31,6 +31,8 @@ import { buildProjectKmz } from '../utils/kmz';
 import { exportFileName } from '../utils/kml';
 import { ensureProjectFolder, uploadProjectFile } from '../utils/projectFileUpload';
 import { buildApprovalDocumentNumber } from '../utils/approvalDocumentNumber';
+import { createLatestRequestGuard, SignatureImageError } from '../utils/signatureImage';
+import { processSignatureFile, type ProcessedSignature } from '../utils/signatureImageBrowser';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -236,6 +238,9 @@ export function DesignApprovalModal({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [uploadedSignature, setUploadedSignature] = useState<ProcessedSignature | null>(null);
+  const [isProcessingSignature, setIsProcessingSignature] = useState(false);
+  const signatureUploadGuardRef = useRef(createLatestRequestGuard());
   const signatureFileRef = useRef<HTMLInputElement | null>(null);
   const [slide4SelectedRouteId, setSlide4SelectedRouteId] = useState<string>('all');
   const [slide5SelectedRouteId, setSlide5SelectedRouteId] = useState<string>('all');
@@ -1081,6 +1086,18 @@ export function DesignApprovalModal({
 
   // Canvas drawing listeners
   useEffect(() => {
+    signatureUploadGuardRef.current.invalidate();
+    setIsProcessingSignature(false);
+    setUploadedSignature(null);
+    if (!isOpen) {
+      setSigningModalOpen(false);
+      setSigningTarget(null);
+      setHasSignature(false);
+      setIsDrawing(false);
+    }
+  }, [signingModalOpen, isOpen]);
+
+  useEffect(() => {
     if (!signingModalOpen) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1096,6 +1113,7 @@ export function DesignApprovalModal({
   }, [signingModalOpen]);
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (isProcessingSignature || uploadedSignature) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -1111,7 +1129,7 @@ export function DesignApprovalModal({
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || isProcessingSignature || uploadedSignature) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -1131,53 +1149,59 @@ export function DesignApprovalModal({
   };
 
   const clearSignature = () => {
+    signatureUploadGuardRef.current.invalidate();
+    setIsProcessingSignature(false);
+    setUploadedSignature(null);
+    setIsDrawing(false);
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
     setHasSignature(false);
     setActionError(null);
   };
 
-  const handleSignatureFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSignatureFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!['image/png', 'image/jpeg'].includes(file.type)) {
-      setActionError('กรุณาเลือกไฟล์ลายเซ็นชนิด PNG หรือ JPG');
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      setActionError('ไฟล์ลายเซ็นต้องมีขนาดไม่เกิน 2 MB');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => setActionError('ไม่สามารถอ่านไฟล์ลายเซ็นได้ กรุณาลองอีกครั้ง');
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') return;
-      const image = new window.Image();
-      image.onerror = () => setActionError('ไม่สามารถเปิดภาพลายเซ็นได้ กรุณาเลือกไฟล์อื่น');
-      image.onload = () => {
-        const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
-        if (!canvas || !ctx || !image.width || !image.height) return;
-        const scale = Math.min((canvas.width - 24) / image.width, (canvas.height - 16) / image.height);
-        const width = image.width * scale;
-        const height = image.height * scale;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
-        setHasSignature(true);
-        setActionError(null);
+    const token = signatureUploadGuardRef.current.begin();
+    setIsProcessingSignature(true);
+    setIsDrawing(false);
+    setActionError(null);
+    try {
+      const processed = await processSignatureFile(file);
+      if (!signatureUploadGuardRef.current.isCurrent(token)) return;
+      setUploadedSignature(processed);
+      setHasSignature(true);
+      setIsDrawing(false);
+      setActionError(null);
+    } catch (error) {
+      if (!signatureUploadGuardRef.current.isCurrent(token)) return;
+      const messages: Record<SignatureImageError['code'], string> = {
+        unsupported_type: 'กรุณาเลือกไฟล์ลายเซ็นชนิด PNG, JPG, WebP หรือ HEIC',
+        too_large: 'ไฟล์ลายเซ็นต้องมีขนาดไม่เกิน 15 MB',
+        decode_failed: 'ไม่สามารถเปิดภาพลายเซ็นได้ กรุณาใช้ไฟล์ JPG หรือ PNG',
+        image_too_large_pixels: 'ภาพลายเซ็นมีความละเอียดสูงเกินไป กรุณาเลือกภาพที่เล็กลง',
+        no_ink: 'ไม่พบลายเส้นลายเซ็นในภาพ',
+        too_big_output: 'ลายเซ็นหลังประมวลผลมีขนาดใหญ่เกินไป กรุณาใช้ภาพที่เล็กลง'
       };
-      image.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+      setActionError(error instanceof SignatureImageError ? messages[error.code] : 'ประมวลผลลายเซ็นไม่สำเร็จ');
+    } finally {
+      if (signatureUploadGuardRef.current.isCurrent(token)) setIsProcessingSignature(false);
+    }
+  };
+
+  const closeSigningModal = () => {
+    signatureUploadGuardRef.current.invalidate();
+    setIsProcessingSignature(false);
+    setUploadedSignature(null);
+    setSigningModalOpen(false);
   };
 
   // Open Signing Modal for specific Owner & Level
   const handleOpenSignModal = (owner: CoreOwner, level: 'Planning' | 'OM', previousSignOff?: OwnerSignOff) => {
+    signatureUploadGuardRef.current.invalidate();
+    setIsProcessingSignature(false);
+    setUploadedSignature(null);
     setActionError(null);
     setSigningTarget({ owner, level });
     setSignerPosition(previousSignOff?.position || '');
@@ -1387,7 +1411,7 @@ export function DesignApprovalModal({
 
   // Sign & Approve for specific Owner & Level (Planning or OM)
   const handleConfirmSignature = async (isApproved: boolean) => {
-    if (!signingTarget || !appUser || !project.designApproval) return;
+    if (isProcessingSignature || !signingTarget || !appUser || !project.designApproval) return;
     const existingSignOff = signingTarget.level === 'Planning'
       ? project.designApproval.planningSignOffs?.[signingTarget.owner]
       : project.designApproval.omSignOffs?.[signingTarget.owner];
@@ -1414,7 +1438,7 @@ export function DesignApprovalModal({
 
     try {
       const canvas = canvasRef.current;
-      const signatureUrl = canvas ? getTrimmedSignatureDataUrl(canvas) : '';
+      const signatureUrl = uploadedSignature?.dataUrl || (canvas ? getTrimmedSignatureDataUrl(canvas) : '');
       const { owner, level } = signingTarget;
 
       const signOffData: OwnerSignOff = {
@@ -1505,7 +1529,7 @@ export function DesignApprovalModal({
       }
       if (allOMApproved && project.designApproval.approvalStage !== 'Completed') setPendingFinalDocuments(true);
 
-      setSigningModalOpen(false);
+      closeSigningModal();
       setSigningTarget(null);
     } catch (err: any) {
       console.error('Error signing approval:', err);
@@ -4015,7 +4039,7 @@ export function DesignApprovalModal({
                   <p className="text-[10px] text-slate-400">ลายเซ็นอิเล็กทรอนิกส์พร้อมบันทึกลงระบบ</p>
                 </div>
               </div>
-              <button type="button" aria-label="ปิด" onClick={() => setSigningModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button type="button" aria-label="ปิด" onClick={closeSigningModal} className="text-slate-400 hover:text-white">
                 <X size={16} />
               </button>
             </div>
@@ -4052,21 +4076,23 @@ export function DesignApprovalModal({
                   <input
                     ref={signatureFileRef}
                     type="file"
-                    accept="image/png,image/jpeg"
+                    accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
                     onChange={handleSignatureFile}
                     className="hidden"
-                    aria-label="เลือกภาพลายเซ็น PNG หรือ JPG"
+                    aria-label="เลือกภาพลายเซ็น PNG, JPG, WebP หรือ HEIC"
+                    disabled={isProcessingSignature}
                   />
                   <button
                     type="button"
                     onClick={() => signatureFileRef.current?.click()}
-                    className="px-3 py-1.5 rounded-lg border border-sky-500/50 bg-sky-500/10 text-sky-300 font-bold hover:bg-sky-500/20"
+                    disabled={isProcessingSignature}
+                    className="px-3 py-1.5 rounded-lg border border-sky-500/50 bg-sky-500/10 text-sky-300 font-bold hover:bg-sky-500/20 disabled:opacity-50"
                   >
-                    แทรกรูปลายเซ็น (PNG/JPG)
+                    แทรกรูปลายเซ็น (PNG/JPG/WebP/HEIC)
                   </button>
                   <span className="text-slate-400">หรือวาดในกรอบด้านล่าง</span>
                 </div>
-                <div className="border-2 border-dashed border-slate-700 rounded-xl bg-white overflow-hidden touch-none">
+                <div className="relative border-2 border-dashed border-slate-700 rounded-xl bg-white overflow-hidden touch-none">
                   <canvas
                     ref={canvasRef}
                     width={440}
@@ -4078,9 +4104,16 @@ export function DesignApprovalModal({
                     onTouchStart={startDrawing}
                     onTouchMove={draw}
                     onTouchEnd={stopDrawing}
-                    className="w-full h-28 cursor-crosshair"
+                    className={`w-full h-28 ${isProcessingSignature || uploadedSignature ? 'cursor-default' : 'cursor-crosshair'}`}
                   />
+                  {uploadedSignature && (
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#fff', backgroundImage: 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)', backgroundSize: '16px 16px', backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0' }}>
+                      <img src={uploadedSignature.dataUrl} alt="ตัวอย่างลายเซ็นหลังลบพื้นหลัง" className="max-w-full max-h-full object-contain" />
+                    </div>
+                  )}
                 </div>
+                {isProcessingSignature && <p role="status" className="mt-1 text-[10px] text-sky-300">กำลังประมวลผลลายเซ็น…</p>}
+                {uploadedSignature && <p className="mt-1 text-[10px] text-emerald-400">ลบพื้นหลังภาพลายเซ็นให้อัตโนมัติแล้ว</p>}
                 {hasSignature && <p className="mt-1 text-[10px] text-emerald-400">ตัวอย่างลายเซ็นที่จะบันทึกแสดงในกรอบด้านบน</p>}
               </div>
 
@@ -4103,7 +4136,7 @@ export function DesignApprovalModal({
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={() => handleConfirmSignature(true)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isProcessingSignature}
                   className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow"
                 >
                   <CheckCircle2 size={15} />
@@ -4111,7 +4144,7 @@ export function DesignApprovalModal({
                 </button>
                 <button
                   onClick={() => handleConfirmSignature(false)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isProcessingSignature}
                   className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all"
                 >
                   <XCircle size={15} />
