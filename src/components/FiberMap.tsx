@@ -1,6 +1,6 @@
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, useMap, LayersControl, LayerGroup, Pane, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
 import { useMapDrawing } from '../hooks/useMapDrawing';
 import { createFiberLoopIcon, fiberLoopSvg } from '../utils/fiberLoopIcon';
@@ -8,7 +8,7 @@ import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority 
 import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
 import { getRouteColor as getRouteColorFor } from '../utils/routeColor';
 import { PlaceResult, searchPlaces } from '../utils/placeSearch';
-import { ENCLOSURE_NAMES_OVERLAY, getEnclosureLabel, getEnclosureLabelKey, getEnclosureLabelOffset, getEnclosureMarkerKey, syncMarkerAlt } from '../utils/enclosureLabels';
+import { ENCLOSURE_NAMES_OVERLAY, LABEL_COMPACT_BREAKPOINT, clearEnclosureLabelWidthCache, getEnclosureLabel, getEnclosureLabelHeight, getEnclosureLabelKey, getEnclosureLabelOffset, getEnclosureMarkerKey, getEnclosureMarkerRadius, layoutEnclosureLabels, measureEnclosureLabelWidth, syncMarkerAlt } from '../utils/enclosureLabels';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -121,6 +121,16 @@ function EnclosureLabelVisibility({ onChange }: { onChange: (enabled: boolean) =
       if (event.name === ENCLOSURE_NAMES_OVERLAY) onChange(false);
     }
   });
+  return null;
+}
+
+function EnclosureLabelLayoutTrigger({ onMapReady, onLayoutChange }: { onMapReady: (map: L.Map) => void; onLayoutChange: () => void }) {
+  const map = useMapEvents({
+    zoomend: onLayoutChange,
+    moveend: onLayoutChange,
+    resize: onLayoutChange
+  });
+  useEffect(() => { onMapReady(map); }, [map, onMapReady]);
   return null;
 }
 
@@ -1411,6 +1421,18 @@ export default function FiberMap({
   const [copiedPin, setCopiedPin] = useState(false);
   const [popupData, setPopupData] = useState<MapPopupData | null>(null);
   const [namesEnabled, setNamesEnabled] = useState(true);
+  const [labelMap, setLabelMap] = useState<L.Map | null>(null);
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (cancelled) return;
+      clearEnclosureLabelWidthCache();
+      setLayoutVersion(version => version + 1);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
 
@@ -1520,6 +1542,44 @@ export default function FiberMap({
     return t ? t.color : '#ef4444';
   };
 
+  const getEnclosureVisual = (enclosure: FiberEnclosure) => {
+    const type = getEnclosureType(enclosure);
+    const iconUrl = type?.icon;
+    const isEditingThis = drawingMode === 'edit-enclosure' && editingEnclosureId === enclosure.id;
+    const kind = iconUrl ? 'icon' as const : 'circle' as const;
+    return { type, iconUrl, isEditingThis, kind, radius: getEnclosureMarkerRadius(kind, isEditingThis) };
+  };
+
+  const labelPlacements = useMemo(() => {
+    if (!namesEnabled || !labelMap) return new Map();
+    try {
+      const size = labelMap.getSize();
+      if (!size.x || !size.y) return new Map();
+      const bounds = labelMap.getBounds().pad(0.2);
+      const compact = window.innerWidth <= LABEL_COMPACT_BREAKPOINT;
+      const items = enclosures.filter(enclosure => bounds.contains(enclosure.position))
+        .map(enclosure => {
+          const visual = getEnclosureVisual(enclosure);
+          const point = labelMap.latLngToContainerPoint(enclosure.position);
+          const label = getEnclosureLabel(enclosure);
+          return {
+            id: enclosure.id,
+            x: point.x,
+            y: point.y,
+            markerRadius: visual.radius,
+            label,
+            labelWidth: label ? measureEnclosureLabelWidth(label, compact, labelMap.getContainer()) : 0,
+            labelHeight: getEnclosureLabelHeight(compact),
+            priority: visual.isEditingThis ? 0 : selectedEnclosureId === enclosure.id ? 1 : 2
+          };
+        });
+      return layoutEnclosureLabels(items);
+    } catch {
+      // Map initialization or canvas measurement must not affect marker rendering.
+      return new Map();
+    }
+  }, [enclosures, enclosureTypes, namesEnabled, selectedEnclosureId, editingEnclosureId, drawingMode, labelMap, layoutVersion]);
+
   const getRouteColor = (route: Route) => getRouteColorFor(route, fiberTypes, fiberColorConfigs);
 
   return (
@@ -1585,12 +1645,11 @@ export default function FiberMap({
           <Pane name="enclosures" style={{ zIndex: 450 }}>
             <LayerGroup>
             {enclosures.map(enclosure => {
-              const type = getEnclosureType(enclosure);
+              const { type, iconUrl, isEditingThis, kind } = getEnclosureVisual(enclosure);
               const color = type ? type.color : '#ef4444';
-              const iconUrl = type?.icon;
-
-              const isEditingThis = drawingMode === 'edit-enclosure' && editingEnclosureId === enclosure.id;
               const label = namesEnabled ? getEnclosureLabel(enclosure) : null;
+              const placement = labelPlacements.get(enclosure.id);
+              const direction = placement && 'direction' in placement ? placement.direction : null;
 
               if (iconUrl) {
                 const customIcon = getEnclosureIcon(iconUrl, isEditingThis, selectedEnclosureId === enclosure.id || isEditingThis);
@@ -1616,8 +1675,8 @@ export default function FiberMap({
                       }
                     }}
                   >
-                    {label && (
-                      <Tooltip key={getEnclosureLabelKey(isEditingThis)} permanent direction="right" offset={getEnclosureLabelOffset('icon', isEditingThis)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
+                    {label && direction && (
+                      <Tooltip key={`${getEnclosureLabelKey(isEditingThis)}-${direction}`} permanent direction={direction} offset={getEnclosureLabelOffset(kind, isEditingThis, direction)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
                         {label}
                       </Tooltip>
                     )}
@@ -1641,8 +1700,8 @@ export default function FiberMap({
                     contextmenu: (e) => handleEnclosureContextMenu(enclosure, e)
                   }}
                 >
-                  {label && (
-                    <Tooltip key={getEnclosureLabelKey(isEditingThis)} permanent direction="right" offset={getEnclosureLabelOffset('circle', isEditingThis)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
+                  {label && direction && (
+                    <Tooltip key={`${getEnclosureLabelKey(isEditingThis)}-${direction}`} permanent direction={direction} offset={getEnclosureLabelOffset(kind, isEditingThis, direction)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
                       {label}
                     </Tooltip>
                   )}
@@ -1757,6 +1816,7 @@ export default function FiberMap({
 
       <MapEvents onMapClick={handleMapClick} />
       <EnclosureLabelVisibility onChange={setNamesEnabled} />
+      <EnclosureLabelLayoutTrigger onMapReady={setLabelMap} onLayoutChange={() => setLayoutVersion(version => version + 1)} />
       <MapResizer 
         sidebarCollapsed={sidebarCollapsed} 
         selectedRouteId={selectedRouteId} 

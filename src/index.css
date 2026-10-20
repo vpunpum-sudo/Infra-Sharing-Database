@@ -617,6 +617,13 @@
   display: none;
 }
 
+.leaflet-tooltip.enclosure-name-label.leaflet-tooltip-right,
+.leaflet-tooltip.enclosure-name-label.leaflet-tooltip-left,
+.leaflet-tooltip.enclosure-name-label.leaflet-tooltip-top,
+.leaflet-tooltip.enclosure-name-label.leaflet-tooltip-bottom {
+  margin: 0;
+}
+
 .light-theme .leaflet-tooltip.enclosure-name-label {
   background: rgba(255, 255, 255, 0.96) !important;
   color: #0f172a !important;
