@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "test:functions": "npm --prefix functions test",
-    "verify": "npm run lint && npm test && npm run test:functions && npm run build"
+    "verify": "npm run lint && npm test && npm run test:functions && npm run build",
+    "wi:screenshots": "tsx scripts/wi-screenshots.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
+    "playwright": "^1.64.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

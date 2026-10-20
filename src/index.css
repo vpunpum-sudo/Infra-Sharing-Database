@@ -1251,6 +1251,10 @@ html:not(.light-theme) .wi-toolbar { background: #0f172a; border-color: #1e293b;
 .wi-figure { margin: 10px 0 4px; break-inside: avoid; }
 .wi-figure figcaption { font-size: 12.5px; text-align: center; margin-top: 4px; color: #475569 !important; }
 .wi-figure img { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; }
+.wi-shot { position: relative; break-inside: avoid; }
+.wi-shot img { display: block; }
+.wi-doc .wi-shot-mark { position: absolute; z-index: 2; display: grid; place-items: center; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: #dc2626 !important; color: #ffffff !important; box-shadow: 0 0 0 2px #ffffff; font-size: 13px; font-weight: 800; line-height: 1; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.wf-mark { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .wi-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; margin: 6px 0 4px; padding: 0; list-style: none !important; font-size: 13px; }
 .wi-legend li { display: flex; gap: 6px; }
 .wi-legend li span:first-child { color: #dc2626 !important; font-weight: 800; }

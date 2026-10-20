@@ -2,7 +2,10 @@
 // (components/WorkInstruction.tsx) only lays it out. Bump `revision` and add a
 // row to `revisions` whenever the procedure changes.
 
+import { WI_SCREENSHOT_MARKS } from './wiScreenshotMarks';
+
 export type WiStep = string | { text: string; sub: string[] };
+export type WiMark = { x: number; y: number };
 export type WiProcedure = {
   id: string;
   title: string;
@@ -12,6 +15,7 @@ export type WiProcedure = {
   /** Drawn figure id (components/WiFigures.tsx); `image` replaces it with a real screenshot in /public. */
   figure?: string;
   image?: string;
+  marks?: WiMark[];
   /** Legend for the numbered markers ①②③ in the figure. */
   callouts?: string[];
   steps: WiStep[];
@@ -24,12 +28,13 @@ export type WiChapter = { id: string; title: string; procedures: WiProcedure[] }
 export const WI_META = {
   number: 'WI-FSD-001',
   title: 'วิธีปฏิบัติงานการใช้งานระบบ Fiber Sharing Database',
-  revision: '02',
+  revision: '03',
   effectiveDate: '2026-10-17',
   department: 'Network Infrastructure'
 };
 
 export const WI_REVISIONS = [
+  { revision: '03', date: '2026-10-20', detail: 'เปลี่ยนภาพประกอบแผนที่และเมนูคลิกขวาเป็นภาพหน้าจอจริง พร้อมภาพวาดสำรอง' },
   { revision: '02', date: '2026-10-17', detail: 'จัดทำครั้งแรก ครอบคลุมการใช้งานทุกเมนูของระบบ' }
 ];
 
@@ -191,6 +196,8 @@ export const WI_CHAPTERS: WiChapter[] = [
           'สัญลักษณ์บนแผนที่: เส้น Fiber แสดงสีตามชนิดสายและ Tier, Enclosure แสดงไอคอนตามประเภท (หรือจุดสีถ้าไม่มีไอคอน), Fiber Loop แสดงเป็นวงกลมซ้อนสีเดียวกับเส้นที่ Loop อยู่'
         ],
         figure: 'map',
+        image: '/wi/map-overview.png',
+        marks: WI_SCREENSHOT_MARKS.map,
         callouts: ['ปุ่ม "Back to Projects" และชื่อโครงการพร้อมสถานะอนุมัติ', 'เครื่องมือ Enclosure / Route / Loop / Select', 'รายการ Routes / Enclosures / Loops (คลิกเพื่อไปยังตำแหน่ง)', 'เลือกชั้นแผนที่ และเปิด-ปิดการแสดงแต่ละประเภท', 'Pop up รายละเอียด (คลิกซ้ายที่เส้นหรือจุด)', 'ปุ่มยุบ/ขยายแถบด้านซ้าย'],
         steps: [
           'ตรวจสอบชื่อโครงการและสถานะที่ ① ทุกครั้งก่อนแก้ไข เพื่อป้องกันการแก้ผิดโครงการ',
@@ -244,7 +251,9 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'loop-add', title: 'เพิ่ม Fiber Loop', who: 'Admin, Design, Sub-contract (ตามสิทธิ์)',
         detail: ['Fiber Loop คือจุดที่ขดสายสำรองไว้ (Slack Loop) เพื่อใช้ซ่อมหรือย้ายแนวในอนาคต ความยาว Loop รวมอยู่ในการคำนวณปริมาณสาย'],
         figure: 'map',
-        callouts: ['ชื่อโครงการและสถานะ', 'เครื่องมือ "Loop" ในกลุ่มเครื่องมือ', 'รายการ Loops', 'ชั้นแผนที่ (เปิดการแสดง Loops)', 'Pop up รายละเอียด Loop', 'ปุ่มยุบ/ขยายแถบ'],
+        image: '/wi/map-overview.png',
+        marks: WI_SCREENSHOT_MARKS.map,
+        callouts: ['ชื่อโครงการและสถานะ', 'เครื่องมือ "Loop" ในกลุ่มเครื่องมือ', 'รายการ Loops', 'ชั้นแผนที่ (เปิดการแสดง Loops)', 'Pop up รายละเอียดเส้น Fiber (ตัวอย่างตำแหน่งแสดงข้อมูล)', 'ปุ่มยุบ/ขยายแถบ'],
         steps: [
           'กดเครื่องมือ "Loop" ② แล้วคลิกบนเส้น Fiber ตรงตำแหน่งที่ขดสายสำรอง',
           'กรอก "Loop Name" และ "Loop Length (Meters)" แล้วกดบันทึก',
@@ -259,6 +268,8 @@ export const WI_CHAPTERS: WiChapter[] = [
           '"Split at Enclosure" ใช้แบ่งเส้นยาวหนึ่งเส้นออกเป็นสองช่วงที่ Enclosure ที่อยู่บนเส้น เช่น เมื่อเพิ่มจุด Splice กลางทาง'
         ],
         figure: 'context-menu',
+        image: '/wi/route-context-menu.png',
+        marks: WI_SCREENSHOT_MARKS['context-menu'],
         callouts: ['คลิกขวาบนเส้น Fiber ตรงตำแหน่งที่ต้องการ', 'คำสั่ง "Cut Fiber Here"', 'คำสั่ง "Split at Enclosure"', 'คำสั่งแก้ไขเส้น'],
         steps: [
           'คลิกขวาบนเส้น Fiber ตรงตำแหน่งที่ต้องการ ①',
