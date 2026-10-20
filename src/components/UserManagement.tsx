@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from './Toast';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth, createUserWithEmailAndPassword, secondaryAuth, signOut, handleFirestoreError, OperationType } from '../firebase';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions, handleFirestoreError, OperationType } from '../firebase';
 import { User as AppUser, UserRole, CoreOwner } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -10,6 +11,7 @@ import { ArrowLeft, Plus, Trash2, Shield, User as UserIcon, Edit2, Loader2, Chec
 import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 import { useRolePermissions } from '../services/rolePermissionsStore';
+import { submitProvisionUser, submitDeleteUser } from '../utils/userProvisioning';
 
 export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | null, quotaExceeded?: boolean }> = ({ user, appUser, quotaExceeded = false }) => {
   const notify = useToast();
@@ -51,115 +53,37 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
   }, [appUser?.id, appUser?.role, appUser?.owner]);
 
   const handleAddUser = async () => {
-    if (!email.trim()) return;
-    
-    // Check if user already exists in the local list
-    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-      notify("This user is already in the list.", 'error');
-      return;
-    }
-    
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      notify("Please enter a valid email address.", 'error');
-      return;
-    }
-
     setIsAdding(true);
     try {
-      // Check if user already exists in Firestore globally (if Admin)
-      if (appUser?.role === 'Admin') {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', email.toLowerCase()));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          notify("This user already exists in the system database.", 'error');
-          setIsAdding(false);
-          return;
+      const result = await submitProvisionUser({ email, password, role, owner }, {
+        listHasEmail: value => users.some(u => u.email?.toLowerCase() === value),
+        isAdmin: appUser?.role === 'Admin',
+        globalEmailExists: async value => !(await getDocs(query(collection(db, 'users'), where('email', '==', value)))).empty,
+        writePreauth: async value => {
+          const id = 'preauth_' + uuidv4().substring(0, 8);
+          await setDoc(doc(db, 'users', id), { id, ...value, isApproved: true,
+            owner: value.role === 'Admin' ? 'None' : value.owner });
+        },
+        logPreauth: value => logActivity('create_preauth_user', `Pre-authorized email ${value.email}`,
+          { role: value.role, owner: value.owner }),
+        createManagedUser: async value => {
+          const response = await httpsCallable<typeof value, { uid: string; existingAccount: boolean; revokeFailed?: boolean }>
+            (functions, 'createManagedUser')(value);
+          return response.data;
         }
-      }
-
-      if (password.trim()) {
-        // Create full account with Auth
-        try {
-          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-          const newUser: AppUser = {
-            id: userCredential.user.uid,
-            email: email.toLowerCase(),
-            role,
-            isApproved: true,
-            requiresPasswordChange: true,
-            ...(role !== 'Admin' ? { owner } : { owner: 'None' })
-          };
-          await setDoc(doc(db, 'users', newUser.id), newUser);
-          await logActivity('create_user', `Created new user account for ${email}`, { role, owner, isApproved: true });
-          notify("User account created and added successfully!");
-        } catch (authError: any) {
-          if (authError.code === 'auth/email-already-in-use') {
-            // Fallback to pre-authorization if account exists in Auth but not in our list
-            const dummyId = 'preauth_' + uuidv4().substring(0, 8);
-            const newUser: AppUser = {
-              id: dummyId,
-              email: email.toLowerCase(),
-              role,
-              isApproved: true,
-              ...(role !== 'Admin' ? { owner } : { owner: 'None' })
-            };
-            await setDoc(doc(db, 'users', dummyId), newUser);
-            await logActivity('create_preauth_user', `Created pre-authorized profile for existing auth user ${email}`, { role, owner });
-            notify("This email is already registered in Authentication. A profile has been created for them so they can now access the system.");
-          } else {
-            throw authError;
-          }
-        }
-      } else {
-        // Pre-authorize email only
-        const dummyId = 'preauth_' + uuidv4().substring(0, 8);
-        const newUser: AppUser = {
-          id: dummyId,
-          email: email.toLowerCase(),
-          role,
-          isApproved: true,
-          ...(role !== 'Admin' ? { owner } : { owner: 'None' })
-        };
-        await setDoc(doc(db, 'users', dummyId), newUser);
-        await logActivity('create_preauth_user', `Pre-authorized email ${email}`, { role, owner });
-        notify("Email pre-authorized successfully! They can now log in once their account is fully created.");
-      }
-      
-      setEmail('');
-      setPassword('');
-      // Sign out the secondary auth so it doesn't persist
-      await signOut(secondaryAuth);
-    } catch (error: any) {
-      console.error("Error creating user:", error);
-      
-      if (error.code === 'auth/weak-password') {
-        notify("The password is too weak. Please use at least 6 characters.", 'error');
-      } else if (error.code === 'auth/invalid-email') {
-        notify("The email address is invalid.", 'error');
-      } else if (error.code === 'auth/operation-not-allowed') {
-        notify("Email/Password authentication is not enabled in the Firebase Console. Please enable it in the Authentication > Sign-in method tab.", 'error');
-      } else {
-        notify("Error creating user: " + (error.message || "Unknown error"), 'error');
-      }
-      
-      // Log firestore error if it's a permission issue
-      if (error instanceof Error && error.message.includes("Missing or insufficient permissions")) {
-        handleFirestoreError(error, OperationType.CREATE, 'users');
-      }
+      });
+      notify(result.message, result.ok ? undefined : 'error');
+      if (result.ok) { setEmail(''); setPassword(''); }
     } finally {
       setIsAdding(false);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
-    const userToDelete = users.find(u => u.id === userId);
-    await deleteDoc(doc(db, 'users', userId));
-    if (userToDelete) {
-      await logActivity('delete_user', `Deleted user ${userToDelete.email}`, { deletedUserId: userId, role: userToDelete.role });
-    }
+    const result = await submitDeleteUser(userId, { deleteManagedUser: async id => {
+      await httpsCallable(functions, 'deleteManagedUser')({ userId: id });
+    } });
+    notify(result.message, result.ok ? undefined : 'error');
   };
 
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
@@ -264,6 +188,8 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
               <div>
                 <input 
                   type="email" 
+                  name="new-user-email"
+                  autoComplete="off"
                   value={email} 
                   onChange={e => setEmail(e.target.value)} 
                   placeholder="name@company.com" 
@@ -273,6 +199,8 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
               <div>
                 <input 
                   type="password" 
+                  name="new-user-password"
+                  autoComplete="new-password"
                   value={password} 
                   onChange={e => setPassword(e.target.value)} 
                   placeholder="Password (Optional)" 

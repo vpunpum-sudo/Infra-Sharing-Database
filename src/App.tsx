@@ -31,6 +31,7 @@ import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, deleteField,
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { motion, AnimatePresence } from 'motion/react';
 import { logActivity } from './services/logService';
+import { passwordChangeGate } from './utils/passwordChangeGate';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 
@@ -2739,6 +2740,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<any | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [signInProvider, setSignInProvider] = useState<string | null | undefined>(undefined);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const { theme, setTheme } = useTheme();
   useRolePermissions();
@@ -2757,15 +2759,25 @@ export default function App() {
 
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
+    let authGeneration = 0;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      const generation = ++authGeneration;
       setUser(currentUser);
+      setAppUser(null);
+      setIsAuthReady(false);
+      setSignInProvider(undefined);
       if (unsubscribeUserDoc) {
         unsubscribeUserDoc();
         unsubscribeUserDoc = null;
       }
 
       if (currentUser) {
+        currentUser.getIdTokenResult().then(result => {
+          if (generation === authGeneration) setSignInProvider(result.signInProvider ?? null);
+        }).catch(() => {
+          if (generation === authGeneration) setSignInProvider(null);
+        });
         // Start real-time listener for user document
         const userDocRef = doc(db, 'users', currentUser.uid);
         unsubscribeUserDoc = onSnapshot(userDocRef, async (docSnap) => {
@@ -2829,13 +2841,14 @@ export default function App() {
     });
 
     return () => {
+      authGeneration++;
       unsubscribeAuth();
       if (unsubscribeUserDoc) unsubscribeUserDoc();
     };
   }, []);
 
-  const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
-  const needsPasswordChange = appUser?.requiresPasswordChange === true && !isGoogleUser;
+  const gate = passwordChangeGate({ requiresPasswordChange: appUser?.requiresPasswordChange, signInProvider });
+  const needsPasswordChange = gate === 'force';
 
   if (quotaExceeded) {
     return (
@@ -2868,7 +2881,7 @@ export default function App() {
     );
   }
 
-  if (!isAuthReady) {
+  if (!isAuthReady || gate === 'pending') {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950">
         <div className="relative">
@@ -2886,18 +2899,24 @@ export default function App() {
     );
   }
 
+  // Cover direct URLs too: a password session cannot reach another route while
+  // its first-login password change is required.
+  if (needsPasswordChange && user && appUser) {
+    return <ForceChangePassword user={user} appUser={appUser} />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
-        <Route path="/pending-approval" element={user && appUser && appUser.isApproved === false && appUser.role !== 'Admin' ? <PendingApproval email={user.email || ''} /> : <Navigate to="/" />} />
+        <Route path="/pending-approval" element={user && appUser && !needsPasswordChange && appUser.isApproved === false && appUser.role !== 'Admin' ? <PendingApproval email={user.email || ''} /> : <Navigate to="/" />} />
         <Route path="/change-password" element={user && appUser && needsPasswordChange ? <ForceChangePassword user={user} appUser={appUser} /> : <Navigate to="/" />} />
         
         <Route path="/" element={
           user ? (
             appUser ? (
-              (appUser.isApproved === false && appUser.role !== 'Admin') ? <Navigate to="/pending-approval" /> :
               needsPasswordChange ? <Navigate to="/change-password" /> :
+              (appUser.isApproved === false && appUser.role !== 'Admin') ? <Navigate to="/pending-approval" /> :
               <ProjectsDashboard user={user} appUser={appUser} quotaExceeded={quotaExceeded} />
             ) : <div className="h-screen w-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
           ) : <Navigate to="/login" />
@@ -2906,8 +2925,8 @@ export default function App() {
         <Route path="/project/:projectId" element={
           user ? (
             appUser ? (
-              (appUser.isApproved === false && appUser.role !== 'Admin') ? <Navigate to="/pending-approval" /> :
               needsPasswordChange ? <Navigate to="/change-password" /> :
+              (appUser.isApproved === false && appUser.role !== 'Admin') ? <Navigate to="/pending-approval" /> :
               !(getRolePermissions()[appUser.role]?.viewMap && getRolePermissions()[appUser.role]?.viewProjects) ? <Navigate to="/" /> :
               <ProjectWorkspace user={user} appUser={appUser} quotaExceeded={quotaExceeded} />
             ) : <div className="h-screen w-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
@@ -2916,7 +2935,7 @@ export default function App() {
         
         <Route path="/settings" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && getRolePermissions()[appUser.role]?.viewSettings ? <SettingsManager user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
         <Route path="/user-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && getRolePermissions()[appUser.role]?.viewUsers ? <UserManagement user={user} appUser={appUser} quotaExceeded={quotaExceeded} /> : <Navigate to="/" />} />
-        <Route path="/logs" element={user && appUser && appUser.role === 'Admin' ? <LogViewer /> : <Navigate to="/" />} />
+        <Route path="/logs" element={user && appUser && !needsPasswordChange && appUser.role === 'Admin' ? <LogViewer /> : <Navigate to="/" />} />
         <Route path="/permission-management" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange && appUser.role === 'Admin' ? <PermissionManagement appUser={appUser} /> : <Navigate to="/" />} />
         <Route path="/profile" element={user && appUser && (appUser.isApproved !== false || appUser.role === 'Admin') && !needsPasswordChange ? <ProfileSettings user={user} appUser={appUser} onBack={() => window.history.back()} theme={theme} setTheme={setTheme} /> : <Navigate to="/" />} />
         <Route path="/manual" element={<WorkInstruction />} />

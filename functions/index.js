@@ -20,6 +20,9 @@ initializeApp();
 const projectFiles = require('./projectFiles');
 exports.manageProjectFile = projectFiles.manageProjectFile;
 exports.getProjectCreatedDates = projectFiles.getProjectCreatedDates;
+const userAccounts = require('./userAccounts');
+exports.createManagedUser = userAccounts.createManagedUser;
+exports.deleteManagedUser = userAccounts.deleteManagedUser;
 
 exports.cleanupProjectFiles = onDocumentDeleted({
   document: 'projects/{projectId}', database: DATABASE_ID, region: 'asia-southeast1', retry: true
