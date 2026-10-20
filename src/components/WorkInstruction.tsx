@@ -5,7 +5,7 @@ import {
   WI_CHAPTERS, WI_DEFINITIONS, WI_META, WI_PURPOSE, WI_RECORDS, WI_REFERENCES, WI_REVISIONS, WI_ROLES, WI_SCOPE, WiStep
 } from '../content/workInstruction';
 import { ThemeToggle } from './ThemeToggle';
-import { markLabel, WiFigure } from './WiFigures';
+import { markLabel, WiFigure, WiScreenshot } from './WiFigures';
 
 const thaiDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -104,7 +104,7 @@ export default function WorkInstruction() {
                   {procedure.detail.map(text => <p key={text} className="wi-detail">{text}</p>)}
                   {(procedure.figure || procedure.image) && (
                     <figure className="wi-figure">
-                      {procedure.image ? <img src={procedure.image} alt={procedure.title} /> : <WiFigure id={procedure.figure!} />}
+                      {procedure.image ? <WiScreenshot src={procedure.image} alt={procedure.title} marks={procedure.marks ?? []} fallback={procedure.figure!} /> : <WiFigure id={procedure.figure!} />}
                       <figcaption>รูปที่ 5.{c + 1}.{p + 1} {procedure.title}</figcaption>
                     </figure>
                   )}

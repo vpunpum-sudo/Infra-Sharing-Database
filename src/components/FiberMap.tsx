@@ -1724,7 +1724,7 @@ export default function FiberMap({
                 <Polyline
                   positions={route.path.map(p => [p.lat, p.lng])}
                   bubblingMouseEvents={false}
-                  pathOptions={{ color: '#000000', weight: 16, opacity: 0.001 }}
+                  pathOptions={{ color: '#000000', weight: 16, opacity: 0.001, className: `wi-route-hit wi-route-${route.id}` }}
                   eventHandlers={{
                     click: (e) => handleRouteClick(route, e),
                     contextmenu: (e) => handleRouteContextMenu(route, e)
@@ -1736,7 +1736,8 @@ export default function FiberMap({
                   pathOptions={{
                     color: (selectedRouteId === route.id || hoveredObjectId === route.id) ? '#3b82f6' : getRouteColor(route),
                     weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 5.5 : 4,
-                    opacity: 0.8
+                    opacity: 0.8,
+                    className: `wi-route-line wi-route-${route.id}`
                   }}
                   eventHandlers={{
                     click: (e) => handleRouteClick(route, e),
