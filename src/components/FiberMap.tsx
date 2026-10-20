@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, useMap, LayersControl, LayerGroup, Pane, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents, useMap, LayersControl, LayerGroup, Pane, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Point, FiberEnclosure, Route, EnclosureType, FiberType, FiberLoop, FiberColorConfig, CoreOwner, Core } from '../types';
@@ -8,6 +8,7 @@ import { EnclosureSpan, getRouteEnclosureSpans, getSpanAtPoint, getTubePriority 
 import { getConnectedEnclosureRoutes } from '../utils/enclosureRoutes';
 import { getRouteColor as getRouteColorFor } from '../utils/routeColor';
 import { PlaceResult, searchPlaces } from '../utils/placeSearch';
+import { ENCLOSURE_NAMES_OVERLAY, getEnclosureLabel, getEnclosureLabelKey, getEnclosureLabelOffset, getEnclosureMarkerKey, syncMarkerAlt } from '../utils/enclosureLabels';
 import { Maximize, Plus, Minus, Info, ChevronDown, ChevronUp, Pencil, Scissors, ExternalLink, MapPin, Layers, Box, Cable, Radio, Compass, Network, Search, X, Copy, Check, CornerDownRight, RefreshCcw, Navigation, Sparkles } from 'lucide-react';
 
 const draftIcon = new L.DivIcon({
@@ -107,6 +108,18 @@ function MapEvents({ onMapClick }: { onMapClick: (latlng: L.LatLng) => void }) {
     click(e) {
       onMapClick(e.latlng);
     },
+  });
+  return null;
+}
+
+function EnclosureLabelVisibility({ onChange }: { onChange: (enabled: boolean) => void }) {
+  useMapEvents({
+    overlayadd(event) {
+      if (event.name === ENCLOSURE_NAMES_OVERLAY) onChange(true);
+    },
+    overlayremove(event) {
+      if (event.name === ENCLOSURE_NAMES_OVERLAY) onChange(false);
+    }
   });
   return null;
 }
@@ -1397,6 +1410,7 @@ export default function FiberMap({
   const [searchPin, setSearchPin] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [copiedPin, setCopiedPin] = useState(false);
   const [popupData, setPopupData] = useState<MapPopupData | null>(null);
+  const [namesEnabled, setNamesEnabled] = useState(true);
 
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
 
@@ -1576,15 +1590,18 @@ export default function FiberMap({
               const iconUrl = type?.icon;
 
               const isEditingThis = drawingMode === 'edit-enclosure' && editingEnclosureId === enclosure.id;
+              const label = namesEnabled ? getEnclosureLabel(enclosure) : null;
 
               if (iconUrl) {
                 const customIcon = getEnclosureIcon(iconUrl, isEditingThis, selectedEnclosureId === enclosure.id || isEditingThis);
 
                 return (
                   <Marker
-                    key={enclosure.id}
+                    key={getEnclosureMarkerKey(enclosure.id, namesEnabled)}
                     position={[enclosure.position.lat, enclosure.position.lng]}
                     icon={customIcon}
+                    alt={enclosure.name}
+                    ref={(marker) => syncMarkerAlt(marker, enclosure.name)}
                     draggable={isEditingThis}
                     bubblingMouseEvents={false}
                     eventHandlers={{
@@ -1598,13 +1615,19 @@ export default function FiberMap({
                         }
                       }
                     }}
-                  />
+                  >
+                    {label && (
+                      <Tooltip key={getEnclosureLabelKey(isEditingThis)} permanent direction="right" offset={getEnclosureLabelOffset('icon', isEditingThis)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
+                        {label}
+                      </Tooltip>
+                    )}
+                  </Marker>
                 );
               }
 
               return (
                 <CircleMarker 
-                  key={enclosure.id} 
+                  key={getEnclosureMarkerKey(enclosure.id, namesEnabled)}
                   center={[enclosure.position.lat, enclosure.position.lng]} 
                   radius={isEditingThis ? 9 : 7}
                   bubblingMouseEvents={false}
@@ -1617,11 +1640,21 @@ export default function FiberMap({
                     click: (e) => handleEnclosureClick(enclosure, e),
                     contextmenu: (e) => handleEnclosureContextMenu(enclosure, e)
                   }}
-                />
+                >
+                  {label && (
+                    <Tooltip key={getEnclosureLabelKey(isEditingThis)} permanent direction="right" offset={getEnclosureLabelOffset('circle', isEditingThis)} pane="tooltipPane" interactive={false} className="enclosure-name-label">
+                      {label}
+                    </Tooltip>
+                  )}
+                </CircleMarker>
               );
             })}
             </LayerGroup>
           </Pane>
+        </LayersControl.Overlay>
+
+        <LayersControl.Overlay checked name={ENCLOSURE_NAMES_OVERLAY}>
+          <LayerGroup />
         </LayersControl.Overlay>
 
         <LayersControl.Overlay checked name="Routes">
@@ -1723,6 +1756,7 @@ export default function FiberMap({
       </LayersControl>
 
       <MapEvents onMapClick={handleMapClick} />
+      <EnclosureLabelVisibility onChange={setNamesEnabled} />
       <MapResizer 
         sidebarCollapsed={sidebarCollapsed} 
         selectedRouteId={selectedRouteId} 
