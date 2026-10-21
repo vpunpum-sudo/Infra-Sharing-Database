@@ -4,7 +4,7 @@ import { chromium, type Browser } from 'playwright';
 import { createServer, loadEnv, type ViteDevServer } from 'vite';
 import { parseOnlyArg, figureImagePath, type FigureId } from '../src/utils/wiScreenshotFigures';
 import { resolveWiScreenshotConfig } from '../src/utils/wiScreenshotConfig';
-import { functionsOriginFor, createGuard, compareCounts, type CountSnapshot } from '../src/utils/wiScreenshotGuard';
+import { functionsOriginFor, createGuard, compareCounts, projectListsLoaded, type CountSnapshot } from '../src/utils/wiScreenshotGuard';
 import { runFigures, SafetyViolation } from '../src/utils/wiScreenshotRun';
 import { formatMarksModule, mergeCapturedMarks, type Mark } from '../src/utils/wiScreenshotMarks';
 import { commitOutputs } from '../src/utils/wiScreenshotOutput';
@@ -17,6 +17,9 @@ const ROOT = resolve(import.meta.dirname, '..');
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 
 async function counts(page: import('playwright').Page): Promise<CountSnapshot> {
+  // Until every list has arrived from the server, the sidebar shows provisional zeros.
+  const loaded = await page.locator('[data-wi-loaded]').first().getAttribute('data-wi-loaded', { timeout: 2_000 }).catch(() => null);
+  if (!projectListsLoaded(loaded)) throw new Error('project lists still loading');
   return page.evaluate(() => {
     const number = (label: string) => {
       const button = [...document.querySelectorAll('.glass-panel button')].find(item =>
@@ -133,6 +136,11 @@ async function main(): Promise<void> {
             captureContext.page = page;
             result = { id, status: 'failed: timeout' };
           } else result = attempt.value;
+          // Local troubleshooting only: the debug image is unmasked and goes to the git-ignored .context directory.
+          if (process.env.WI_SCREENSHOT_DEBUG === '1' && result.status !== 'captured') {
+            await mkdir(join(ROOT, '.context', 'wi-debug'), { recursive: true });
+            await page.screenshot({ path: join(ROOT, '.context', 'wi-debug', `${id}.png`) }).catch(() => undefined);
+          }
         }
         if (result.status === 'captured') captured.push(result);
         return result;
@@ -141,12 +149,8 @@ async function main(): Promise<void> {
         if (dialogSeen) throw new SafetyViolation('native dialog appeared');
         await page.goto(new URL(`/project/${encodeURIComponent(config.projectId)}`, baseUrl).toString(), { waitUntil: 'domcontentloaded' });
         await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: 20_000 });
-        // Project data streams in after the map appears, so wait for the counts to catch up before comparing.
-        let after = await counts(page).catch(() => undefined);
-        for (const deadline = Date.now() + 20_000; !(after && compareCounts(before, after)) && Date.now() < deadline;) {
-          await wait(300);
-          after = await counts(page).catch(() => undefined);
-        }
+        // Project data streams in after the map appears: compare only once the counts have settled again.
+        const after = await stableCounts(page).catch(() => undefined);
         if (!after || !compareCounts(before, after)) {
           const show = (value?: CountSnapshot) => value ? `${value.routes}/${value.enclosures}/${value.loops}` : 'unavailable';
           throw new SafetyViolation(`route, enclosure, or loop counts changed (before ${show(before)}, after ${show(after)})`);

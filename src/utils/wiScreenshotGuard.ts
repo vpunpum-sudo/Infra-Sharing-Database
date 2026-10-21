@@ -53,6 +53,12 @@ export function createGuard(config: { functionsOrigin: string }) {
   };
 }
 
+/** True once the project page reports routes, enclosures and loops all loaded from the server. */
+export function projectListsLoaded(attribute: string | null | undefined): boolean {
+  const loaded = new Set((attribute || '').split(/\s+/).filter(Boolean));
+  return ['routes', 'enclosures', 'loops'].every(name => loaded.has(name));
+}
+
 export function compareCounts(before: CountSnapshot, after: CountSnapshot): boolean {
   return before.routes === after.routes && before.enclosures === after.enclosures && before.loops === after.loops;
 }

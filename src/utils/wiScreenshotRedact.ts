@@ -17,5 +17,6 @@ export function findKnownValues(text: string, known: KnownValues): Array<'email'
 }
 
 export function redactSecrets(text: string, secrets: Array<string | undefined>): string {
-  return secrets.filter((item): item is string => !!item).reduce((value, secret) => value.replaceAll(secret, '[redacted]'), text);
+  // Very short values (a flag such as "1") are not secrets and would mangle every message.
+  return secrets.filter((item): item is string => !!item && item.length >= 4).reduce((value, secret) => value.replaceAll(secret, '[redacted]'), text);
 }

@@ -6,6 +6,8 @@ export const WI_MASK_PLACEHOLDERS = {
   ownName: 'ผู้ใช้ตัวอย่าง',
   email: (n: number) => `อีเมลผู้ใช้ ${n} (ปิดบัง)`,
   phone: 'เบอร์โทร (ปิดบัง)',
+  initial: 'ผ',
+  userId: 'UID: (ปิดบัง)',
   profileImageLink: 'ลิงก์รูปโปรไฟล์ (ปิดบัง)',
   supervisor: 'ผู้รับผิดชอบตัวอย่าง',
   company: 'บริษัทตัวอย่าง จำกัด',
@@ -69,7 +71,8 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
   ] },
   users: { regions: [
     ...header(false), region('user-email', 'text', WI_MASK_PLACEHOLDERS.email(1), true, 'UserManagement.tsx'),
-    region('user-name', 'text', WI_MASK_PLACEHOLDERS.name(1), true, 'UserManagement.tsx'),
+    region('user-name', 'text', WI_MASK_PLACEHOLDERS.initial, true, 'UserManagement.tsx'),
+    region('user-uid', 'text', WI_MASK_PLACEHOLDERS.userId, false, 'UserManagement.tsx'),
     region('add-user-email', 'input', WI_MASK_PLACEHOLDERS.email(1), false, 'UserManagement.tsx')
   ] },
   permissions: { regions: header(false) },

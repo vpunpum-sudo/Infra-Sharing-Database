@@ -343,7 +343,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                             </div>
                             <div className="truncate">
                               <p data-wi-pii="user-email" className="font-bold text-white text-xs truncate">{u.email}</p>
-                              <p className="text-xs text-slate-400 font-mono mt-0.5">UID: {u.id.substring(0, 8)}</p>
+                              <p data-wi-pii="user-uid" className="text-xs text-slate-400 font-mono mt-0.5">UID: {u.id.substring(0, 8)}</p>
                             </div>
                           </div>
                           <div className="col-span-2">

@@ -44,6 +44,10 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   const [enclosures, setEnclosures] = useState<FiberEnclosure[]>([]);
   const [routes, setRoutes] = useState<RouteType[]>([]);
   const [loops, setLoops] = useState<FiberLoop[]>([]);
+  // Which project lists have arrived from the server; exposed as data-wi-loaded for the WI screenshot script.
+  // The list listeners include metadata changes so a cached list confirmed unchanged by the server still reports loaded.
+  const [loadedLists, setLoadedLists] = useState<string[]>([]);
+  const markListLoaded = (name: string) => setLoadedLists(prev => prev.includes(name) ? prev : [...prev, name].sort());
   const [drawingMode, setDrawingMode] = useState<'none' | 'enclosure' | 'route' | 'edit-route' | 'loop' | 'edit-enclosure'>('none');
   const [draftRoute, setDraftRoute] = useState<Point[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
@@ -162,6 +166,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   }, [sidebarFocusTarget, sidebarCollapsed, routesExpanded, enclosuresExpanded, loopsExpanded]);
 
   useEffect(() => {
+    setLoadedLists([]);
     if (!user || !activeProjectId) {
       setEnclosures([]);
       setRoutes([]);
@@ -172,9 +177,12 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     const loopsPath = `projects/${activeProjectId}/loops`;
     const colorConfigsPath = 'fiberColorConfigs';
 
-    const unsubscribeNodes = onSnapshot(collection(db, enclosuresPath), (snapshot) => {
-      const newEnclosures = snapshot.docs.map(doc => doc.data() as FiberEnclosure);
-      setEnclosures(newEnclosures);
+    // Metadata-only callbacks (cache -> server) only update loadedLists, so the lists re-render exactly as before.
+    const seen = { enclosures: false, routes: false, loops: false };
+    const unsubscribeNodes = onSnapshot(collection(db, enclosuresPath), { includeMetadataChanges: true }, (snapshot) => {
+      if (!seen.enclosures || snapshot.docChanges().length) setEnclosures(snapshot.docs.map(doc => doc.data() as FiberEnclosure));
+      seen.enclosures = true;
+      if (!snapshot.metadata.fromCache) markListLoaded('enclosures');
     }, (error) => {
       if (error.message.includes('Missing or insufficient permissions')) {
         console.warn('Access denied to project. Redirecting to dashboard.');
@@ -184,9 +192,10 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       }
     });
 
-    const unsubscribeRoutes = onSnapshot(collection(db, routesPath), (snapshot) => {
-      const newRoutes = snapshot.docs.map(doc => doc.data() as RouteType);
-      setRoutes(newRoutes);
+    const unsubscribeRoutes = onSnapshot(collection(db, routesPath), { includeMetadataChanges: true }, (snapshot) => {
+      if (!seen.routes || snapshot.docChanges().length) setRoutes(snapshot.docs.map(doc => doc.data() as RouteType));
+      seen.routes = true;
+      if (!snapshot.metadata.fromCache) markListLoaded('routes');
     }, (error) => {
       if (error.message.includes('Missing or insufficient permissions')) {
         navigate('/');
@@ -195,9 +204,10 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       }
     });
 
-    const unsubscribeLoops = onSnapshot(collection(db, loopsPath), (snapshot) => {
-      const newLoops = snapshot.docs.map(doc => doc.data() as FiberLoop);
-      setLoops(newLoops);
+    const unsubscribeLoops = onSnapshot(collection(db, loopsPath), { includeMetadataChanges: true }, (snapshot) => {
+      if (!seen.loops || snapshot.docChanges().length) setLoops(snapshot.docs.map(doc => doc.data() as FiberLoop));
+      seen.loops = true;
+      if (!snapshot.metadata.fromCache) markListLoaded('loops');
     }, (error) => {
       if (error.message.includes('Missing or insufficient permissions')) {
         navigate('/');
@@ -1526,6 +1536,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
         {/* Sidebar Area */}
       <div className="relative flex h-full shrink-0 z-[1002]">
         <div 
+          data-wi-loaded={loadedLists.join(' ')}
           className={`glass-panel h-full flex flex-col transition-all duration-500 ease-in-out overflow-hidden ${sidebarCollapsed ? '-translate-x-full w-0' : 'translate-x-0 w-84 md:w-[350px]'}`}
         >
           {/* Sidebar Top Header */}

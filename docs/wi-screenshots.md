@@ -67,3 +67,11 @@ The browser blocks service workers. Until sign-in succeeds and `/` settles, the 
 Native dialogs, sign-in failure or account gating, an inaccessible sample project, disallowed actions or labels, a guard trip, and changed counts also abort the whole run before output commit. Otherwise, captured figures are committed in one replacement operation, even if another figure failed. Skipped figures do not make the exit code nonzero; failed figures do. The results table identifies each figure as captured, skipped for permission or data state, or failed with a reason. The summary prints files to inspect, the observe-phase request log, and `quiet-denied: N`. It omits query strings and request bodies and redacts configured credential values.
 
 The script stages images and merged marks before replacement. A caught replacement error rolls back existing outputs. A killed process may leave partial replacement; recover tracked outputs with `git checkout -- public/wi src/content/wiScreenshotMarks.ts`, then inspect untracked files. To remove one screenshot deliberately, delete its key from `WI_SCREENSHOT_MARKS`, delete its PNG, and verify the WI shows the drawing. Skipping a figure never removes an old key or PNG automatically.
+
+## Firebase quota and troubleshooting
+
+Every run signs in to production and reloads each screen it captures, so it reads the sample project, the user list, the schedule and the whole activity log several times. The project is on the Firebase free tier, and when its daily read quota runs out the app stops working for every user until midnight Pacific Time. This happened on 2026-10-21 after about 30 runs in one morning.
+
+- Do not use the production run to debug selectors. Capture only what changed with `--only=<id,…>`, and run it once.
+- Debug against a separate Firebase project or the emulator when a figure keeps failing.
+- `WI_SCREENSHOT_DEBUG=1` prints the underlying error for each failed or skipped figure and saves an unmasked screenshot of the page to `.context/wi-debug/<id>.png`. The `.context` directory is git-ignored. Delete these images when you are done, and never commit or share them.
