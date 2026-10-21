@@ -6,10 +6,16 @@ import type { Locator, Page } from 'playwright';
 
 function fakeContext(redirect = false): CaptureContext {
   let current = 'http://127.0.0.1:3000/';
+  // The project page counts as loaded; every tool button is missing, as for an account without edit rights.
+  const present = { first() { return this; }, filter() { return this; }, getByText() { return this; }, waitFor: async () => undefined };
+  const missing = { first() { return this; }, isVisible: async () => false, waitFor: async () => { throw new Error('not visible'); } };
   const page = {
     goto: async (url: string) => { current = redirect ? 'http://127.0.0.1:3000/' : url; },
     url: () => current,
-    getByRole: () => ({ isVisible: async () => false })
+    locator: () => present,
+    evaluate: async () => ({ unloaded: 0, error: false }),
+    waitForTimeout: async () => undefined,
+    getByRole: () => missing
   };
   return { page: page as unknown as CaptureContext['page'], baseUrl: 'http://127.0.0.1:3000',
     projectId: 'sample', tempDir: '/tmp', known: {}, guardTripped: () => false, dialogSeen: () => false };

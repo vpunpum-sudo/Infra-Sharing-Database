@@ -5,7 +5,7 @@ export const WI_ALLOWED_ACTIONS = [
   'openEnclosureForm', 'openRouteDraft', 'finishRouteDraft', 'cancelDraft',
   'openCoreManager', 'selectCore', 'openSpliceManager', 'selectFiberSide',
   'openFiles', 'openSchedule', 'selectTask', 'openApprovalDocument', 'openSignForm', 'closeSignForm',
-  'openUserPage', 'openPermissionsPage', 'openSettingsPage', 'openLogsPage'
+  'openUserPage', 'openPermissionsPage', 'openSettingsPage', 'openLogsPage', 'openSettingsTab', 'openSettingsForm', 'pickOnMap', 'openSignSlide', 'exitDrawMode'
 ] as const;
 
 export type WiAllowedAction = (typeof WI_ALLOWED_ACTIONS)[number];
@@ -17,7 +17,12 @@ const EXACT_SAFE_LABELS = new Set(['Cancel', 'Finish Drawing', 'Back to Projects
 const DENIED_LABEL = /บันทึก|save|ยืนยัน|confirm|ลบ|delete|ส่งคำขออนุมัติ|ลงนาม|ไม่อนุมัติ|upload|export|splice|unsplice|ออกจากระบบ|logout|อนุมัติ|ขอแก้ไข|ส่ง|submit|approve|reject|sign/i;
 export const ACTION_EXACT_LABELS: Partial<Record<WiAllowedAction, readonly RegExp[]>> = {
   openApprovalDocument: [/^ลงนาม 2 ระดับ$/, /^เอกสารอนุมัติ$/],
-  openSignForm: [/^ลงนาม Planning \([^()]+\)$/, /^ลงนาม O&M \([^()]+\)$/]
+  openSignForm: [/^ลงนาม Planning \([^()]+\)$/, /^ลงนาม O&M \([^()]+\)$/],
+  openSettingsTab: [/^Enclosure Types$/],
+  openSettingsForm: [/^Add Type$/],
+  pickOnMap: [/^Pick on Map$/],
+  openSignSlide: [/^6$/],
+  exitDrawMode: [/^Select$/]
 };
 export const normalizeLabel = (label: string): string => label.trim().replace(/\s+/g, ' ');
 export function matchesActionExactLabel(label: string, action: WiAllowedAction): boolean {

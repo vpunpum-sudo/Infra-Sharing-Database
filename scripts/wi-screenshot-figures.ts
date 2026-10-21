@@ -96,10 +96,11 @@ async function waitForTiles(page: Page): Promise<void> {
 }
 
 async function box(page: Page, selector: string, last = false): Promise<Rect | undefined> {
+  // A short wait: a missing target should fail the figure quickly, not hold it for Playwright's 30 s default.
   return (last ? page.locator(selector).last() : page.locator(selector).first()).evaluate(element => {
     const r = element.getBoundingClientRect();
     return r.width && r.height ? { x: r.x, y: r.y, width: r.width, height: r.height } : undefined;
-  }).catch(() => undefined);
+  }, undefined, { timeout: 3_000 }).catch(() => undefined);
 }
 
 async function assertPanelsAbsent(page: Page): Promise<void> {
@@ -116,6 +117,20 @@ async function firstSidebarEntry(page: Page, section: 'Routes' | 'Enclosures', p
     await clickSafe(heading, section === 'Routes' ? 'expandRoutesList' : 'expandEnclosuresList');
   }
   return await entry.waitFor({ state: 'visible', timeout: 20_000 }).then(() => entry, () => undefined);
+}
+
+/** Pages render after navigation, so an element counts as missing only after a bounded wait. */
+const visibleWithin = (target: Locator, ms = 10_000) => target.first().waitFor({ state: 'visible', timeout: ms }).then(() => true, () => false);
+
+/** The project page streams data in after navigation: wait for the map, the sidebar lists, the routes and the tiles. */
+async function waitProjectReady(page: Page): Promise<boolean> {
+  if (!await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false)) return false;
+  const routesHeader = page.locator('.glass-panel button').filter({ has: page.locator('span.uppercase').getByText('Routes', { exact: true }) }).first();
+  if (!await routesHeader.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false)) return false;
+  await page.locator('.leaflet-overlay-pane .wi-route-line').first().waitFor({ state: 'attached', timeout: 20_000 }).catch(() => undefined);
+  await page.waitForTimeout(1_000);
+  await waitForTiles(page).catch(() => undefined);
+  return true;
 }
 
 export type CapturedFigure = FigureResult & { marks?: Mark[]; staged?: string };
@@ -233,14 +248,16 @@ async function maskPage(ctx: CaptureContext, spec: MaskSpec, mutate = true): Pro
           continue;
         }
         if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-          if (mutate) { element.value = replacement || ''; element.placeholder = replacement || ''; }
+          // An empty field stays empty; only its example text is replaced.
+          if (mutate) { if (element.value) element.value = replacement || ''; element.placeholder = replacement || ''; }
         } else if (mutate) {
           element.textContent = replacement || '';
         }
         if (mutate) for (const attr of ['title', 'alt', 'aria-label']) if (element.hasAttribute(attr)) element.setAttribute(attr, replacement || '');
         const actual = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent?.trim() || '';
         regions[region.name].values.push(actual);
-        regions[region.name].maskValid!.push(actual === (replacement || ''));
+        const emptyField = (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && !actual && element.placeholder === (replacement || '');
+        regions[region.name].maskValid!.push(emptyField || actual === (replacement || ''));
       }
     }
     return {
@@ -286,15 +303,15 @@ const MARK_TARGETS: Partial<Record<FigureId, readonly string[]>> = {
   dashboard: ['header nav', 'input[aria-label="ค้นหาชื่อโครงการหรือรหัสเส้นทาง"]', 'button:has-text("ทั้งหมด")', 'button:has-text("สร้างโครงการ")', '[data-wi-project-id]:visible', '[data-wi-project-id]:visible .card-action'],
   'card-actions': ['[data-wi-project-id]:visible button:has-text("แผนงาน")', '[data-wi-project-id]:visible button:has-text("ไฟล์โครงการ")', '[data-wi-project-id]:visible button:has-text("Export KMZ")', '[data-wi-project-id]:visible button:has-text("เปิดแผนที่")', '[data-wi-project-id]:visible button[aria-label="แก้ไขโครงการ"]', '[data-wi-project-id]:visible button[aria-label="ลบโครงการ"]'],
   'project-form': ['label:has-text("ชื่อโครงการ") + input', '#project-route-code', 'div.fixed:has(#project-route-code) .grid.grid-cols-3', 'div.fixed:has(#project-route-code) button:has-text("สร้างโครงการ")'],
-  'enclosure-form': ['input[placeholder="e.g., SN-001"]', 'select:has(option:has-text("Keep clicked location"))', 'label:has-text("Enclosure Type") + select', 'input[placeholder="e.g., MH-123"]', 'input[placeholder="e.g., 13.7563"]', 'button:has-text("Save Enclosure")'],
+  'enclosure-form': ['input[placeholder="e.g., SN-001"]', 'select:has(option:has-text("Keep clicked location"))', 'select:has(option:text-is("Select Type"))', 'select:has(option:has-text("Select Location Type"))', 'input[placeholder="e.g., 13.7563"]', 'button:has-text("Save Enclosure")'],
   'core-manager': ['select:has(option:has-text("Owner"))', 'select:has(option:has-text("Priority"))', 'text=Enclosure span for Tube Priority', 'text=Owner', 'text=Status', 'button:has-text("Confirm Changes?")'],
   splice: ['text=Fiber A', 'text=Fiber B', 'text=Core', 'svg', 'button:has-text("Splice")', 'button:has-text("Export Diagram as PDF")'],
   files: ['button:has-text("สร้างโฟลเดอร์")', 'button:has-text("เพิ่มไฟล์")', 'nav[aria-label="ตำแหน่งโฟลเดอร์"]', 'section[role="dialog"] ul li', 'section[role="dialog"] li:has(svg)', 'section[role="dialog"] button[title="ดาวน์โหลด"]'],
   schedule: ['section[role="dialog"] header', '.schedule-plan', 'section[role="dialog"] .grid.grid-cols-2', 'section[role="dialog"] input[aria-label="ชื่องาน"]', '[data-wi-pii="task-owner"]', '#schedule-progress'],
   'approval-request': ['[data-wi-pii="approval-company"]', 'text=กำหนดการติดตั้ง', 'text=บันทึกประกอบ', 'text=ตัวอย่างเอกสาร', 'button:has-text("ส่งคำขออนุมัติแบบ")'],
   'approval-sign': ['div.fixed:has([data-wi-pii="signer-name"]) h3:has-text("ลงนามอนุมัติ")', '[data-wi-pii="signer-name"]', '[data-wi-pii="signer-position"]', '[data-wi-pii="signature-pad"]', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("อนุมัติ (Approve)")', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("ไม่อนุมัติ / ขอแก้ไข")'],
-  users: ['input[name="new-user-email"]', 'select', 'select', 'button:has-text("Add User")', 'text=Approved', 'button[title="Edit User"]'],
-  permissions: ['table th', 'table th:nth-child(2)', 'table input[type="checkbox"]', 'button:has-text("บันทึก")'],
+  users: ['input[name="new-user-email"]', 'select >> nth=0', 'select >> nth=1', 'button:has-text("Add User")', 'button:text-is("Approved")', 'button[title="Edit User"]'],
+  permissions: ['table th', 'table th:nth-child(2)', 'table td label:has(input[type="checkbox"])', 'button:has-text("Save Changes")'],
   settings: ['button:has-text("Enclosure Types")', 'text=Enclosure Types', 'input', 'label[for="icon-upload"]', 'button:has-text("บันทึก")'],
   logs: ['th:has-text("Timestamp")', 'th:has-text("User")', 'th:has-text("Action")', 'th:has-text("Description")']
 };
@@ -336,6 +353,7 @@ async function composite(ctx: CaptureContext, id: FigureId, parts: { png: Buffer
 
 async function captureProfile(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, '/');
+  if (!await visibleWithin(ctx.page.locator('[data-wi-pii="account-name"]'), 15_000)) return { id: 'profile', status: 'failed: account name not shown' };
   const headerSpec = { regions: WI_MASK_SPECS.profile.regions.filter(region => region.name === 'account-name' || region.name === 'account-avatar') };
   const firstMask = await maskPage(ctx, headerSpec);
   if (firstMask) return { id: 'profile', status: `failed: ${firstMask}` };
@@ -348,6 +366,7 @@ async function captureProfile(ctx: CaptureContext): Promise<CapturedFigure> {
   if (headShot.ok === false) return { id: 'profile', status: `failed: ${headShot.error}` };
   const headPng = headShot.value;
   await goto(ctx, '/profile');
+  if (!await visibleWithin(ctx.page.locator('[data-wi-pii="profile-display-name"]'), 15_000)) return { id: 'profile', status: 'failed: profile form not shown' };
   const profileSpec = { regions: WI_MASK_SPECS.profile.regions.filter(region => !['account-name', 'account-avatar'].includes(region.name)) };
   const profileMask = await maskPage(ctx, profileSpec);
   if (profileMask) return { id: 'profile', status: `failed: ${profileMask}` };
@@ -368,8 +387,9 @@ async function captureProfile(ctx: CaptureContext): Promise<CapturedFigure> {
 async function captureRouteDraw(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, PROJECT_PATH(ctx.projectId));
   const page = ctx.page;
+  if (!await waitProjectReady(page)) return { id: 'route-draw', status: 'failed: project did not load' };
   const tool = page.getByRole('button', { name: 'Route', exact: true });
-  if (!await tool.isVisible().catch(() => false)) return { id: 'route-draw', status: 'skipped: permission' };
+  if (!await visibleWithin(tool)) return { id: 'route-draw', status: 'skipped: permission' };
   await clickSafe(tool, 'openRouteDraft');
   const map = await box(page, '.leaflet-container');
   if (!map) return { id: 'route-draw', status: 'skipped: data-state' };
@@ -399,11 +419,11 @@ async function captureRouteDraw(ctx: CaptureContext): Promise<CapturedFigure> {
   const firstPng = firstShot.value;
   await clickSafe(finish, 'finishRouteDraft');
   const modal = page.locator('div.fixed:has(button:has-text("Save Route")) .glass-panel').first();
-  if (!await modal.isVisible().catch(() => false)) return { id: 'route-draw', status: 'failed: route form unavailable' };
+  if (!await visibleWithin(modal)) return { id: 'route-draw', status: 'failed: route form unavailable' };
   const secondMask = await maskPage(ctx, WI_MASK_SPECS['route-draw']);
   if (secondMask) return { id: 'route-draw', status: `failed: ${secondMask}` };
   const secondClip = { x: 0, y: 0, width: 1440, height: 900 };
-  const secondMarks = await measuredMarks(page, ['input[placeholder="e.g., Main Backbone"]', 'select:has(option:has-text("Cores"))', 'select:has(option:has-text("Tier 1"))', 'input[placeholder="0"]'], secondClip,
+  const secondMarks = await measuredMarks(page, ['input[placeholder="e.g., Main Backbone"]', 'label:text-is("Capacity / Fiber Type") + select', 'select:has(option:has-text("Tier 1"))', 'input[placeholder="0"]'], secondClip,
     ['Route Name', 'Capacity / Fiber Type', 'Tier and Operator', 'Mark Length']);
   if (secondMarks.error) return { id: 'route-draw', status: `failed: ${secondMarks.error}` };
   const secondShot = await captureCheckedScreenshot(
@@ -423,35 +443,57 @@ async function captureRouteDraw(ctx: CaptureContext): Promise<CapturedFigure> {
 async function captureEnclosureForm(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, PROJECT_PATH(ctx.projectId));
   const page = ctx.page;
+  if (!await waitProjectReady(page)) return { id: 'enclosure-form', status: 'failed: project did not load' };
   const tool = page.getByRole('button', { name: 'Enclosure', exact: true });
-  if (!await tool.isVisible().catch(() => false)) return { id: 'enclosure-form', status: 'skipped: permission' };
+  if (!await visibleWithin(tool)) return { id: 'enclosure-form', status: 'skipped: permission' };
   const routeEntry = await firstSidebarEntry(page, 'Routes', 'sidebar-route-');
   const routeId = await routeEntry?.getAttribute('id');
   if (!routeId) return { id: 'enclosure-form', status: 'skipped: data-state' };
+  const modalSelector = 'div.fixed.inset-0:has(button:has-text("Save Enclosure")) .glass-panel';
+  const modal = page.locator(modalSelector).first();
+  // The tool opens the form directly; "Pick on Map" returns to the map so a click on the route offers the snap option.
   await clickSafe(tool, 'openEnclosureForm');
-  let point: Point | undefined;
-  for (const fraction of candidateFractions()) {
-    const candidate = await checkedPoint(page, routeId.slice('sidebar-route-'.length), fraction);
-    if (!candidate.reason) { point = candidate.point; break; }
+  let picking = false;
+  try {
+    if (!await visibleWithin(modal)) return { id: 'enclosure-form', status: 'failed: enclosure form did not open' };
+    await clickSafe(page.getByRole('button', { name: 'Pick on Map', exact: true }), 'pickOnMap');
+    picking = true;
+    if (!await modal.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false)) return { id: 'enclosure-form', status: 'failed: pick on map did not start' };
+    // Try every listed route: the first one may be hidden under a parallel route or enclosure icons.
+    const routeIds = await page.locator('li[id^="sidebar-route-"]').evaluateAll(items => items.map(item => item.id.slice('sidebar-route-'.length)));
+    let point: Point | undefined;
+    for (const candidateRoute of routeIds) {
+      for (const fraction of candidateFractions()) {
+        const candidate = await checkedPoint(page, candidateRoute, fraction);
+        if (!candidate.reason) { point = candidate.point; break; }
+      }
+      if (point) break;
+    }
+    if (!point) return { id: 'enclosure-form', status: 'skipped: data-state' };
+    assertAllowedAction('leftClickPoint');
+    await page.mouse.click(point.x, point.y);
+    if (!await visibleWithin(modal)) return { id: 'enclosure-form', status: 'failed: enclosure form did not reopen' };
+    picking = false;
+    await page.waitForTimeout(800);
+    return await screenshot(ctx, 'enclosure-form', MARK_TARGETS['enclosure-form']!, modalSelector);
+  } finally {
+    // Every exit leaves the map as it was: the form cancelled, or pick mode ended with the Select tool.
+    const cancel = modal.getByRole('button', { name: 'Cancel', exact: true });
+    if (await cancel.isVisible().catch(() => false)) await clickSafe(cancel, 'cancelDraft');
+    if (picking && !await modal.isVisible().catch(() => false)) await clickSafe(page.getByRole('button', { name: 'Select', exact: true }), 'exitDrawMode');
+    if (!await modal.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false)) throw new Error('enclosure form did not close');
   }
-  if (!point) return { id: 'enclosure-form', status: 'skipped: data-state' };
-  assertAllowedAction('leftClickPoint');
-  await page.mouse.click(point.x, point.y);
-  const modal = page.locator('div.fixed:has(button:has-text("Save Enclosure")) .glass-panel').first();
-  if (!await modal.isVisible().catch(() => false)) return { id: 'enclosure-form', status: 'skipped: data-state' };
-  const result = await screenshot(ctx, 'enclosure-form', MARK_TARGETS['enclosure-form']!, 'div.fixed:has(button:has-text("Save Enclosure")) .glass-panel');
-  await clickSafe(modal.getByRole('button', { name: 'Cancel', exact: true }), 'cancelDraft');
-  return result;
 }
 
 async function captureCoreManager(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, PROJECT_PATH(ctx.projectId));
   const page = ctx.page;
+  if (!await waitProjectReady(page)) return { id: 'core-manager', status: 'failed: project did not load' };
   const route = await firstSidebarEntry(page, 'Routes', 'sidebar-route-');
   if (!route) return { id: 'core-manager', status: 'skipped: data-state' };
   await clickSafe(route, 'openCoreManager');
   const panel = page.locator('div.fixed.top-0.right-0.h-screen').first();
-  if (!await panel.isVisible().catch(() => false)) return { id: 'core-manager', status: 'skipped: permission' };
+  if (!await visibleWithin(panel)) return { id: 'core-manager', status: 'skipped: permission' };
   const expand = panel.getByRole('button', { name: /expand|tube/i }).first();
   if (await expand.isVisible().catch(() => false)) await clickSafe(expand, 'selectCore');
   const core = panel.locator('button:has-text("Core")').first();
@@ -464,14 +506,15 @@ async function captureCoreManager(ctx: CaptureContext): Promise<CapturedFigure> 
 async function captureSplice(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, PROJECT_PATH(ctx.projectId));
   const page = ctx.page;
+  if (!await waitProjectReady(page)) return { id: 'splice', status: 'failed: project did not load' };
   const enclosure = await firstSidebarEntry(page, 'Enclosures', 'sidebar-enclosure-');
   if (!enclosure) return { id: 'splice', status: 'skipped: data-state' };
   await clickSafe(enclosure, 'openSpliceManager');
   const panelSelector = 'div.bg-slate-900.border-l:has(h2:text-matches("^Enclosure:"))';
   const tool = page.getByRole('button', { name: 'Splicing Tool', exact: true });
-  if (!await tool.isVisible().catch(() => false)) return { id: 'splice', status: 'skipped: permission' };
+  if (!await visibleWithin(tool)) return { id: 'splice', status: 'skipped: permission' };
   await clickSafe(tool, 'selectFiberSide');
-  if (!await page.getByText(/Spliced to|Splice Core/).first().isVisible().catch(() => false)) return { id: 'splice', status: 'skipped: data-state' };
+  if (!await visibleWithin(page.getByText(/Spliced to|Splice Core/).first())) return { id: 'splice', status: 'skipped: data-state' };
   return screenshot(ctx, 'splice', MARK_TARGETS.splice!, panelSelector);
 }
 
@@ -534,6 +577,55 @@ async function captureMap(ctx: CaptureContext, id: 'map' | 'context-menu'): Prom
   return screenshot(ctx, id, [routeSelector, ...REQUIRED_MENU_ITEMS.map(item => `.fiber-context-menu button:has-text("${item}")`)]);
 }
 
+/** Settings needs two parts: the Add Type form covers the tabs and list it is opened from. Nothing is saved. */
+async function captureSettings(ctx: CaptureContext): Promise<CapturedFigure> {
+  const id = 'settings';
+  await goto(ctx, '/settings');
+  const page = ctx.page;
+  const tab = page.getByRole('button', { name: 'Enclosure Types', exact: true });
+  if (!await tab.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false)) return { id, status: 'skipped: permission' };
+  await clickSafe(tab, 'openSettingsTab');
+  const item = page.locator('div.rounded-\\[2rem\\]:has(> div button[aria-label="Edit"])');
+  if (!await item.first().waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false)) return { id, status: 'skipped: data-state' };
+  const add = page.getByRole('button', { name: 'Add Type', exact: true });
+  if (!await visibleWithin(add)) return { id, status: 'skipped: permission' };
+  await page.waitForTimeout(500);
+  const spec = WI_MASK_SPECS[id];
+  const maskError = await maskPage(ctx, spec);
+  if (maskError) return { id, status: `failed: ${maskError}` };
+  const card = await box(page, '.glass-panel.rounded-\\[2\\.5rem\\]');
+  const tabs = await box(page, 'div.flex-wrap:has(> button:has-text("Enclosure Types"))');
+  const last = await box(page, 'div.rounded-\\[2rem\\]:has(> div button[aria-label="Edit"])', true);
+  if (!card || !tabs || !last) return { id, status: 'failed: settings layout not measurable' };
+  const listClip = { x: card.x, y: tabs.y - 24, width: card.width, height: last.y + last.height + 24 - (tabs.y - 24) };
+  const listMarks = await measuredMarks(page, ['div.flex-wrap:has(> button:has-text("Enclosure Types"))', 'div.rounded-\\[2rem\\]:has(> div button[aria-label="Edit"])'], listClip);
+  if (listMarks.error) return { id, status: `failed: ${listMarks.error}` };
+  const listShot = await captureCheckedScreenshot(() => page.screenshot({ clip: listClip, animations: 'disabled' }), () => maskPage(ctx, spec, false));
+  if (listShot.ok === false) return { id, status: `failed: ${listShot.error}` };
+  await clickSafe(add, 'openSettingsForm');
+  const form = page.locator('div.fixed.inset-0 div.rounded-\\[2\\.5rem\\]:has(button:has-text("Save Specification"))').first();
+  try {
+    if (!await form.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false)) return { id, status: 'failed: settings form did not open' };
+    await page.waitForTimeout(600);
+    const modal = await box(page, 'div.fixed.inset-0 div.rounded-\\[2\\.5rem\\]:has(button:has-text("Save Specification"))');
+    if (!modal) return { id, status: 'failed: settings form not measurable' };
+    const formClip = { x: card.x, y: modal.y - 16, width: card.width, height: modal.height + 32 };
+    const formMarks = await measuredMarks(page, ['div.fixed.inset-0 input >> nth=0', 'div.fixed.inset-0 div.border-dashed >> nth=0', 'div.fixed.inset-0 button:has-text("Save Specification")'], formClip);
+    if (formMarks.error) return { id, status: `failed: ${formMarks.error}` };
+    const formShot = await captureCheckedScreenshot(() => page.screenshot({ clip: formClip, animations: 'disabled' }), () => maskPage(ctx, spec, false));
+    if (formShot.ok === false) return { id, status: `failed: ${formShot.error}` };
+    return await composite(ctx, id, [
+      { png: listShot.value, width: listClip.width, height: listClip.height, marks: listMarks.marks },
+      { png: formShot.value, width: formClip.width, height: formClip.height, marks: formMarks.marks }
+    ]);
+  } finally {
+    const cancel = page.locator('div.fixed.inset-0').getByRole('button', { name: 'Cancel', exact: true });
+    if (await cancel.isVisible().catch(() => false)) await clickSafe(cancel, 'cancelDraft');
+    // A form left open would mean the page is not back to its saved state; fail the figure rather than report it captured.
+    if (!await form.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false)) throw new Error('settings form did not close');
+  }
+}
+
 export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<CapturedFigure> {
   try {
     if (id === 'map' || id === 'context-menu') return await captureMap(ctx, id);
@@ -551,11 +643,16 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
     if (id === 'route-draw') return await captureRouteDraw(ctx);
     if (id === 'core-manager') return await captureCoreManager(ctx);
     if (id === 'splice') return await captureSplice(ctx);
+    if (id === 'settings') return await captureSettings(ctx);
     const item = WI_FIGURES.find(figure => figure.id === id)!;
     if (item.screen.startsWith('/project')) await goto(ctx, `/project/${encodeURIComponent(ctx.projectId)}`);
     else if (['dashboard', 'card-actions', 'project-form', 'files', 'schedule', 'approval-request', 'approval-sign'].includes(id)) await openDashboardCard(ctx);
     else await goto(ctx, item.screen);
     if (['users', 'permissions', 'settings', 'logs'].includes(id) && new URL(ctx.page.url()).pathname === '/') return { id, status: 'skipped: permission' };
+    // These lists stream in after navigation; masking before they arrive would miss the rows.
+    const rowsReady = { users: '[data-wi-pii="user-email"]', logs: '[data-wi-pii="log-user"]', permissions: 'table td label' }[id as 'users' | 'logs' | 'permissions'];
+    if (rowsReady && !await ctx.page.locator(rowsReady).first().waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false)) return { id, status: 'skipped: data-state' };
+    if (rowsReady) await ctx.page.waitForTimeout(1_000);
     const page = ctx.page;
     const card = page.locator(`[data-wi-project-id="${ctx.projectId}"]`);
     if (id === 'card-actions') {
@@ -565,7 +662,7 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
     }
     if (id === 'project-form') {
       const button = page.getByRole('button', { name: 'สร้างโครงการ', exact: true });
-      if (!await button.isVisible().catch(() => false)) return { id, status: 'skipped: permission' };
+      if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openProjectForm');
       assertAllowedAction('fillProjectDraft');
       const name = page.locator('label:has-text("ชื่อโครงการ") + input').first();
@@ -575,14 +672,15 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
     }
     if (id === 'files') {
       const button = card.getByRole('button', { name: 'ไฟล์โครงการ' });
-      if (!await button.isVisible().catch(() => false)) return { id, status: 'skipped: permission' };
+      if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openFiles');
       if (await page.locator('section[role="dialog"] ul').count() < 2) return { id, status: 'skipped: data-state' };
     }
     if (id === 'schedule') {
       const button = card.getByRole('button', { name: /แผนงาน/ });
-      if (!await button.isVisible().catch(() => false)) return { id, status: 'skipped: permission' };
+      if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openSchedule');
+      await page.locator('section[role="dialog"] button.schedule-row').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined);
       const task = page.locator('section[role="dialog"] button.schedule-row').filter({ hasNot: page.locator('[aria-label="ซิงก์กับเอกสารอนุมัติ"]') }).first();
       if (!await task.count()) return { id, status: 'skipped: data-state' };
       await clickSafe(task, 'selectTask');
@@ -590,11 +688,14 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
     }
     if (id === 'approval-request' || id === 'approval-sign') {
       const button = card.getByRole('button', { name: /เอกสารอนุมัติ|ลงนาม 2 ระดับ/ });
-      if (!await button.isVisible().catch(() => false)) return { id, status: 'skipped: permission' };
+      if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openApprovalDocument');
       if (id === 'approval-sign') {
         console.log('approval-sign action: openApprovalDocument');
         const modal = approvalModal(page);
+        // The Planning and O&M sign buttons live on the last slide of the approval document.
+        const signSlide = modal.getByRole('button', { name: '6', exact: true });
+        if (await visibleWithin(signSlide)) { await clickSafe(signSlide, 'openSignSlide'); await page.waitForTimeout(800); }
         const state = await openApprovalSignForm(page, modal);
         if (state === 'skipped: data-state') return { id, status: state };
         try {
@@ -615,6 +716,7 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
   } catch (error) {
     if (error instanceof SafetyViolation || ctx.guardTripped() || ctx.dialogSeen()) throw error;
     const reason = error instanceof Error ? error.message : String(error);
+    if (process.env.WI_SCREENSHOT_DEBUG === '1') console.error(`[debug] ${id}: ${reason.split('\n')[0]}`);
     const needs = WI_FIGURES.find(item => item.id === id)?.needs;
     if (/redirected|not visible|Timeout/i.test(reason) && (needs?.startsWith('permission') || needs === 'admin')) return { id, status: 'skipped: permission' };
     return { id, status: 'failed: capture unavailable' };

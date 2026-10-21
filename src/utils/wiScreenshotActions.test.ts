@@ -39,7 +39,7 @@ test('approval openers accept only full labels for their own action', () => {
   ] as const) assert.throws(() => assertSafeClickLabel(label, action), label);
   assert.throws(() => assertSafeClickLabel('ลงนาม 2 ระดับ'));
 
-  assert.deepEqual(Object.keys(ACTION_EXACT_LABELS).sort(), ['openApprovalDocument', 'openSignForm']);
+  assert.deepEqual(Object.keys(ACTION_EXACT_LABELS).sort(), ['exitDrawMode', 'openApprovalDocument', 'openSettingsForm', 'openSettingsTab', 'openSignForm', 'openSignSlide', 'pickOnMap']);
   for (const patterns of Object.values(ACTION_EXACT_LABELS)) {
     for (const pattern of patterns ?? []) {
       assert.ok(pattern.source.startsWith('^'));
@@ -56,4 +56,13 @@ test('goto accepts only approved app paths', () => {
 test('missing menu items report absent or hidden commands', () => {
   assert.deepEqual(missingMenuItems(['Cut Fiber Here', 'Edit']), ['Split at Enclosure']);
   assert.deepEqual(missingMenuItems(['Cut Fiber Here', 'Split at Enclosure', 'Edit']), []);
+});
+
+test('open-only settings, map and slide controls match only their exact labels', () => {
+  for (const [label, action] of [['Enclosure Types', 'openSettingsTab'], ['Add Type', 'openSettingsForm'], ['Pick on Map', 'pickOnMap'], ['6', 'openSignSlide'], ['Select', 'exitDrawMode']] as const) {
+    assert.doesNotThrow(() => assertSafeClickLabel(label, action), label);
+  }
+  for (const [label, action] of [['Save Specification', 'openSettingsForm'], ['Save Enclosure', 'pickOnMap'], ['ลงนามอนุมัติ', 'openSignSlide'], ['Delete', 'openSettingsTab']] as const) {
+    assert.throws(() => assertSafeClickLabel(label, action), label);
+  }
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyRequest, compareCounts, createGuard, describeRequest, functionsOriginFor } from './wiScreenshotGuard';
+import { classifyRequest, compareCounts, projectListsLoaded, createGuard, describeRequest, functionsOriginFor } from './wiScreenshotGuard';
 
 const functionsOrigin = 'https://asia-southeast1-demo.cloudfunctions.net';
 const classify = (method: string, url: string) => classifyRequest({ method, url }, { functionsOrigin });
@@ -47,4 +47,12 @@ test('observe records requests, enforce aborts quiet requests and trips on block
 test('count comparison detects a changed route, enclosure, or loop count', () => {
   assert.equal(compareCounts({ routes: 1, enclosures: 2, loops: 3 }, { routes: 1, enclosures: 2, loops: 3 }), true);
   assert.equal(compareCounts({ routes: 1, enclosures: 2, loops: 3 }, { routes: 1, enclosures: 1, loops: 3 }), false);
+});
+
+test('counts are trusted only after every project list has loaded, even when listeners arrive at different times', () => {
+  assert.equal(projectListsLoaded(''), false);
+  assert.equal(projectListsLoaded('routes'), false);
+  assert.equal(projectListsLoaded('enclosures routes'), false);
+  assert.equal(projectListsLoaded('enclosures loops routes'), true);
+  assert.equal(projectListsLoaded(null), false);
 });
