@@ -37,6 +37,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useRolePermissions } from '../services/rolePermissionsStore';
+import type { ApprovalSnapshotCollections } from '../types';
+import { buildApprovalSnapshot, chooseApprovalSource, getParticipatingOwners, nextApprovalId, projectForDocument, resolveApprovalFormValues,
+  sourceReadiness, ApprovalStateChangedError, type ApprovalSnapshot, type ExpectedApprovalState, type SnapshotSourceStatus } from '../utils/approvalSnapshot';
+import { attachApprovalSnapshot, readApprovalSnapshot, writeApprovalSnapshot } from '../services/approvalSnapshotService';
 
 interface DesignApprovalModalProps {
   isOpen: boolean;
@@ -140,6 +144,7 @@ export function DesignApprovalModal({
 
   // Modal View State: presentation and the approval request form
   const [viewMode, setViewMode] = useState<'slides' | 'request'>('slides');
+  const [previewLive, setPreviewLive] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(1);
   const totalSlides = 6;
 
@@ -165,74 +170,78 @@ export function DesignApprovalModal({
   const [enclosureTypes, setEnclosureTypes] = useState<EnclosureType[]>([]);
   const [fiberTypes, setFiberTypes] = useState<FiberType[]>([]);
   const [fiberColorConfigs, setFiberColorConfigs] = useState<FiberColorConfig[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [sourceStatus, setSourceStatus] = useState<SnapshotSourceStatus>({
+    routes: { loaded: false }, enclosures: { loaded: false }, loops: { loaded: false },
+    enclosureTypes: { loaded: false }, fiberTypes: { loaded: false }, fiberColorConfigs: { loaded: false }
+  });
+  const [sourceProjectId, setSourceProjectId] = useState<string | null>(null);
+  const [snapshotState, setSnapshotState] = useState<{ id?: string; data?: ApprovalSnapshot; error?: string }>({});
+  const readiness = sourceProjectId === project.id ? sourceReadiness(sourceStatus)
+    : { ready: false, loading: true, errorSource: undefined };
+  const isLoadingData = readiness.loading;
+  const sourceError = readiness.errorSource ? [readiness.errorSource, sourceStatus[readiness.errorSource]] as const : undefined;
 
   // Request form state
-  const [requestNotes, setRequestNotes] = useState(project.designApproval?.designNotes || project.approvalDraft?.designNotes || '');
+  const formValues = resolveApprovalFormValues(project);
+  const [requestNotes, setRequestNotes] = useState(formValues.designNotes);
   const [mapLabelMode, setMapLabelMode] = useState<'all' | 'hover' | 'code'>('hover');
-  const [contractorInput, setContractorInput] = useState(project.designApproval?.contractorName || project.approvalDraft?.contractorName || '');
-  const [contractorContactInput, setContractorContactInput] = useState(
-    project.designApproval?.contractorContact || project.approvalDraft?.contractorContact || ''
-  );
-  const [contractorPhoneInput, setContractorPhoneInput] = useState(
-    project.designApproval?.contractorPhone || project.approvalDraft?.contractorPhone || ''
-  );
-  const [contractorPoInput, setContractorPoInput] = useState(
-    project.designApproval?.contractorPoNumber || project.approvalDraft?.contractorPoNumber || ''
-  );
-  const [contractorScopeInput, setContractorScopeInput] = useState(
-    project.designApproval?.contractorScope || project.approvalDraft?.contractorScope || ''
-  );
+  const [contractorInput, setContractorInput] = useState(formValues.contractorName);
+  const [contractorContactInput, setContractorContactInput] = useState(formValues.contractorContact);
+  const [contractorPhoneInput, setContractorPhoneInput] = useState(formValues.contractorPhone);
+  const [contractorPoInput, setContractorPoInput] = useState(formValues.contractorPoNumber);
+  const [contractorScopeInput, setContractorScopeInput] = useState(formValues.contractorScope);
   const [isEditingContractor, setIsEditingContractor] = useState(false);
   const [isSavingContractor, setIsSavingContractor] = useState(false);
   const [contractorSaveSuccess, setContractorSaveSuccess] = useState(false);
   const [contractorSaveError, setContractorSaveError] = useState<string | null>(null);
-  const [operationKmInput, setOperationKmInput] = useState(
-    (project.designApproval?.totalOperationDistanceKm ?? project.approvalDraft?.totalOperationDistanceKm)?.toString() || ''
-  );
+  const [operationKmInput, setOperationKmInput] = useState(formValues.totalOperationDistanceKm?.toString() || '');
   const [rewindTarget, setRewindTarget] = useState<'Draft' | 'Planning' | 'OM'>('Draft');
-  const [targetInstallDate, setTargetInstallDate] = useState(project.designApproval?.estimatedInstallationDate || project.approvalDraft?.estimatedInstallationDate || '');
+  const [targetInstallDate, setTargetInstallDate] = useState(formValues.estimatedInstallationDate);
+  const pendingDraftWrites = useRef<Set<Promise<void>>>(new Set());
+  const draftWriteError = useRef<Error | null>(null);
+  const saveDraftField = (key: keyof NonNullable<Project['approvalDraft']>, value: string | number) => {
+    if (project.designApproval && project.designApproval.status !== 'Rejected') return;
+    draftWriteError.current = null;
+    const write = updateDoc(doc(db, `projects/${project.id}`), { [`approvalDraft.${key}`]: value });
+    pendingDraftWrites.current.add(write);
+    write.catch(error => {
+      draftWriteError.current = error instanceof Error ? error : new Error(String(error));
+      setActionError(`บันทึกข้อมูลคำขอไม่สำเร็จ: ${draftWriteError.current.message}`);
+    }).finally(() => pendingDraftWrites.current.delete(write));
+  };
 
   // What the slide shows is what the PDF prints: both read the form values,
   // which follow the saved approval (or draft). Empty fields show "-".
+  const historicalContractor = project.designApproval &&
+    !(previewLive && project.designApproval.status === 'Rejected') && viewMode === 'slides' ? project.designApproval : null;
   const contractorView = {
-    name: contractorInput.trim() || '-',
-    contact: contractorContactInput.trim() || '-',
-    phone: contractorPhoneInput.trim() || '-',
-    po: contractorPoInput.trim() || '-',
-    scope: contractorScopeInput.trim(),
-    installDate: targetInstallDate || '-'
+    name: historicalContractor ? historicalContractor.contractorName?.trim() || '-' : contractorInput.trim() || '-',
+    contact: historicalContractor ? historicalContractor.contractorContact?.trim() || '-' : contractorContactInput.trim() || '-',
+    phone: historicalContractor ? historicalContractor.contractorPhone?.trim() || '-' : contractorPhoneInput.trim() || '-',
+    po: historicalContractor ? historicalContractor.contractorPoNumber?.trim() || '-' : contractorPoInput.trim() || '-',
+    scope: historicalContractor ? historicalContractor.contractorScope?.trim() || '' : contractorScopeInput.trim(),
+    installDate: historicalContractor ? historicalContractor.estimatedInstallationDate || '-' : targetInstallDate || '-'
   };
 
-  // Sync contractor inputs if project designApproval updates
+  // A partial draft update must not reset another field the user is still editing.
+  const previousFormValues = useRef({ projectId: project.id, values: formValues });
   useEffect(() => {
-    if (project?.designApproval) {
-      setRequestNotes(project.designApproval.designNotes || '');
-      setOperationKmInput(project.designApproval.totalOperationDistanceKm?.toString() || '');
-      setContractorInput(project.designApproval.contractorName || '');
-      setContractorContactInput(project.designApproval.contractorContact || '');
-      setContractorPhoneInput(project.designApproval.contractorPhone || '');
-      setContractorPoInput(project.designApproval.contractorPoNumber || '');
-      setContractorScopeInput(project.designApproval.contractorScope || '');
-      setTargetInstallDate(project.designApproval.estimatedInstallationDate || '');
-    } else if (project.approvalDraft) {
-      setRequestNotes(project.approvalDraft.designNotes || '');
-      setContractorInput(project.approvalDraft.contractorName || '');
-      setContractorContactInput(project.approvalDraft.contractorContact || '');
-      setContractorPhoneInput(project.approvalDraft.contractorPhone || '');
-      setContractorPoInput(project.approvalDraft.contractorPoNumber || '');
-      setContractorScopeInput(project.approvalDraft.contractorScope || '');
-      setOperationKmInput(project.approvalDraft.totalOperationDistanceKm?.toString() || '');
-      setTargetInstallDate(project.approvalDraft.estimatedInstallationDate || '');
-    }
-  }, [project.id, project.designApproval?.designNotes, project.designApproval?.totalOperationDistanceKm,
-    project.designApproval?.contractorName, project.designApproval?.contractorContact,
-    project.designApproval?.contractorPhone, project.designApproval?.contractorPoNumber,
-    project.designApproval?.contractorScope, project.designApproval?.estimatedInstallationDate,
-    project.approvalDraft?.designNotes, project.approvalDraft?.totalOperationDistanceKm,
-    project.approvalDraft?.contractorName, project.approvalDraft?.contractorContact,
-    project.approvalDraft?.contractorPhone, project.approvalDraft?.contractorPoNumber,
-    project.approvalDraft?.contractorScope, project.approvalDraft?.estimatedInstallationDate]);
+    const prior = previousFormValues.current;
+    const reset = prior.projectId !== project.id;
+    if (reset || prior.values.designNotes !== formValues.designNotes) setRequestNotes(formValues.designNotes);
+    if (reset || prior.values.contractorName !== formValues.contractorName) setContractorInput(formValues.contractorName);
+    if (reset || prior.values.contractorContact !== formValues.contractorContact) setContractorContactInput(formValues.contractorContact);
+    if (reset || prior.values.contractorPhone !== formValues.contractorPhone) setContractorPhoneInput(formValues.contractorPhone);
+    if (reset || prior.values.contractorPoNumber !== formValues.contractorPoNumber) setContractorPoInput(formValues.contractorPoNumber);
+    if (reset || prior.values.contractorScope !== formValues.contractorScope) setContractorScopeInput(formValues.contractorScope);
+    if (reset || prior.values.totalOperationDistanceKm !== formValues.totalOperationDistanceKm)
+      setOperationKmInput(formValues.totalOperationDistanceKm?.toString() || '');
+    if (reset || prior.values.estimatedInstallationDate !== formValues.estimatedInstallationDate)
+      setTargetInstallDate(formValues.estimatedInstallationDate);
+    previousFormValues.current = { projectId: project.id, values: formValues };
+  }, [project.id, formValues.designNotes, formValues.contractorName, formValues.contractorContact,
+    formValues.contractorPhone, formValues.contractorPoNumber, formValues.contractorScope,
+    formValues.totalOperationDistanceKm, formValues.estimatedInstallationDate]);
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -244,17 +253,18 @@ export function DesignApprovalModal({
   const signatureFileRef = useRef<HTMLInputElement | null>(null);
   const [slide4SelectedRouteId, setSlide4SelectedRouteId] = useState<string>('all');
   const [slide5SelectedRouteId, setSlide5SelectedRouteId] = useState<string>('all');
-  const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>({});
+  const [routeEnclosureSelections, setRouteEnclosureSelections] = useState<Record<string, string[]>>(formValues.routeEnclosureSelections);
   const [editingEnclosureRouteId, setEditingEnclosureRouteId] = useState<string | null>(null);
   const [previewingEnclosureImage, setPreviewingEnclosureImage] = useState<{ url: string; name: string } | null>(null);
   const [previewingFiberImage, setPreviewingFiberImage] = useState<{ url: string; name: string; cores: number } | null>(null);
 
   useEffect(() => {
-    setRouteEnclosureSelections(project.designApproval?.routeEnclosureSelections ||
-      project.approvalDraft?.routeEnclosureSelections || {});
-  }, [project.designApproval?.routeEnclosureSelections, project.approvalDraft?.routeEnclosureSelections]);
+    setRouteEnclosureSelections(resolveApprovalFormValues(project).routeEnclosureSelections);
+  }, [project.id, project.designApproval?.status,
+    project.designApproval?.routeEnclosureSelections, project.approvalDraft?.routeEnclosureSelections]);
 
   const handleToggleEnclosureForRoute = async (routeId: string, encId: string) => {
+    if (project.designApproval?.status !== 'Rejected' && project.designApproval) return;
     const currentList = getRouteEnclosures(routeId).map(e => e.id);
     let nextList: string[];
     if (currentList.includes(encId)) {
@@ -270,12 +280,8 @@ export function DesignApprovalModal({
 
     if (project?.id) {
       try {
-        const updatedProject: Project = project.designApproval
-          ? { ...project, designApproval: { ...project.designApproval, routeEnclosureSelections: updatedMap } }
-          : { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
-        await setDoc(doc(db, `projects/${project.id}`), project.designApproval
-          ? { designApproval: updatedProject.designApproval }
-          : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
+        const updatedProject: Project = { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
+        await setDoc(doc(db, `projects/${project.id}`), { approvalDraft: updatedProject.approvalDraft }, { merge: true });
         onProjectUpdated?.(updatedProject);
       } catch (err) {
         console.warn("Could not save routeEnclosureSelections:", err);
@@ -284,18 +290,15 @@ export function DesignApprovalModal({
   };
 
   const handleResetEnclosuresForRoute = async (routeId: string) => {
+    if (project.designApproval?.status !== 'Rejected' && project.designApproval) return;
     const updatedMap = { ...routeEnclosureSelections };
     delete updatedMap[routeId];
     setRouteEnclosureSelections(updatedMap);
 
     if (project?.id) {
       try {
-        const updatedProject: Project = project.designApproval
-          ? { ...project, designApproval: { ...project.designApproval, routeEnclosureSelections: updatedMap } }
-          : { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
-        await setDoc(doc(db, `projects/${project.id}`), project.designApproval
-          ? { designApproval: updatedProject.designApproval }
-          : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
+        const updatedProject: Project = { ...project, approvalDraft: { ...project.approvalDraft, routeEnclosureSelections: updatedMap } };
+        await setDoc(doc(db, `projects/${project.id}`), { approvalDraft: updatedProject.approvalDraft }, { merge: true });
         onProjectUpdated?.(updatedProject);
       } catch (err) {
         console.warn("Could not reset routeEnclosureSelections:", err);
@@ -304,46 +307,53 @@ export function DesignApprovalModal({
   };
   useEffect(() => {
     if (!isOpen || !project?.id) return;
-    setIsLoadingData(true);
+    const fresh = { loaded: false };
+    setSourceStatus({ routes: fresh, enclosures: fresh, loops: fresh,
+      enclosureTypes: fresh, fiberTypes: fresh, fiberColorConfigs: fresh });
+    setSourceProjectId(project.id);
+    const ready = (name: keyof ApprovalSnapshotCollections) =>
+      setSourceStatus(previous => ({ ...previous, [name]: { loaded: true } }));
+    const failed = (name: keyof ApprovalSnapshotCollections, error: Error) => {
+      console.warn(`Could not load ${name} for approval:`, error);
+      setSourceStatus(previous => ({ ...previous, [name]: { loaded: false, error: error.message } }));
+    };
 
     const routesPath = `projects/${project.id}/routes`;
     const enclosuresPath = `projects/${project.id}/enclosures`;
     const loopsPath = `projects/${project.id}/loops`;
 
     const unsubRoutes = onSnapshot(collection(db, routesPath), (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as Route);
+      const data = snapshot.docs.map(item => ({ ...item.data(), id: item.id } as Route));
       setLoadedRoutes(data);
-      setIsLoadingData(false);
-    }, (err) => {
-      console.warn("Could not load routes for approval:", err);
-      setIsLoadingData(false);
-    });
+      ready('routes');
+    }, err => failed('routes', err));
 
     const unsubEnclosures = onSnapshot(collection(db, enclosuresPath), (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as FiberEnclosure);
+      const data = snapshot.docs.map(item => ({ ...item.data(), id: item.id } as FiberEnclosure));
       setLoadedEnclosures(data);
-    }, (err) => {
-      console.warn("Could not load enclosures for approval:", err);
-    });
+      ready('enclosures');
+    }, err => failed('enclosures', err));
 
     const unsubLoops = onSnapshot(collection(db, loopsPath), (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as FiberLoop);
+      const data = snapshot.docs.map(item => ({ ...item.data(), id: item.id } as FiberLoop));
       setLoadedLoops(data);
-    }, (err) => {
-      console.warn("Could not load loops for approval:", err);
-    });
+      ready('loops');
+    }, err => failed('loops', err));
 
     const unsubTypes = onSnapshot(collection(db, 'enclosureTypes'), (snapshot) => {
       setEnclosureTypes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as EnclosureType)));
-    });
+      ready('enclosureTypes');
+    }, err => failed('enclosureTypes', err));
 
     const unsubFiberTypes = onSnapshot(collection(db, 'fiberTypes'), (snapshot) => {
       setFiberTypes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FiberType)));
-    });
+      ready('fiberTypes');
+    }, err => failed('fiberTypes', err));
 
     const unsubConfigs = onSnapshot(collection(db, 'fiberColorConfigs'), (snapshot) => {
       setFiberColorConfigs(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FiberColorConfig)));
-    });
+      ready('fiberColorConfigs');
+    }, err => failed('fiberColorConfigs', err));
 
     return () => {
       unsubRoutes();
@@ -355,41 +365,48 @@ export function DesignApprovalModal({
     };
   }, [isOpen, project?.id]);
 
-  const effectiveRoutes = loadedRoutes;
-  const effectiveEnclosures = loadedEnclosures;
-  const effectiveLoops = loadedLoops;
+  useEffect(() => {
+    const id = project.designApproval?.snapshotId;
+    if (!isOpen || !id) { setSnapshotState({}); return; }
+    let cancelled = false;
+    setSnapshotState({ id });
+    readApprovalSnapshot(project.id, id).then(data => {
+      if (!cancelled) setSnapshotState({ id, data });
+    }).catch(error => {
+      if (!cancelled) setSnapshotState({ id, error: error instanceof Error ? error.message : String(error) });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, project.id, project.designApproval?.snapshotId]);
+
+  const liveSource: ApprovalSnapshotCollections = {
+    routes: loadedRoutes, enclosures: loadedEnclosures, loops: loadedLoops,
+    enclosureTypes, fiberTypes, fiberColorConfigs
+  };
+  const viewedSnapshot = snapshotState.id === project.designApproval?.snapshotId ? snapshotState.data : undefined;
+  const snapshotUnavailable = Boolean(project.designApproval?.snapshotId && !viewedSnapshot);
+  const documentSource = project.designApproval?.snapshotId
+    ? viewedSnapshot?.collections : liveSource;
+  const usingLivePreview = (previewLive || viewMode === 'request') && project.designApproval?.status === 'Rejected';
+  const activeSource = usingLivePreview ? chooseApprovalSource(liveSource, project.designApproval, viewedSnapshot, true) : documentSource;
+  const effectiveRoutes = activeSource?.routes || [];
+  const effectiveEnclosures = activeSource?.enclosures || [];
+  const effectiveLoops = activeSource?.loops || [];
+  const documentProject = projectForDocument(project, viewedSnapshot);
+  const activeProject = usingLivePreview ? project : documentProject;
+  const activeEnclosureTypes = activeSource?.enclosureTypes || [];
+  const activeFiberTypes = activeSource?.fiberTypes || [];
+  const activeFiberColorConfigs = activeSource?.fiberColorConfigs || [];
   const hasApprovalDesign = effectiveRoutes.length > 0 && effectiveEnclosures.length > 0;
 
   // Participating / Authorized operators for this project (แสดงตาม authorized operators ที่กำหนดสิทธิ์ไว้ในโครงการ)
   const participatingOwners: CoreOwner[] = useMemo(() => {
-    const list: CoreOwner[] = [];
-    const addOwner = (o?: CoreOwner | string) => {
-      if (!o || o === 'None') return;
-      const norm = o.toUpperCase().trim() as CoreOwner;
-      if (!list.includes(norm)) {
-        list.push(norm);
-      }
-    };
-
-    // Use project's configured Authorized Operators (project.owners or project.owner)
-    if (project.owners && project.owners.length > 0) {
-      project.owners.forEach(addOwner);
-    } else if (project.owner && project.owner !== 'None') {
-      addOwner(project.owner);
-    }
-
-    const orderMap: Record<string, number> = { 'ITEL': 1, 'SYMC': 2, 'UIH': 3 };
-
-    if (list.length === 0) {
-      effectiveRoutes.forEach(route => {
-        (route.owners || route.tierSharingPartners || []).forEach(addOwner);
-        route.cores?.forEach(core => addOwner(core.owner));
-      });
-    }
-    return list.sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
-  }, [project.owners, project.owner, effectiveRoutes]);
+    if (viewedSnapshot && !usingLivePreview) return [...viewedSnapshot.metadata.participatingOwners];
+    return getParticipatingOwners(activeProject, effectiveRoutes);
+  }, [activeProject.owners, activeProject.owner, effectiveRoutes, viewedSnapshot, usingLivePreview]);
 
   const designApproval = project.designApproval;
+  const activeSelections = designApproval && !usingLivePreview
+    ? designApproval.routeEnclosureSelections || {} : routeEnclosureSelections;
 
   // Derive approval stage and overall status
   const currentStage: ApprovalStage = designApproval?.approvalStage || (
@@ -450,9 +467,9 @@ export function DesignApprovalModal({
   // Helper to get enclosure type exactly like in FiberMap.tsx
   function getEnclosureType(enclosure: FiberEnclosure) {
     if (enclosure.enclosureTypeId) {
-      return enclosureTypes.find(et => et.id === enclosure.enclosureTypeId);
+      return activeEnclosureTypes.find(et => et.id === enclosure.enclosureTypeId);
     }
-    return enclosureTypes.find(et => et.name?.toLowerCase() === enclosure.locationType?.toLowerCase());
+    return activeEnclosureTypes.find(et => et.name?.toLowerCase() === enclosure.locationType?.toLowerCase());
   }
 
   function getEnclosureColor(enclosure: FiberEnclosure) {
@@ -518,16 +535,16 @@ export function DesignApprovalModal({
         offset
       };
     });
-  }, [effectiveEnclosures, enclosureTypes]);
+  }, [effectiveEnclosures, activeEnclosureTypes]);
 
   const getRouteColor = (route: Route) => {
     const fiberType = route.fiberType || route.capacity.toString();
     const tier = route.tierSharing || route.tier || 'Tier 1';
     
     // Find matching color config
-    const ft = fiberTypes.find(f => f.name === fiberType);
+    const ft = activeFiberTypes.find(f => f.name === fiberType);
     if (ft) {
-      const config = fiberColorConfigs.find(c => c.fiberTypeId === ft.id && c.tier === tier);
+      const config = activeFiberColorConfigs.find(c => c.fiberTypeId === ft.id && c.tier === tier);
       if (config) return config.color;
       if (ft.color) return ft.color;
     }
@@ -619,7 +636,7 @@ export function DesignApprovalModal({
 
   // Extract corridor road name and dynamic landmarks based on real project data
   const corridorRoadName = useMemo(() => {
-    const projName = project.name || '';
+    const projName = activeProject.name || '';
     if (projName.includes('อังรีดูนังต์')) return 'ถนนอังรีดูนังต์';
     if (projName.includes('วิทยุ')) return 'ถนนวิทยุ';
     if (projName.includes('สุขุมวิท')) return 'ถนนสุขุมวิท';
@@ -627,7 +644,7 @@ export function DesignApprovalModal({
     if (projName.includes('พระราม')) return 'ถนนพระราม';
     if (projName.includes('พหลโยธิน')) return 'ถนนพหลโยธิน';
     return projName.split(' ')[0] || 'แนวเส้นทางโครงข่ายเคเบิล';
-  }, [project.name]);
+  }, [activeProject.name]);
 
   // Derive Landmark Chips from actual enclosure names / locations along the corridor
   const dynamicLandmarks = useMemo(() => {
@@ -723,7 +740,7 @@ export function DesignApprovalModal({
         totalCores: totalAllocated
       };
     });
-  }, [effectiveRoutes, effectiveEnclosures, sldEnclosures, project.name, participatingOwners, projectTierName, projectTierCompactLabel]);
+  }, [effectiveRoutes, effectiveEnclosures, sldEnclosures, activeProject.name, participatingOwners, projectTierName, projectTierCompactLabel]);
 
   // Aggregate totals across all fiber optic routes
   const fiberRouteTotals = useMemo(() => {
@@ -878,8 +895,8 @@ export function DesignApprovalModal({
   // Helper to resolve enclosures associated with a specific route line (strictly separated per route)
   const getRouteEnclosures = (routeSchedId: string): FiberEnclosure[] => {
     // 0. User custom selection takes highest precedence
-    if (routeEnclosureSelections[routeSchedId] && Array.isArray(routeEnclosureSelections[routeSchedId])) {
-      const selectedIds = new Set(routeEnclosureSelections[routeSchedId]);
+    if (activeSelections[routeSchedId] && Array.isArray(activeSelections[routeSchedId])) {
+      const selectedIds = new Set(activeSelections[routeSchedId]);
       return sldEnclosures.filter(e => selectedIds.has(e.id));
     }
 
@@ -959,8 +976,8 @@ export function DesignApprovalModal({
     const used = new Map<string, { key: string; name: string; imageUrl: string | null; enclosureNames: string[] }>();
     for (const enc of routeEncs) {
       const locationTypeName = enc.locationType?.trim().toLowerCase();
-      const type = enclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
-        (locationTypeName ? enclosureTypes.find(t => t.name?.trim().toLowerCase() === locationTypeName) : undefined);
+      const type = activeEnclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
+        (locationTypeName ? activeEnclosureTypes.find(t => t.name?.trim().toLowerCase() === locationTypeName) : undefined);
       const key = type?.id || enc.enclosureTypeId || locationTypeName || 'unassigned';
       const imageUrl = type?.imageUrl || enc.imageUrl || null;
       const enclosureName = enc.name?.trim() || enc.locationName?.trim() || '-';
@@ -1062,8 +1079,8 @@ export function DesignApprovalModal({
   };
 
   const getEnclosureCapacityText = (enc: FiberEnclosure) => {
-    const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || 
-                    enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+    const encType = activeEnclosureTypes.find(t => t.id === enc.enclosureTypeId) ||
+                    activeEnclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
     if (encType?.capacity) {
       return `${encType.capacity} Core`;
     }
@@ -1199,6 +1216,7 @@ export function DesignApprovalModal({
 
   // Open Signing Modal for specific Owner & Level
   const handleOpenSignModal = (owner: CoreOwner, level: 'Planning' | 'OM', previousSignOff?: OwnerSignOff) => {
+    if (snapshotUnavailable || usingLivePreview) return;
     signatureUploadGuardRef.current.invalidate();
     setIsProcessingSignature(false);
     setUploadedSignature(null);
@@ -1214,14 +1232,14 @@ export function DesignApprovalModal({
   // Signing depends only on the level's own permission. approveDesign used to be
   // an extra master switch; with it off, roles allowed to sign a level could not.
   const canUserSign = (owner: CoreOwner, level: 'Planning' | 'OM') => {
-    if (!appUser) return false;
+    if (!appUser || snapshotUnavailable || usingLivePreview) return false;
     if (!(level === 'Planning' ? permissions?.approvePlanning : permissions?.approveOM)) return false;
     if (appUser.role === 'Admin') return true;
 
     return !(appUser.owner && appUser.owner !== 'None' && appUser.owner !== owner);
   };
 
-  const canCorrectSignOff = () => appUser?.role === 'Admin';
+  const canCorrectSignOff = () => appUser?.role === 'Admin' && !snapshotUnavailable && !usingLivePreview;
 
   const confirm = useConfirm();
   const handleRewindApproval = async () => {
@@ -1280,7 +1298,12 @@ export function DesignApprovalModal({
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
     if (!appUser || !permissions?.requestApproval) return;
-    if (!hasApprovalDesign || participatingOwners.length === 0) {
+    if (isLoadingData || sourceError) {
+      setActionError(sourceError ? `โหลด ${sourceError[0]} ไม่สำเร็จ: ${sourceError[1].error}` : 'กำลังโหลดข้อมูลโครงการ');
+      return;
+    }
+    const liveOwners = getParticipatingOwners(project, liveSource.routes);
+    if (liveSource.routes.length === 0 || liveSource.enclosures.length === 0 || liveOwners.length === 0) {
       setActionError('กรุณาเพิ่มเส้น Fiber, Enclosure และกำหนด Owner ของโครงการก่อนยื่นขออนุมัติ');
       return;
     }
@@ -1288,12 +1311,14 @@ export function DesignApprovalModal({
     setActionError(null);
 
     try {
+      await Promise.all([...pendingDraftWrites.current]);
+      if (draftWriteError.current) throw draftWriteError.current;
       const docNumber = buildApprovalDocumentNumber(project);
       
       const initialPlanningSignOffs: Record<string, OwnerSignOff> = {};
       const initialOMSignOffs: Record<string, OwnerSignOff> = {};
 
-      participatingOwners.forEach(owner => {
+      liveOwners.forEach(owner => {
         initialPlanningSignOffs[owner] = {
           owner,
           level: 'Planning',
@@ -1307,7 +1332,7 @@ export function DesignApprovalModal({
       });
 
       const newApproval: DesignApproval = {
-        id: `appr_${Date.now()}`,
+        id: nextApprovalId(),
         documentNumber: docNumber,
         status: 'Pending Approval',
         approvalStage: 'Planning',
@@ -1330,6 +1355,15 @@ export function DesignApprovalModal({
         ownerSignOffs: initialPlanningSignOffs
       };
 
+      const snapshot = buildApprovalSnapshot(project, newApproval.id, newApproval.requestedAt, appUser.id, liveOwners, liveSource);
+      newApproval.snapshotId = newApproval.id;
+      newApproval.snapshotCreatedAt = snapshot.metadata.createdAt;
+      const expected: ExpectedApprovalState = project.designApproval?.status === 'Rejected'
+        ? { kind: 'rejected', id: project.designApproval.id } : { kind: 'none' };
+
+      await writeApprovalSnapshot(snapshot);
+      await attachApprovalSnapshot(project.id, expected, newApproval);
+
       const updatedProject: Project = {
         ...project,
         status: 'Pending Approval',
@@ -1337,29 +1371,25 @@ export function DesignApprovalModal({
         approvalDraft: undefined
       };
 
-      await updateDoc(doc(db, `projects/${project.id}`), {
-        status: 'Pending Approval',
-        designApproval: newApproval,
-        approvalDraft: deleteField()
-      });
-
-      await logActivity('request_design_approval', `Requested 2-level design approval for project ${project.name} (${docNumber})`, {
+      logActivity('request_design_approval', `Requested 2-level design approval for project ${project.name} (${docNumber})`, {
         projectId: project.id,
         documentNumber: docNumber,
-        owners: participatingOwners,
-        routesCount: effectiveRoutes.length,
-        enclosuresCount: effectiveEnclosures.length
-      });
+        owners: liveOwners,
+        routesCount: liveSource.routes.length,
+        enclosuresCount: liveSource.enclosures.length
+      }).catch(console.warn);
 
       if (onProjectUpdated) {
         onProjectUpdated(updatedProject);
       }
 
       setViewMode('slides');
+      setPreviewLive(false);
       setCurrentSlide(1);
     } catch (err: any) {
       console.error('Error requesting approval:', err);
-      setActionError(err.message || 'Failed to submit approval request');
+      setActionError(err instanceof ApprovalStateChangedError ? 'คำขอเปลี่ยนไปแล้ว กรุณาโหลดหน้าใหม่ก่อนยื่นอีกครั้ง'
+        : err.message || 'Failed to submit approval request');
     } finally {
       setIsSubmitting(false);
     }
@@ -1367,10 +1397,10 @@ export function DesignApprovalModal({
 
   // Directly save contractor details from Slide 6 or request form
   const handleSaveContractorDetails = async () => {
+    if (project.designApproval && project.designApproval.status !== 'Rejected') return;
     setIsSavingContractor(true);
     setContractorSaveError(null);
     try {
-      const existingApproval = project.designApproval;
       const contractorDetails = {
         contractorName: contractorInput.trim(),
         contractorContact: contractorContactInput.trim(),
@@ -1379,12 +1409,8 @@ export function DesignApprovalModal({
         contractorScope: contractorScopeInput.trim(),
         estimatedInstallationDate: targetInstallDate
       };
-      const updatedProject: Project = existingApproval
-        ? { ...project, designApproval: { ...existingApproval, ...contractorDetails } }
-        : { ...project, approvalDraft: { ...project.approvalDraft, ...contractorDetails } };
-      await setDoc(doc(db, `projects/${project.id}`), existingApproval
-        ? { designApproval: updatedProject.designApproval }
-        : { approvalDraft: updatedProject.approvalDraft }, { merge: true });
+      const updatedProject: Project = { ...project, approvalDraft: { ...project.approvalDraft, ...contractorDetails } };
+      await setDoc(doc(db, `projects/${project.id}`), { approvalDraft: updatedProject.approvalDraft }, { merge: true });
 
       await logActivity('update_contractor_details', `Updated contractor details for project ${project.name}: ${contractorInput.trim()}`, {
         projectId: project.id,
@@ -1411,7 +1437,7 @@ export function DesignApprovalModal({
 
   // Sign & Approve for specific Owner & Level (Planning or OM)
   const handleConfirmSignature = async (isApproved: boolean) => {
-    if (isProcessingSignature || !signingTarget || !appUser || !project.designApproval) return;
+    if (isProcessingSignature || !signingTarget || !appUser || !project.designApproval || snapshotUnavailable || usingLivePreview) return;
     const existingSignOff = signingTarget.level === 'Planning'
       ? project.designApproval.planningSignOffs?.[signingTarget.owner]
       : project.designApproval.omSignOffs?.[signingTarget.owner];
@@ -1495,6 +1521,7 @@ export function DesignApprovalModal({
         ...existingApproval,
         status: nextProjectStatus,
         approvalStage: nextStage,
+        rejectionReason: isAnyRejected ? signerComment.trim() : '',
         planningSignOffs: nextPlanningSignOffs,
         omSignOffs: nextOMSignOffs,
         ...(allOMApproved ? {
@@ -1551,20 +1578,20 @@ export function DesignApprovalModal({
   /** Builds the fully signed PDF and the KMZ, saves both to the project files
    *  ("เอกสารอนุมัติ") and records them on the approval for the completion email. */
   const createFinalDocuments = async () => {
-    if (!appUser || !project.designApproval || finalDocumentsState === 'working') return;
+    if (!appUser || !project.designApproval || finalDocumentsState === 'working' || snapshotUnavailable || usingLivePreview) return;
     setFinalDocumentsState('working');
     try {
       const pdf = (await createApprovalPdf(await buildPrintDocument())).output('blob');
       const folderId = await ensureProjectFolder(project.id, 'เอกสารอนุมัติ');
-      const baseName = exportFileName(project, 'pdf').replace(/\.pdf$/, '');
+      const baseName = exportFileName(documentProject, 'pdf').replace(/\.pdf$/, '');
       const docNo = (project.designApproval.documentNumber || '').replace(/[\\/:*?"<>|]+/g, '-');
       const pdfName = `${docNo ? `${docNo} ` : ''}${baseName} (ลงนามครบ).pdf`;
       const pdfFileId = await uploadProjectFile(project.id, pdf, pdfName, folderId);
       let kmz: { kmzFileId: string; kmzName: string } | {} = {};
       try {
-        const kmzName = exportFileName(project, 'kmz');
-        const kmzBlob = await buildProjectKmz({ project, routes: effectiveRoutes, enclosures: effectiveEnclosures, loops: loadedLoops,
-          enclosureTypes, fiberTypes, fiberColorConfigs });
+        const kmzName = exportFileName(documentProject, 'kmz');
+        const kmzBlob = await buildProjectKmz({ project: documentProject, routes: effectiveRoutes, enclosures: effectiveEnclosures, loops: effectiveLoops,
+          enclosureTypes: activeEnclosureTypes, fiberTypes: activeFiberTypes, fiberColorConfigs: activeFiberColorConfigs });
         kmz = { kmzFileId: await uploadProjectFile(project.id, kmzBlob, kmzName, folderId), kmzName };
       } catch (error) {
         console.error('Final KMZ failed', error);
@@ -1581,19 +1608,19 @@ export function DesignApprovalModal({
 
   // Runs once the completed approval (with the last signature) is in the props.
   useEffect(() => {
-    if (!pendingFinalDocuments || isLoadingData || project.designApproval?.approvalStage !== 'Completed') return;
+    if (!pendingFinalDocuments || isLoadingData || snapshotUnavailable || usingLivePreview || project.designApproval?.approvalStage !== 'Completed') return;
     setPendingFinalDocuments(false);
     if (!project.designApproval.finalDocuments) createFinalDocuments();
-  }, [pendingFinalDocuments, isLoadingData, project.designApproval?.approvalStage]);
+  }, [pendingFinalDocuments, isLoadingData, snapshotUnavailable, usingLivePreview, project.designApproval?.approvalStage]);
 
   const handleExportDocument = async () => {
-    if (isExporting || !permissions?.exportData) return;
+    if (isExporting || !permissions?.exportData || snapshotUnavailable || usingLivePreview) return;
     setIsExporting(true);
     setExportError(null);
     try {
       const printDoc = await buildPrintDocument();
-      const projectName = project.name.replace(/[\\/:*?"<>|\s]+/g, '_');
-      await exportApprovalPdf(printDoc, `Fiber_Infra_Sharing_Approval_${projectName}_${new Date().toISOString().split('T')[0]}.pdf`);
+      const submittedName = exportFileName(documentProject, 'pdf').replace(/\.pdf$/, '').replace(/\s+/g, '_');
+      await exportApprovalPdf(printDoc, `Fiber_Infra_Sharing_Approval_${submittedName}_${new Date().toISOString().split('T')[0]}.pdf`);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 4000);
     } catch (e) {
@@ -1621,7 +1648,7 @@ export function DesignApprovalModal({
         name: route.name || 'Fiber Route',
         color: getRouteColor(route),
         distanceKm: routeSummary?.distanceKm || (route.totalLength ? (route.totalLength / 1000).toFixed(2) : '-'),
-        fiberType: route.fiberType?.trim() || fiberTypes.find(type => type.cores === route.capacity)?.name || `OFC ${route.capacity} Core`,
+        fiberType: route.fiberType?.trim() || activeFiberTypes.find(type => type.cores === route.capacity)?.name || `OFC ${route.capacity} Core`,
         points: routePoints.length >= 2 ? routePoints : (start && end ? [start, end] : routePoints)
       };
     });
@@ -1670,7 +1697,7 @@ export function DesignApprovalModal({
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>Fiber Infra Sharing Approval Document - ${project.name}</title>
+  <title>Fiber Infra Sharing Approval Document - ${escapePrintText(documentProject.name)}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap');
     @page { size: A4 landscape; margin: 10mm; }
@@ -1889,11 +1916,11 @@ export function DesignApprovalModal({
       ${coverLogosHtml}
     </div>
     <h1 style="font-size: 42px; font-weight: 900; color: #0369a1; margin: 0 0 16px 0; text-transform: uppercase;">FIBER INFRA SHARING</h1>
-    <h2 style="font-size: 26px; font-weight: 700; color: #334155; margin: 0 0 20px 0;">${project.name}</h2>
+    <h2 style="font-size: 26px; font-weight: 700; color: #334155; margin: 0 0 20px 0;">${escapePrintText(documentProject.name)}</h2>
     <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center;">
-      ${project.routeCode?.trim() ? `<div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
+      ${documentProject.routeCode?.trim() ? `<div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
         <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">รหัสเส้นทาง (Route Code)</span>
-        <strong style="color: #047857; font-size: 15px; font-family: monospace;">${escapePrintText(project.routeCode.trim())}</strong>
+        <strong style="color: #047857; font-size: 15px; font-family: monospace;">${escapePrintText(documentProject.routeCode.trim())}</strong>
       </div>` : ''}
       <div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
         <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">Tier Classification</span>
@@ -1910,6 +1937,7 @@ export function DesignApprovalModal({
     </div>
     <div style="font-size: 14px; color: #64748b; background: white; padding: 12px 24px; border-radius: 10px; border: 1px solid #cbd5e1; display: inline-block;">
       <strong>Ref Doc:</strong> ${docNum} | <strong>Date:</strong> ${dateStr} | <strong>Status:</strong> ${project.status || 'Pending Approval'}
+      ${designApproval?.rejectionReason ? `<div><strong>เหตุผลที่ไม่อนุมัติ:</strong> ${escapePrintText(designApproval.rejectionReason)}</div>` : ''}
     </div>
   </div>
 
@@ -2068,7 +2096,7 @@ export function DesignApprovalModal({
                 const trayAssignments = enc.trayAssignments || {};
                 const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
                 const encCapText = getEnclosureCapacityText(enc);
-                const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+                const encType = activeEnclosureTypes.find(t => t.id === enc.enclosureTypeId) || activeEnclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
                 const totalTrays = encType?.spliceTrays || 7;
 
                 return `
@@ -2130,7 +2158,7 @@ export function DesignApprovalModal({
       const routeEncs = getRouteEnclosures(routeSched.id);
       const totalC = routeSched.capacity || 144;
       const actualRoute = effectiveRoutes.find(route => route.id === routeSched.id);
-      const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+      const routeFt = activeFiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || activeFiberTypes[0];
       const fiberImgUrl = routeFt?.imageUrl || '';
       const fiberName = routeFt?.name || `OFC ${totalC} Core`;
       const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
@@ -2239,7 +2267,7 @@ export function DesignApprovalModal({
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
         <div style="min-width: 0;">
           <div style="font-size: 12px; color: #0369a1; font-weight: 700;">สรุปงานติดตั้ง ${projectTierName} (${participatingOwners.join('+')})</div>
-          <strong style="display: block; font-size: 14px; color: #0f172a; line-height: 1.4;">${escapePrintText(project.name)}</strong>
+          <strong style="display: block; font-size: 14px; color: #0f172a; line-height: 1.4;">${escapePrintText(documentProject.name)}</strong>
           <div style="font-size: 11px; color: #64748b;">รหัสเอกสาร: <span style="white-space: nowrap;">${escapePrintText(docNum)}</span> | สถานะ: ${designApproval?.status || project.status || 'Pending Approval'}</div>
         </div>
         <div style="text-align: right; font-size: 11px; color: #475569; white-space: nowrap; flex-shrink: 0;">
@@ -2387,7 +2415,7 @@ export function DesignApprovalModal({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium truncate">
-                {project.name} &bull; {participatingOwners.join(' + ')} &bull; {sldEnclosures.length} Enclosures &bull; {totalLengthKm} km
+                {activeProject.name} &bull; {participatingOwners.join(' + ')} &bull; {sldEnclosures.length} Enclosures &bull; {totalLengthKm} km
               </p>
             </div>
           </div>
@@ -2416,6 +2444,7 @@ export function DesignApprovalModal({
                 </span>
               ) : (
                 <button type="button" onClick={createFinalDocuments}
+                  disabled={snapshotUnavailable || usingLivePreview}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300"
                   title="สร้าง PDF ฉบับลงนามครบและ KMZ บันทึกในไฟล์โครงการ แล้วส่งอีเมลแนบไฟล์ให้ผู้เกี่ยวข้อง">
                   <FileText size={13} /> {finalDocumentsState === 'error' ? 'สร้างเอกสารไม่สำเร็จ ลองใหม่' : 'สร้างและส่งเอกสารฉบับลงนามครบ'}
@@ -2426,7 +2455,7 @@ export function DesignApprovalModal({
             {/* Export HTML / Print */}
             {permissions?.exportData && <button
               onClick={handleExportDocument}
-              disabled={isExporting || !hasApprovalDesign}
+              disabled={isExporting || !hasApprovalDesign || snapshotUnavailable || usingLivePreview}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
               title="ดาวน์โหลดเอกสาร PDF" aria-label="ดาวน์โหลดเอกสาร PDF"
             >
@@ -2506,6 +2535,21 @@ export function DesignApprovalModal({
 
         {/* Modal Main Content Body */}
         <div className="flex-1 overflow-y-auto bg-slate-950 p-4 sm:p-6 custom-scrollbar">
+          {project.designApproval && !project.designApproval.snapshotId && (
+            <div role="status" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+              เอกสารคำขอเก่านี้ยังไม่ล็อกข้อมูล และอาจเปลี่ยนตามข้อมูลโครงการปัจจุบัน
+            </div>
+          )}
+          {snapshotUnavailable && (
+            <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
+              {snapshotState.error ? `โหลดเอกสารคำขอเดิมไม่สำเร็จ: ${snapshotState.error}` : 'กำลังโหลดเอกสารคำขอเดิม…'}
+            </div>
+          )}
+          {sourceError && (
+            <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
+              โหลด {sourceError[0]} ไม่สำเร็จ: {sourceError[1].error}
+            </div>
+          )}
           {exportError && (
             <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-300">
               ส่งออก PDF ไม่สำเร็จ: {exportError}
@@ -2513,8 +2557,16 @@ export function DesignApprovalModal({
           )}
           
           {/* VIEW MODE 1: PRESENTATION SLIDES (Matching the attached PDF presentation) */}
-          {viewMode === 'slides' && (
+          {viewMode === 'slides' && (!snapshotUnavailable || usingLivePreview) && (
             <div className="w-full space-y-4">
+              {isRejected && (
+                <div className="flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-xs text-sky-100">
+                  <span>{usingLivePreview ? 'ตัวอย่างคำขอใหม่จากข้อมูลปัจจุบัน' : 'เอกสารคำขอที่ถูกปฏิเสธ (ข้อมูล ณ วันที่ยื่น)'}</span>
+                  <button type="button" onClick={() => setPreviewLive(value => !value)} className="ml-auto rounded-lg bg-sky-600 px-2.5 py-1 font-bold text-white">
+                    {usingLivePreview ? 'ดูเอกสารเดิม' : 'ดูตัวอย่างคำขอใหม่'}
+                  </button>
+                </div>
+              )}
               {!hasApprovalDesign && !isLoadingData && (
                 <div role="status" className="approval-empty-notice rounded-xl px-4 py-3 text-sm font-medium">
                   ยังไม่มีข้อมูลเส้น Fiber และ Enclosure ครบสำหรับขออนุมัติ กรุณาเพิ่มข้อมูลโครงการก่อนยื่นคำขอ
@@ -2522,7 +2574,7 @@ export function DesignApprovalModal({
               )}
               {hasApprovalDesign && !isLoadingData && (!designApproval || isRejected) && (
                 <div className="approval-warning flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
-                  <span>{isRejected ? 'คำขอเดิมถูกปฏิเสธ สามารถยื่นคำขอใหม่ได้' : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
+                  <span>{isRejected ? `คำขอเดิมถูกปฏิเสธ${designApproval?.rejectionReason ? `: ${designApproval.rejectionReason}` : ''} สามารถยื่นคำขอใหม่ได้` : 'ยังไม่ได้ยื่นคำขออนุมัติแบบโครงการ'}</span>
                   {permissions?.requestApproval && (
                     <button onClick={() => setViewMode('request')} className="rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400">
                       ยื่นขออนุมัติใหม่
@@ -2593,18 +2645,18 @@ export function DesignApprovalModal({
                           FIBER INFRA SHARING
                         </h1>
                         <p className="text-lg md:text-2xl font-bold text-slate-200">
-                          {project.name}
+                          {activeProject.name}
                         </p>
                         <p className="text-xs md:text-sm text-slate-400">
                           ข้อเสนอการร่วมใช้โครงข่ายเคเบิลใยแก้วนำแสงร่วมกัน (Infrastructure Sharing Agreement)
                         </p>
                       </div>
 
-                      <div className={`grid grid-cols-1 gap-3 mx-auto pt-4 text-left ${project.routeCode?.trim() ? 'sm:grid-cols-4 max-w-3xl' : 'sm:grid-cols-3 max-w-2xl'}`}>
-                        {project.routeCode?.trim() && (
+                      <div className={`grid grid-cols-1 gap-3 mx-auto pt-4 text-left ${activeProject.routeCode?.trim() ? 'sm:grid-cols-4 max-w-3xl' : 'sm:grid-cols-3 max-w-2xl'}`}>
+                        {activeProject.routeCode?.trim() && (
                           <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                             <p className="text-[10px] text-slate-400 font-bold uppercase">รหัสเส้นทาง (Route Code)</p>
-                            <p className="text-xs font-black text-emerald-400 font-mono break-all">{project.routeCode.trim()}</p>
+                            <p className="text-xs font-black text-emerald-400 font-mono break-all">{activeProject.routeCode.trim()}</p>
                           </div>
                         )}
                         <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
@@ -3112,7 +3164,7 @@ export function DesignApprovalModal({
                                     <div className="text-[11px] font-bold text-slate-400">
                                       จุดตัดต่อ Enclosure: <strong className="text-amber-400 font-black">{routeEncs.length} หัว</strong>
                                     </div>
-                                    <button
+                                    {(!designApproval || usingLivePreview) && <button
                                       type="button"
                                       onClick={() => setEditingEnclosureRouteId(editingEnclosureRouteId === routeSched.id ? null : routeSched.id)}
                                       className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer border ${
@@ -3124,12 +3176,12 @@ export function DesignApprovalModal({
                                     >
                                       <Box size={12} />
                                       <span>{editingEnclosureRouteId === routeSched.id ? 'ปิดการเลือก' : 'เลือก Enclosure ของเส้นนี้'}</span>
-                                    </button>
+                                    </button>}
                                   </div>
                                 </div>
 
                                 {/* Enclosure Selection Manager for this specific Route */}
-                                {editingEnclosureRouteId === routeSched.id && (
+                                {editingEnclosureRouteId === routeSched.id && (!designApproval || usingLivePreview) && (
                                   <div className="m-3 p-3.5 bg-slate-950/95 rounded-xl border border-amber-500/50 space-y-3 shadow-2xl">
                                     <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                                       <div className="flex items-center gap-2">
@@ -3210,7 +3262,7 @@ export function DesignApprovalModal({
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/80 font-medium">
                                       {routeEncs.map((enc, idx) => {
-                                        const encType = enclosureTypes.find(t => t.id === enc.enclosureTypeId) || enclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
+                                        const encType = activeEnclosureTypes.find(t => t.id === enc.enclosureTypeId) || activeEnclosureTypes.find(t => t.name?.toLowerCase() === enc.locationType?.toLowerCase());
                                         const trayAssignments = enc.trayAssignments || {};
                                         const hasExplicitAssignments = Object.values(trayAssignments).some(o => o && o !== 'None');
                                         const encCapText = getEnclosureCapacityText(enc);
@@ -3305,7 +3357,7 @@ export function DesignApprovalModal({
                               <span className="font-bold text-slate-100 flex items-center gap-2">
                                 <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-black text-[10px]">{routeSched.tier}</span>
                                 {(() => {
-                                  const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                                  const routeFt = activeFiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || activeFiberTypes[0];
                                   return routeFt?.imageUrl ? (
                                     <img src={routeFt.imageUrl} alt={routeFt.name} className="w-5 h-5 object-contain rounded bg-slate-800 p-0.5 border border-slate-700" title={routeFt.name} />
                                   ) : null;
@@ -3318,7 +3370,7 @@ export function DesignApprovalModal({
                             </div>
 
                             {(() => {
-                              const routeFt = fiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || fiberTypes[0];
+                              const routeFt = activeFiberTypes.find(ft => ft.cores === totalC || ft.name?.toLowerCase().includes(totalC.toString())) || activeFiberTypes[0];
                               const firstEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[0], 0).bjNo : '-';
                               const lastEnc = routeEncs.length > 0 ? parseEnclosureName(routeEncs[routeEncs.length - 1], routeEncs.length - 1).bjNo : '-';
                               const routeBjDisplay = routeEncs.length === 0 ? '-' : routeEncs.length === 1 ? firstEnc : `${firstEnc} - ${lastEnc}`;
@@ -3452,7 +3504,7 @@ export function DesignApprovalModal({
                               {projectTierName} ({participatingOwners.join('+')})
                             </span>
                             <span className="text-white font-extrabold text-sm md:text-base">
-                              {project.name}
+                              {activeProject.name}
                             </span>
                             {designApproval?.documentNumber && (
                               <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -3467,7 +3519,7 @@ export function DesignApprovalModal({
                                 <Check size={13} /> บันทึกข้อมูลแล้ว
                               </span>
                             )}
-                            <button
+                            {(!designApproval || usingLivePreview) && <button
                               type="button"
                               onClick={() => setIsEditingContractor(!isEditingContractor)}
                               className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
@@ -3478,12 +3530,12 @@ export function DesignApprovalModal({
                             >
                               <Edit3 size={13} />
                               <span>{isEditingContractor ? 'ยกเลิกการแก้ไข' : 'กรอก/แก้ไขข้อมูลผู้รับจ้าง'}</span>
-                            </button>
+                            </button>}
                           </div>
                         </div>
 
                         {/* Editable Contractor Form (when isEditingContractor is true) */}
-                        {isEditingContractor && (
+                        {isEditingContractor && (!designApproval || usingLivePreview) && (
                           <div className="p-3.5 bg-slate-900/90 rounded-xl border border-sky-500/40 space-y-3">
                             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                               <span className="text-xs font-black text-sky-400 flex items-center gap-1.5">
@@ -3678,7 +3730,7 @@ export function DesignApprovalModal({
                               <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
                               ผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor):
                             </span>
-                            {!isEditingContractor && (
+                            {!isEditingContractor && (!designApproval || usingLivePreview) && (
                               <button
                                 type="button"
                                 onClick={() => setIsEditingContractor(true)}
@@ -3977,6 +4029,7 @@ export function DesignApprovalModal({
                     type="text"
                     value={contractorInput}
                     onChange={e => setContractorInput(e.target.value)}
+                    onBlur={() => saveDraftField('contractorName', contractorInput)}
                     className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-sky-500"
                     placeholder="เช่น United Telecommunication Services Co., Ltd."
                   />
@@ -3990,6 +4043,7 @@ export function DesignApprovalModal({
                     min="0"
                     value={operationKmInput}
                     onChange={e => setOperationKmInput(e.target.value)}
+                    onBlur={() => saveDraftField('totalOperationDistanceKm', Number.parseFloat(operationKmInput) || 0)}
                     className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-sky-500"
                   />
                 </div>
@@ -4000,6 +4054,7 @@ export function DesignApprovalModal({
                     rows={3}
                     value={requestNotes}
                     onChange={e => setRequestNotes(e.target.value)}
+                    onBlur={() => saveDraftField('designNotes', requestNotes)}
                     placeholder="ระบุข้อกำหนดหรือหมายเหตุสำคัญสำหรับการก่อสร้าง..."
                     className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-sky-500"
                   />
@@ -4008,11 +4063,12 @@ export function DesignApprovalModal({
                 <div className="pt-2">
                   <button
                     onClick={handleSubmitApprovalRequest}
-                    disabled={isSubmitting || !hasApprovalDesign || participatingOwners.length === 0 || isLoadingData || !permissions?.requestApproval}
+                    disabled={isSubmitting || liveSource.routes.length === 0 || liveSource.enclosures.length === 0 ||
+                      isLoadingData || Boolean(sourceError) || !permissions?.requestApproval}
                     className="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-                    <span>ส่งคำขออนุมัติแบบ (เริ่มระดับที่ 1: Planning)</span>
+                    <span>{isLoadingData ? 'กำลังโหลดข้อมูลโครงการ…' : 'ส่งคำขออนุมัติแบบ (เริ่มระดับที่ 1: Planning)'}</span>
                   </button>
                 </div>
               </div>

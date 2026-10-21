@@ -65,6 +65,8 @@ export type OwnerSignOff = {
 
 export type DesignApproval = {
   id: string;
+  snapshotId?: string;
+  snapshotCreatedAt?: string;
   documentNumber: string;
   status: ProjectStatus;
   approvalStage?: ApprovalStage;
@@ -286,6 +288,30 @@ export type FiberColorConfig = {
   tier: string;
   color: string;
   uid: string;
+};
+
+export type ApprovalSnapshotCollections = {
+  routes: Route[];
+  enclosures: FiberEnclosure[];
+  loops: FiberLoop[];
+  enclosureTypes: EnclosureType[];
+  fiberTypes: FiberType[];
+  fiberColorConfigs: FiberColorConfig[];
+};
+
+export type ApprovalSnapshotProject = Pick<Project, 'name' | 'routeCode' | 'owner' | 'owners'>;
+
+export type ApprovalSnapshotMetadata = {
+  id: string;
+  approvalId: string;
+  projectId: string;
+  createdAt: string;
+  createdByUid: string;
+  schemaVersion: 1;
+  project: ApprovalSnapshotProject;
+  participatingOwners: CoreOwner[];
+  ids?: { [K in keyof ApprovalSnapshotCollections]: string[] };
+  idIndex?: { mode: 'chunked'; chunkCount: number };
 };
 
 export type UserLog = {

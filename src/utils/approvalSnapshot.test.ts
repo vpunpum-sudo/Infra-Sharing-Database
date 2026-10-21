@@ -1,0 +1,183 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import type { ApprovalSnapshotCollections, DesignApproval, Project } from '../types';
+import { buildProjectKml, exportFileName } from './kml';
+import { ApprovalStateChangedError, buildApprovalSnapshot, chooseApprovalSource, chunkSnapshotWrites, getParticipatingOwners, remapApprovalDraftSelections, sourceReadiness,
+  IncompleteApprovalSnapshotError, nextApprovalId, planApprovalAttach, planIdIndex, projectForDocument,
+  resolveApprovalFormValues, resolveApprovalSnapshot } from './approvalSnapshot';
+
+const project: Project = { id: 'p', name: 'Submitted name', routeCode: 'OLD', uid: 'u', owner: 'UIH', status: 'Draft',
+  approvalDraft: { contractorName: 'Edited contractor' } };
+const source = (): ApprovalSnapshotCollections => ({
+  routes: [{ id: 'r1', name: 'Route one', path: [], capacity: 1, cores: [] }],
+  enclosures: [{ id: 'e1', name: 'Enclosure one', position: { lat: 1, lng: 2 } }],
+  loops: [], enclosureTypes: [{ id: 't1', name: 'Type one', color: 'red' }], fiberTypes: [], fiberColorConfigs: []
+});
+const approval = (id: string, status: DesignApproval['status'] = 'Pending Approval'): DesignApproval => ({
+  id, documentNumber: 'D-1', status, requestedBy: 'User', requestedByUid: 'u', requestedAt: '2026-10-22', snapshotId: id
+});
+const make = () => buildApprovalSnapshot(project, 'a1', '2026-10-22', 'u', ['UIH'], source());
+
+test('snapshot copies the ready view and submitted project header, and keeps historical sources fixed', () => {
+  const live = source();
+  const snapshot = buildApprovalSnapshot(project, 'a1', '2026-10-22', 'u', ['UIH'], live);
+  live.routes[0].name = 'Changed route';
+  live.enclosureTypes[0].name = 'Changed type';
+  const changedProject = { ...project, name: 'New name', routeCode: 'NEW', owners: ['ITEL' as const] };
+  const resolved = resolveApprovalSnapshot(snapshot.metadata, snapshot.collections);
+  assert.equal(chooseApprovalSource(live, approval('a1'), resolved).routes[0].name, 'Route one');
+  assert.equal(chooseApprovalSource(live, approval('a1'), resolved).enclosureTypes[0].name, 'Type one');
+  assert.equal(projectForDocument(changedProject, resolved).name, 'Submitted name');
+  assert.equal(projectForDocument(changedProject, resolved).routeCode, 'OLD');
+  assert.equal(projectForDocument(changedProject, resolved).owners, undefined);
+  const documentProject = projectForDocument(changedProject, resolved);
+  assert.equal(exportFileName(documentProject, 'pdf'), 'OLD Submitted name.pdf');
+  assert.equal(exportFileName(documentProject, 'kmz'), 'OLD Submitted name.kmz');
+  const kml = buildProjectKml({ project: documentProject, ...resolved.collections }).kml;
+  assert.match(kml, /Submitted name/);
+  assert.doesNotMatch(kml, /New name/);
+  assert.deepEqual(resolved.metadata.participatingOwners, ['UIH']);
+  assert.deepEqual(getParticipatingOwners(changedProject, live.routes), ['ITEL']);
+  assert.equal(chooseApprovalSource(live, approval('a1', 'Rejected'), resolved, true).routes[0].name, 'Changed route');
+  assert.equal(chooseApprovalSource(live).routes[0].name, 'Changed route');
+  assert.equal(chooseApprovalSource(live, { ...approval('legacy'), snapshotId: undefined }).routes[0].name, 'Changed route');
+  assert.throws(() => chooseApprovalSource(live, approval('a1'), null), IncompleteApprovalSnapshotError);
+});
+
+test('inline index rejects missing, unexpected and duplicate child IDs and duplicate expected IDs', () => {
+  const original = make();
+  assert.deepEqual(original.metadata.ids?.routes, ['r1']);
+  assert.equal(resolveApprovalSnapshot(original.metadata, original.collections).collections.routes[0].id, 'r1');
+  assert.throws(() => resolveApprovalSnapshot(null, original.collections), /metadata/);
+  for (const routes of [[], [{ ...original.collections.routes[0], id: 'other' }],
+    [original.collections.routes[0], original.collections.routes[0]]]) {
+    assert.throws(() => resolveApprovalSnapshot(original.metadata, { ...original.collections, routes }), /routes IDs/);
+  }
+  const badMetadata = structuredClone(original.metadata);
+  badMetadata.ids!.routes = ['r1', 'r1'];
+  assert.throws(() => resolveApprovalSnapshot(badMetadata, original.collections), /routes IDs/);
+  assert.throws(() => resolveApprovalSnapshot(original.metadata, original.collections, [{ id: '0', data: { collection: 'routes', ids: [] } }]), /inline index/);
+});
+
+test('large index uses numbered chunks and rejects missing or extra chunks', () => {
+  const large = source();
+  large.loops = Array.from({ length: 520 }, (_, i) => ({ id: `${String(i).padStart(4, '0')}${'x'.repeat(510)}`,
+    name: `Loop ${i}`, position: { lat: 1, lng: 2 }, routeId: 'r1', length: 1 }));
+  const snapshot = buildApprovalSnapshot(project, 'large', '2026-10-22', 'u', ['UIH'], large);
+  assert.equal(snapshot.metadata.ids, undefined);
+  assert.equal(snapshot.metadata.idIndex?.mode, 'chunked');
+  const chunks = snapshot.indexChunks.map((data, i) => ({ id: String(i), data }));
+  assert.equal(resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, chunks).collections.loops.length, 520);
+  assert.throws(() => resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, chunks.slice(1)), /index count/);
+  assert.throws(() => resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, [...chunks, { id: '99', data: chunks[0].data }]), /index count/);
+  assert.throws(() => resolveApprovalSnapshot(snapshot.metadata, { ...snapshot.collections, loops: snapshot.collections.loops.slice(1) }, chunks), /loops IDs/);
+});
+
+test('inline index includes exactly 256 KiB and the next byte switches to chunks', () => {
+  const ids = { routes: Array.from({ length: 260 }, (_, i) => `${i}_` + 'x'.repeat(1000)),
+    enclosures: [], loops: [], enclosureTypes: [], fiberTypes: [], fiberColorConfigs: [] };
+  const size = () => new TextEncoder().encode(JSON.stringify(ids)).length;
+  const adjustment = 256 * 1024 - size();
+  ids.routes[0] += 'x'.repeat(adjustment);
+  assert.equal(size(), 256 * 1024);
+  assert.ok(ids.routes[0].length <= 1500);
+  assert.ok(planIdIndex(ids).ids);
+  ids.routes[0] += 'x';
+  assert.equal(size(), 256 * 1024 + 1);
+  assert.equal(planIdIndex(ids).idIndex?.mode, 'chunked');
+});
+
+test('snapshot children are batched at 450 operations, including zero and more than 500', () => {
+  assert.deepEqual(chunkSnapshotWrites([]), []);
+  assert.deepEqual(chunkSnapshotWrites(Array.from({ length: 450 }, (_, i) => i)).map(group => group.length), [450]);
+  assert.deepEqual(chunkSnapshotWrites(Array.from({ length: 551 }, (_, i) => i)).map(group => group.length), [450, 101]);
+});
+
+test('each submit attempt gets a new ID, including a retry after a failed snapshot write', () => {
+  const failedAttempt = nextApprovalId();
+  const retry = nextApprovalId();
+  assert.notEqual(retry, failedAttempt);
+  assert.equal(buildApprovalSnapshot(project, retry, '2026-10-22', 'u', ['UIH'], source()).metadata.approvalId, retry);
+});
+
+test('attach decisions preserve Draft and Rejected state on failure and reject stale sessions', () => {
+  const pending = approval('new');
+  const originalDraft = structuredClone(project);
+  const planned = planApprovalAttach({ kind: 'none' }, project, pending);
+  assert.equal(planned.status, 'Pending Approval');
+  assert.equal(planned.designApproval?.id, 'new');
+  assert.equal(planned.approvalDraft, undefined);
+  assert.deepEqual(project, originalDraft);
+  const rejected = { ...project, status: 'Rejected' as const, designApproval: {
+    ...approval('old', 'Rejected'), rejectionReason: 'Revise', planningSignOffs: { UIH: { owner: 'UIH' as const, status: 'Rejected' as const } }
+  }, approvalDraft: { contractorName: 'Newest edit' } };
+  const originalRejected = structuredClone(rejected);
+  assert.equal(planApprovalAttach({ kind: 'rejected', id: 'old' }, rejected, pending).designApproval?.id, 'new');
+  for (const [expected, actual] of [
+    [{ kind: 'none' as const }, { ...project, designApproval: approval('other') }],
+    [{ kind: 'rejected' as const, id: 'old' }, { ...rejected, designApproval: approval('other', 'Rejected') }],
+    [{ kind: 'rejected' as const, id: 'old' }, { ...rejected, designApproval: approval('old', 'Approved') }],
+    [{ kind: 'rejected' as const, id: 'old' }, { ...rejected, status: 'Draft' as const }]
+  ] as const) assert.throws(() => planApprovalAttach(expected, actual, pending), ApprovalStateChangedError);
+  assert.deepEqual(rejected, originalRejected);
+});
+
+test('route cut and split remap only the editable draft, never a submitted approval', () => {
+  const original = { ...project, approvalDraft: { routeEnclosureSelections: { r1: ['e1', 'e2'] } } };
+  const draft = remapApprovalDraftSelections(original, 'r1', 'r2', ['e1'], ['e2']);
+  assert.deepEqual(draft?.routeEnclosureSelections, { r1: ['e1'], r2: ['e2'] });
+  const rejected = { ...original, status: 'Rejected' as const, designApproval: {
+    ...approval('old', 'Rejected'), routeEnclosureSelections: { r1: ['e1', 'e2'] }
+  } };
+  const rejectedBefore = structuredClone(rejected.designApproval);
+  assert.deepEqual(remapApprovalDraftSelections(rejected, 'r1', 'r2', ['e1'], ['e2'])?.routeEnclosureSelections,
+    { r1: ['e1'], r2: ['e2'] });
+  assert.deepEqual(rejected.designApproval, rejectedBefore);
+  for (const status of ['Pending Approval', 'Approved'] as const) {
+    assert.equal(remapApprovalDraftSelections({ ...rejected, status, designApproval: { ...rejected.designApproval, status } },
+      'r1', 'r2', ['e1'], ['e2']), undefined);
+  }
+});
+
+test('rejected resubmission inherits every unsaved field and custom route selection from the prior approval', () => {
+  const rejected: Project = { ...project, status: 'Rejected', designApproval: {
+    ...approval('old', 'Rejected'), designNotes: 'Original notes', contractorName: 'Original contractor',
+    contractorContact: 'Original contact', contractorPhone: '123', contractorPoNumber: 'PO-1',
+    contractorScope: 'Install', totalOperationDistanceKm: 14, estimatedInstallationDate: '2026-11-01',
+    routeEnclosureSelections: { r1: ['e2'] }
+  }, approvalDraft: undefined };
+  const beforeSave = resolveApprovalFormValues(rejected);
+  const afterOneFieldSave = resolveApprovalFormValues({ ...rejected, approvalDraft: { contractorName: 'New contractor' } });
+  assert.deepEqual(afterOneFieldSave, { ...beforeSave, contractorName: 'New contractor' });
+  assert.deepEqual(afterOneFieldSave.routeEnclosureSelections, { r1: ['e2'] });
+
+  const explicitClears = resolveApprovalFormValues({ ...rejected, approvalDraft: {
+    designNotes: '', totalOperationDistanceKm: 0, routeEnclosureSelections: {}
+  } });
+  assert.equal(explicitClears.designNotes, '');
+  assert.equal(explicitClears.totalOperationDistanceKm, 0);
+  assert.deepEqual(explicitClears.routeEnclosureSelections, {});
+  assert.equal(explicitClears.contractorContact, 'Original contact');
+});
+
+test('pending and approved forms ignore stale drafts', () => {
+  for (const status of ['Pending Approval', 'Approved'] as const) {
+    const saved: Project = { ...project, status, designApproval: {
+      ...approval('current', status), contractorName: 'Submitted', routeEnclosureSelections: { r1: ['e1'] }
+    }, approvalDraft: { contractorName: 'Stale edit', routeEnclosureSelections: { r1: ['e2'] } } };
+    assert.equal(resolveApprovalFormValues(saved).contractorName, 'Submitted');
+    assert.deepEqual(resolveApprovalFormValues(saved).routeEnclosureSelections, { r1: ['e1'] });
+  }
+});
+
+test('all six listeners must load and any named source error blocks submission', () => {
+  const status = {
+    routes: { loaded: false }, enclosures: { loaded: false }, loops: { loaded: false },
+    enclosureTypes: { loaded: false }, fiberTypes: { loaded: false }, fiberColorConfigs: { loaded: false }
+  };
+  assert.deepEqual(sourceReadiness(status), { ready: false, loading: true, errorSource: undefined });
+  for (const key of Object.keys(status) as Array<keyof typeof status>) status[key].loaded = true;
+  assert.deepEqual(sourceReadiness(status), { ready: true, loading: false, errorSource: undefined });
+  const failed = { ...status, fiberTypes: { loaded: false, error: 'permission-denied' } };
+  assert.deepEqual(sourceReadiness(failed), { ready: false, loading: false, errorSource: 'fiberTypes' });
+});
