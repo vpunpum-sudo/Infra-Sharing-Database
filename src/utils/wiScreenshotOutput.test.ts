@@ -39,6 +39,35 @@ test('successful commit replaces all outputs and removes backups', async () => {
   assert.equal([...files.keys()].filter(path => path.endsWith('.bak')).length, 0);
 });
 
+test('a dashboard-only commit leaves existing login and map PNGs untouched', async () => {
+  const subset = [
+    { staged: `${tempDir}/dashboard.png`, target: '/repo/public/wi/dashboard.png' },
+    { staged: `${tempDir}/wiScreenshotMarks.ts`, target: '/repo/src/content/wiScreenshotMarks.ts' }
+  ];
+  const files = new Map([
+    [subset[0].staged, 'new-dashboard'], [subset[1].staged, 'merged-marks'],
+    [subset[0].target, 'old-dashboard'], [subset[1].target, 'old-marks'],
+    ['/repo/public/wi/login.png', 'old-login'],
+    ['/repo/public/wi/map-overview.png', 'old-map'],
+    ['/repo/public/wi/route-context-menu.png', 'old-context-menu']
+  ]);
+  const result = await commitOutputs(subset, {
+    exists: async path => files.has(path),
+    rename: async (from, to) => {
+      const data = files.get(from);
+      if (data === undefined) throw new Error('missing source');
+      files.delete(from); files.set(to, data);
+    },
+    rm: async path => { files.delete(path); }
+  }, tempDir);
+  assert.deepEqual(result, { ok: true });
+  assert.equal(files.get(subset[0].target), 'new-dashboard');
+  assert.equal(files.get(subset[1].target), 'merged-marks');
+  assert.equal(files.get('/repo/public/wi/login.png'), 'old-login');
+  assert.equal(files.get('/repo/public/wi/map-overview.png'), 'old-map');
+  assert.equal(files.get('/repo/public/wi/route-context-menu.png'), 'old-context-menu');
+});
+
 for (let step = 1; step <= 6; step++) {
   test(`rename failure at step ${step} restores every original output`, async () => {
     const { files, ops } = fakeFs([true, true, true], step);

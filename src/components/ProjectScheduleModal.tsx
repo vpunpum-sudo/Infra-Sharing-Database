@@ -290,7 +290,7 @@ export function ScheduleView({ project, canEdit, onClose, tasks, logs, save: per
                   </div>
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
                     <label className="text-xs text-slate-400">ผู้รับผิดชอบ
-                      <input value={draft.assignee || ''} disabled={!canEdit} maxLength={60} placeholder="เช่น ผู้รับเหมา, ITEL"
+                      <input data-wi-pii="task-owner" value={draft.assignee || ''} disabled={!canEdit} maxLength={60} placeholder="เช่น ผู้รับเหมา, ITEL"
                         onChange={event => setDraft({ ...draft, assignee: event.target.value })} className={`${field} mt-1`} />
                     </label>
                     <label className="text-xs text-slate-400">{draft.milestone ? 'วันที่' : 'เริ่ม'}
@@ -345,7 +345,7 @@ export function ScheduleView({ project, canEdit, onClose, tasks, logs, save: per
                           <li key={log.id} className="flex gap-3 text-sm">
                             <span className="w-28 shrink-0 text-xs text-slate-400">{new Date(log.at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}</span>
                             <span className="min-w-0"><b>{log.progress}%</b>{log.text && ` · ${log.text}`}
-                              <span className="text-xs text-slate-400"> — {log.byName}</span></span>
+                              <span data-wi-pii="schedule-history-name" className="text-xs text-slate-400"> — {log.byName}</span></span>
                           </li>
                         ))}
                       </ul>

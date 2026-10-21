@@ -187,6 +187,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
                 <input 
+                  data-wi-pii="add-user-email"
                   type="email" 
                   name="new-user-email"
                   autoComplete="off"
@@ -290,7 +291,7 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                     <div key={u.id} className="px-6 py-4 grid grid-cols-12 gap-4 items-center hover:bg-slate-800/40 transition-colors">
                       {editingUser?.id === u.id ? (
                         <div className="col-span-12 grid grid-cols-12 gap-4 items-center">
-                          <div className="col-span-4 font-bold text-white text-xs truncate">{u.email}</div>
+                          <div data-wi-pii="user-email" className="col-span-4 font-bold text-white text-xs truncate">{u.email}</div>
                           <div className="col-span-2">
                             <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${u.isApproved ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
                               {u.isApproved ? 'Approved' : 'Pending'}
@@ -337,11 +338,11 @@ export const UserManagement: React.FC<{ user: FirebaseUser, appUser: AppUser | n
                       ) : (
                         <>
                           <div className="col-span-4 flex items-center gap-3">
-                            <div className="w-9 h-9 bg-slate-800 text-brand-400 rounded-xl flex items-center justify-center font-bold text-xs border border-slate-700">
+                            <div data-wi-pii="user-name" className="w-9 h-9 bg-slate-800 text-brand-400 rounded-xl flex items-center justify-center font-bold text-xs border border-slate-700">
                               {u.email.charAt(0).toUpperCase()}
                             </div>
                             <div className="truncate">
-                              <p className="font-bold text-white text-xs truncate">{u.email}</p>
+                              <p data-wi-pii="user-email" className="font-bold text-white text-xs truncate">{u.email}</p>
                               <p className="text-xs text-slate-400 font-mono mt-0.5">UID: {u.id.substring(0, 8)}</p>
                             </div>
                           </div>

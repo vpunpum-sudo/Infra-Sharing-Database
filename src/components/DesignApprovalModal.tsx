@@ -3504,6 +3504,7 @@ export function DesignApprovalModal({
                                   ชื่อผู้รับจ้าง / บริษัทที่ติดตั้ง <span className="text-rose-400">*</span>
                                 </label>
                                 <input
+                                  data-wi-pii="approval-company"
                                   type="text"
                                   value={contractorInput}
                                   onChange={e => setContractorInput(e.target.value)}
@@ -3517,6 +3518,7 @@ export function DesignApprovalModal({
                                   ผู้ควบคุมงาน / ผู้ประสานงาน
                                 </label>
                                 <input
+                                  data-wi-pii="approval-supervisor"
                                   type="text"
                                   value={contractorContactInput}
                                   onChange={e => setContractorContactInput(e.target.value)}
@@ -3530,6 +3532,7 @@ export function DesignApprovalModal({
                                   เบอร์โทรศัพท์ / ข้อมูลติดต่อ
                                 </label>
                                 <input
+                                  data-wi-pii="approval-phone"
                                   type="text"
                                   value={contractorPhoneInput}
                                   onChange={e => setContractorPhoneInput(e.target.value)}
@@ -3543,6 +3546,7 @@ export function DesignApprovalModal({
                                   เลขที่สัญญา / ใบสั่งจ้าง PO
                                 </label>
                                 <input
+                                  data-wi-pii="approval-contract"
                                   type="text"
                                   value={contractorPoInput}
                                   onChange={e => setContractorPoInput(e.target.value)}
@@ -3688,25 +3692,25 @@ export function DesignApprovalModal({
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">ชื่อบริษัทผู้รับจ้าง:</span>
-                              <strong className="text-white truncate block" title={contractorView.name}>
+                              <strong data-wi-pii="approval-company" className="text-white truncate block" title={contractorView.name}>
                                 {contractorView.name}
                               </strong>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">ผู้ควบคุมงาน / ประสานงาน:</span>
-                              <span className="text-slate-200 truncate block">
+                              <span data-wi-pii="approval-supervisor" className="text-slate-200 truncate block">
                                 {contractorView.contact}
                               </span>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">เบอร์ติดต่อ:</span>
-                              <span className="text-slate-200 truncate block">
+                              <span data-wi-pii="approval-phone" className="text-slate-200 truncate block">
                                 {contractorView.phone}
                               </span>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-950 border border-slate-800/80">
                               <span className="text-slate-400 block text-[10px]">เลขที่สัญญา / PO:</span>
-                              <span className="text-amber-300 truncate block font-mono">
+                              <span data-wi-pii="approval-contract" className="text-amber-300 truncate block font-mono">
                                 {contractorView.po}
                               </span>
                             </div>
@@ -3772,10 +3776,10 @@ export function DesignApprovalModal({
 
                                     {isSigned ? (
                                       <div className="space-y-1">
-                                        <div className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
-                                          {signOff.signatureDataUrl && <img src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
+                                        <div data-wi-pii="approval-signature" className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
+                                          {signOff.signatureDataUrl && <img data-wi-pii="previous-signature" src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
                                         </div>
-                                        <p className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
+                                        <p data-wi-pii="approval-signer-name" className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
                                         <p className="text-[10px] text-slate-400 break-words">ตำแหน่ง: {signOff.position || 'ไม่ได้ระบุ'}</p>
                                         <p className="text-[9px] text-slate-500">{new Date(signOff.signedAt || '').toLocaleDateString('th-TH')}</p>
                                       </div>
@@ -3862,10 +3866,10 @@ export function DesignApprovalModal({
 
                                     {isSigned ? (
                                       <div className="space-y-1">
-                                        <div className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
-                                          {signOff.signatureDataUrl && <img src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
+                                        <div data-wi-pii="approval-signature" className="h-14 w-full rounded bg-white/90 flex items-center justify-center p-1">
+                                          {signOff.signatureDataUrl && <img data-wi-pii="previous-signature" src={signOff.signatureDataUrl} alt="ลายเซ็น" className="max-h-full max-w-full object-contain" />}
                                         </div>
-                                        <p className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
+                                        <p data-wi-pii="previous-signer" className="text-[11px] font-bold text-white break-words">ชื่อ-นามสกุล: {signOff.signedBy || '-'}</p>
                                         <p className="text-[10px] text-slate-400 break-words">ตำแหน่ง: {signOff.position || 'ไม่ได้ระบุ'}</p>
                                         <p className="text-[9px] text-slate-500">{new Date(signOff.signedAt || '').toLocaleDateString('th-TH')}</p>
                                       </div>
@@ -4048,6 +4052,7 @@ export function DesignApprovalModal({
               <div>
                 <label className="block font-bold text-slate-300 mb-1">ชื่อ-นามสกุล ผู้ลงนาม</label>
                 <input
+                  data-wi-pii="signer-name"
                   type="text"
                   value={signerName}
                   onChange={e => setSignerName(e.target.value)}
@@ -4058,6 +4063,7 @@ export function DesignApprovalModal({
               <div>
                 <label className="block font-bold text-slate-300 mb-1">ตำแหน่ง</label>
                 <input
+                  data-wi-pii="signer-position"
                   type="text"
                   value={signerPosition}
                   onChange={e => setSignerPosition(e.target.value)}
@@ -4094,6 +4100,7 @@ export function DesignApprovalModal({
                 </div>
                 <div className="relative border-2 border-dashed border-slate-700 rounded-xl bg-white overflow-hidden touch-none">
                   <canvas
+                    data-wi-pii="signature-pad"
                     ref={canvasRef}
                     width={440}
                     height={120}
