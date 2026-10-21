@@ -29,7 +29,6 @@ export function classifyRequest(request: RequestShape, config: { functionsOrigin
 }
 
 export function createGuard(config: { functionsOrigin: string }) {
-  let phase: 'observe' | 'enforce' = 'observe';
   const observed: string[] = [];
   const blocked: string[] = [];
   let quietDenied = 0;
@@ -38,16 +37,10 @@ export function createGuard(config: { functionsOrigin: string }) {
     observed, blocked,
     get quietDenied() { return quietDenied; },
     get tripped() { return tripped; },
-    get phase() { return phase; },
-    enforce() { phase = 'enforce'; },
     handle(request: RequestShape): 'continue' | 'abort' {
       const decision = classifyRequest(request, config);
-      if (phase === 'observe') {
-        if (decision !== 'allow') observed.push(describeRequest(request));
-        return 'continue';
-      }
       if (decision === 'deny-quiet') { quietDenied += 1; return 'abort'; }
-      if (decision === 'block') { blocked.push(describeRequest(request)); tripped = true; return 'abort'; }
+      if (decision === 'block') { const description = describeRequest(request); blocked.push(description); observed.push(description); tripped = true; return 'abort'; }
       return 'continue';
     }
   };

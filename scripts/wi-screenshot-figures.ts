@@ -8,7 +8,7 @@ import { checkMaskResult, WI_MASK_PLACEHOLDERS } from '../src/utils/wiScreenshot
 import { candidateFractions, validateClickPoint, type Point, type Rect } from '../src/utils/wiScreenshotPoint';
 import { evaluateRouteReadiness, routeReadinessMessage, type ReadinessSample } from '../src/utils/wiScreenshotReadiness';
 import { selectRoute } from '../src/utils/wiScreenshotRoute';
-import { toPercentMarks, stackParts, type Mark, type MarkBox } from '../src/utils/wiScreenshotMarks';
+import { toPercentMarks, stackParts, type Mark, type MarkAnchor, type MarkBox } from '../src/utils/wiScreenshotMarks';
 import { SafetyViolation, type FigureResult } from '../src/utils/wiScreenshotRun';
 import type { KnownValues } from '../src/utils/wiScreenshotRedact';
 import { captureCheckedScreenshot } from '../src/utils/wiScreenshotCaptureCheck';
@@ -139,6 +139,7 @@ export type CaptureContext = {
   baseUrl: string;
   projectId: string;
   routeName?: string;
+  enclosureId?: string;
   tempDir: string;
   known: KnownValues;
   guardTripped: () => boolean;
@@ -158,15 +159,20 @@ async function goto(ctx: CaptureContext, path: string): Promise<void> {
   if (new URL(ctx.page.url()).pathname !== path) throw new Error(`redirected from ${path}`);
 }
 
-export async function clickSafe(target: Locator, action: string): Promise<void> {
+/** `labelAttribute` reads the label from that attribute only, for controls whose text is data (such as an enclosure name). */
+export async function clickSafe(target: Locator, action: string, labelAttribute?: string): Promise<void> {
   try { assertAllowedAction(action); }
   catch { throw new SafetyViolation('Disallowed action'); }
-  const label = await target.first().evaluate(element => element.textContent?.trim() || element.getAttribute('aria-label') || '');
+  const label = labelAttribute
+    ? await target.first().getAttribute(labelAttribute) ?? ''
+    : await target.first().evaluate(element => element.textContent?.trim() || element.getAttribute('aria-label') || '');
   try { assertSafeClickLabel(label, action); }
   catch { throw new SafetyViolation('Disallowed click label'); }
   await target.first().click();
 }
 
+// Exact: the slide-6 preview behind the popup has an "ผู้ลงนามอนุมัติโครงการ" heading that a substring match also finds.
+const SIGN_HEADING = 'h3:text-is("ลงนามอนุมัติ :")';
 const approvalModal = (page: Page) => page.locator('div.fixed:has(h2:has-text("FIBER INFRA SHARING")) > div').first();
 const signerName = (page: Page) => page.locator('[data-wi-pii="signer-name"]');
 
@@ -196,7 +202,7 @@ export async function openApprovalSignForm(page: Page, modal: Locator): Promise<
 export async function closeApprovalSignForm(page: Page, modal: Locator): Promise<void> {
   assertAllowedAction('pressEscape');
   await page.keyboard.press('Escape');
-  const popup = page.locator('div.fixed:has(h3:has-text("ลงนามอนุมัติ")) > div').last();
+  const popup = page.locator(`div.fixed:has(${SIGN_HEADING}) > div`).last();
   if (await popup.isVisible().catch(() => false)) {
     await clickSafe(popup.getByRole('button', { name: 'ปิด', exact: true }).first(), 'closeSignForm');
   }
@@ -270,16 +276,22 @@ async function maskPage(ctx: CaptureContext, spec: MaskSpec, mutate = true): Pro
   return checkMaskResult(snapshot, spec, ctx.known)[0];
 }
 
-async function measuredMarks(page: Page, targets: readonly string[], clip: Rect, names = targets): Promise<{ marks: Mark[]; error?: string }> {
+/** A selector marked at its top-left corner, or an explicitly anchored selector. */
+type MarkTarget = string | { selector: string; anchor: MarkAnchor };
+const targetSelector = (target: MarkTarget) => typeof target === 'string' ? target : target.selector;
+
+async function measuredMarks(page: Page, targets: readonly MarkTarget[], clip: Rect, names = targets.map(targetSelector)): Promise<{ marks: Mark[]; error?: string }> {
   const boxes: MarkBox[] = [];
-  for (const [index, selector] of targets.entries()) boxes.push({ name: names[index], box: await box(page, selector), anchor: 'top-left' });
+  for (const [index, target] of targets.entries()) {
+    boxes.push({ name: names[index], box: await box(page, targetSelector(target)), anchor: typeof target === 'string' ? 'top-left' : target.anchor });
+  }
   const result = toPercentMarks(boxes, clip, []);
   if (result.kept.length) return { marks: [], error: `${result.kept[0]} not measurable` };
-  for (const warning of result.warnings) console.warn(warning);
+  if (result.warnings.length) return { marks: [], error: result.warnings[0] };
   return { marks: result.marks };
 }
 
-async function screenshot(ctx: CaptureContext, id: FigureId, targets: readonly string[], crop?: string): Promise<CapturedFigure> {
+async function screenshot(ctx: CaptureContext, id: FigureId, targets: readonly MarkTarget[], crop?: string): Promise<CapturedFigure> {
   checkSafety(ctx);
   const maskError = await maskPage(ctx, WI_MASK_SPECS[id]);
   if (maskError) return { id, status: `failed: ${maskError}` };
@@ -298,18 +310,20 @@ async function screenshot(ctx: CaptureContext, id: FigureId, targets: readonly s
   return { id, status: 'captured', marks: measured.marks, staged };
 }
 
-const MARK_TARGETS: Partial<Record<FigureId, readonly string[]>> = {
+const MARK_TARGETS: Partial<Record<FigureId, readonly MarkTarget[]>> = {
   login: ['#login-email', '#login-password', 'button:has-text("ลืมรหัสผ่าน")', 'form:has(#login-email) button[type="submit"]'],
   dashboard: ['header nav', 'input[aria-label="ค้นหาชื่อโครงการหรือรหัสเส้นทาง"]', 'button:has-text("ทั้งหมด")', 'button:has-text("สร้างโครงการ")', '[data-wi-project-id]:visible', '[data-wi-project-id]:visible .card-action'],
   'card-actions': ['[data-wi-project-id]:visible button:has-text("แผนงาน")', '[data-wi-project-id]:visible button:has-text("ไฟล์โครงการ")', '[data-wi-project-id]:visible button:has-text("Export KMZ")', '[data-wi-project-id]:visible button:has-text("เปิดแผนที่")', '[data-wi-project-id]:visible button[aria-label="แก้ไขโครงการ"]', '[data-wi-project-id]:visible button[aria-label="ลบโครงการ"]'],
   'project-form': ['label:has-text("ชื่อโครงการ") + input', '#project-route-code', 'div.fixed:has(#project-route-code) .grid.grid-cols-3', 'div.fixed:has(#project-route-code) button:has-text("สร้างโครงการ")'],
   'enclosure-form': ['input[placeholder="e.g., SN-001"]', 'select:has(option:has-text("Keep clicked location"))', 'select:has(option:text-is("Select Type"))', 'select:has(option:has-text("Select Location Type"))', 'input[placeholder="e.g., 13.7563"]', 'button:has-text("Save Enclosure")'],
-  'core-manager': ['select:has(option:has-text("Owner"))', 'select:has(option:has-text("Priority"))', 'text=Enclosure span for Tube Priority', 'text=Owner', 'text=Status', 'button:has-text("Confirm Changes?")'],
-  splice: ['text=Fiber A', 'text=Fiber B', 'text=Core', 'svg', 'button:has-text("Splice")', 'button:has-text("Export Diagram as PDF")'],
-  files: ['button:has-text("สร้างโฟลเดอร์")', 'button:has-text("เพิ่มไฟล์")', 'nav[aria-label="ตำแหน่งโฟลเดอร์"]', 'section[role="dialog"] ul li', 'section[role="dialog"] li:has(svg)', 'section[role="dialog"] button[title="ดาวน์โหลด"]'],
-  schedule: ['section[role="dialog"] header', '.schedule-plan', 'section[role="dialog"] .grid.grid-cols-2', 'section[role="dialog"] input[aria-label="ชื่องาน"]', '[data-wi-pii="task-owner"]', '#schedule-progress'],
-  'approval-request': ['[data-wi-pii="approval-company"]', 'text=กำหนดการติดตั้ง', 'text=บันทึกประกอบ', 'text=ตัวอย่างเอกสาร', 'button:has-text("ส่งคำขออนุมัติแบบ")'],
-  'approval-sign': ['div.fixed:has([data-wi-pii="signer-name"]) h3:has-text("ลงนามอนุมัติ")', '[data-wi-pii="signer-name"]', '[data-wi-pii="signer-position"]', '[data-wi-pii="signature-pad"]', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("อนุมัติ (Approve)")', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("ไม่อนุมัติ / ขอแก้ไข")'],
+  splice: ['[data-wi-splice-route="true"] >> nth=0', '[data-wi-splice-side-b="true"]','[data-wi-splice-endpoint="true"]', 'g:has(> [data-wi-splice-link="true"])',
+    // ⑤ and ⑥ sit on the centres of the tab and the zoom group: their top-left corners fall on neighbouring controls.
+    { selector: 'button:has-text("Splice Summary")', anchor: 'center' }, { selector: 'div:has(> button[aria-label="Zoom In"])', anchor: 'center' }],
+  files: ['button:has-text("สร้างโฟลเดอร์")', 'button:has-text("เพิ่มไฟล์")', 'nav[aria-label="ตำแหน่งโฟลเดอร์"]', 'section[role="dialog"] nav[aria-label="ตำแหน่งโฟลเดอร์"] + ul li', 'section[role="dialog"] ul li:has(button[title="ดาวน์โหลด"])', 'section[role="dialog"] button[title="ดาวน์โหลด"]'],
+  // ① status chip, ② overall bar with its dashed plan marker, ③ counts, ④ first timeline row, ⑤ task details, ⑥ progress.
+  schedule: [{ selector: 'section[role="dialog"] header .schedule-chip', anchor: 'center' }, { selector: 'section[role="dialog"] div.flex-1:has(> div.border-dashed)', anchor: 'left-center' },
+    'section[role="dialog"] .grid.grid-cols-2', 'section[role="dialog"] button.schedule-row .schedule-plan', '[data-wi-pii="task-owner"]', '#schedule-progress'],
+  'approval-sign': [`div.fixed:has([data-wi-pii="signer-name"]) ${SIGN_HEADING}`, '[data-wi-pii="signer-name"]', '[data-wi-pii="signer-position"]', '[data-wi-pii="signature-pad"]', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("อนุมัติ (Approve)")', 'div.fixed:has([data-wi-pii="signer-name"]) button:has-text("ไม่อนุมัติ / ขอแก้ไข")'],
   users: ['input[name="new-user-email"]', 'select >> nth=0', 'select >> nth=1', 'button:has-text("Add User")', 'button:text-is("Approved")', 'button[title="Edit User"]'],
   permissions: ['table th', 'table th:nth-child(2)', 'table td label:has(input[type="checkbox"])', 'button:has-text("Save Changes")'],
   settings: ['button:has-text("Enclosure Types")', 'text=Enclosure Types', 'input', 'label[for="icon-upload"]', 'button:has-text("บันทึก")'],
@@ -351,6 +365,9 @@ async function composite(ctx: CaptureContext, id: FigureId, parts: { png: Buffer
   return { id, status: 'captured', staged, marks: geometry.marks };
 }
 
+// Rendered only for password accounts; a Google-linked account shows a notice instead.
+const PROFILE_SECURITY = 'section:has(h2:text-is("Security & Password"))';
+
 async function captureProfile(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, '/');
   if (!await visibleWithin(ctx.page.locator('[data-wi-pii="account-name"]'), 15_000)) return { id: 'profile', status: 'failed: account name not shown' };
@@ -370,18 +387,24 @@ async function captureProfile(ctx: CaptureContext): Promise<CapturedFigure> {
   const profileSpec = { regions: WI_MASK_SPECS.profile.regions.filter(region => !['account-name', 'account-avatar'].includes(region.name)) };
   const profileMask = await maskPage(ctx, profileSpec);
   if (profileMask) return { id: 'profile', status: `failed: ${profileMask}` };
-  const bodyClip = { x: 0, y: 64, width: 1440, height: 836 };
-  const bodyMarks = await measuredMarks(ctx.page, ['[data-wi-pii="profile-display-name"]', 'text=Security & Password'], bodyClip);
-  if (bodyMarks.error) return { id: 'profile', status: `failed: ${bodyMarks.error}` };
-  const bodyShot = await captureCheckedScreenshot(
-    () => ctx.page.screenshot({ clip: bodyClip, animations: 'disabled' }),
-    () => maskPage(ctx, profileSpec, false));
-  if (bodyShot.ok === false) return { id: 'profile', status: `failed: ${bodyShot.error}` };
-  const bodyPng = bodyShot.value;
-  return composite(ctx, 'profile', [
-    { png: headPng, width: 1440, height: 64, marks: headMarks.marks },
-    { png: bodyPng, width: 1440, height: 836, marks: bodyMarks.marks }
-  ]);
+  // Security & Password sits below the first screen: crop Personal Information and the security section
+  // from the full page (measured at scroll 0, so element boxes are page coordinates) and skip Appearance.
+  const appearance = await box(ctx.page, 'section:has(h2:text-is("Appearance"))');
+  const security = await box(ctx.page, PROFILE_SECURITY);
+  if (!appearance || !security) return { id: 'profile', status: 'failed: profile sections not measurable' };
+  const bodyClip = { x: 0, y: 64, width: 1440, height: Math.round(appearance.y - 64) };
+  const securityClip = { x: 0, y: Math.round(security.y), width: 1440, height: Math.round(security.height + 24) };
+  const parts: { png: Buffer; width: number; height: number; marks: Mark[] }[] = [{ png: headPng, width: 1440, height: 64, marks: headMarks.marks }];
+  for (const [clip, target] of [[bodyClip, '[data-wi-pii="profile-display-name"]'], [securityClip, `${PROFILE_SECURITY} h2`]] as const) {
+    const measured = await measuredMarks(ctx.page, [target], clip);
+    if (measured.error) return { id: 'profile', status: `failed: ${measured.error}` };
+    const shot = await captureCheckedScreenshot(
+      () => ctx.page.screenshot({ clip, fullPage: true, animations: 'disabled' }),
+      () => maskPage(ctx, profileSpec, false));
+    if (shot.ok === false) return { id: 'profile', status: `failed: ${shot.error}` };
+    parts.push({ png: shot.value, width: clip.width, height: clip.height, marks: measured.marks });
+  }
+  return composite(ctx, 'profile', parts);
 }
 
 async function captureRouteDraw(ctx: CaptureContext): Promise<CapturedFigure> {
@@ -494,28 +517,150 @@ async function captureCoreManager(ctx: CaptureContext): Promise<CapturedFigure> 
   await clickSafe(route, 'openCoreManager');
   const panel = page.locator('div.fixed.top-0.right-0.h-screen').first();
   if (!await visibleWithin(panel)) return { id: 'core-manager', status: 'skipped: permission' };
-  const expand = panel.getByRole('button', { name: /expand|tube/i }).first();
-  if (await expand.isVisible().catch(() => false)) await clickSafe(expand, 'selectCore');
-  const core = panel.locator('button:has-text("Core")').first();
-  if (await core.isVisible().catch(() => false)) await clickSafe(core, 'selectCore');
-  // The sixth callout appears only when the sample has a pending edit. Do not edit production data for a figure.
-  if (!await panel.getByText('Confirm Changes?').isVisible().catch(() => false)) return { id: 'core-manager', status: 'skipped: data-state' };
-  return screenshot(ctx, 'core-manager', MARK_TARGETS['core-manager']!, 'div.fixed.top-0.right-0.h-screen');
+  // Tubes start collapsed; open the first one this account may expand (a local view toggle only).
+  const expand = panel.getByRole('button', { name: /^Expand tube \d+$/ }).first();
+  if (await expand.isVisible().catch(() => false)) await clickSafe(expand, 'expandTube');
+  const core = panel.locator('.group.relative.cursor-pointer').first();
+  if (!await visibleWithin(core)) return { id: 'core-manager', status: 'skipped: data-state' };
+  const panelClip = await box(page, 'div.fixed.top-0.right-0.h-screen');
+  if (!panelClip) return { id: 'core-manager', status: 'failed: core panel not measurable' };
+  const panelMarks = await measuredMarks(page, ['text=Filter by Owner', '#enclosure-span', 'select:has(option:text-is("None"))', '.group.relative.cursor-pointer'], panelClip);
+  if (panelMarks.error) return { id: 'core-manager', status: `failed: ${panelMarks.error}` };
+  const panelMask = await maskPage(ctx, WI_MASK_SPECS['core-manager']);
+  if (panelMask) return { id: 'core-manager', status: `failed: ${panelMask}` };
+  const panelShot = await captureCheckedScreenshot(() => page.screenshot({ clip: panelClip, animations: 'disabled' }), () => maskPage(ctx, WI_MASK_SPECS['core-manager'], false));
+  if (panelShot.ok === false) return { id: 'core-manager', status: `failed: ${panelShot.error}` };
+  await clickSafe(core, 'selectCore');
+  const detail = page.locator('div.fixed:has(h3:text-is("Core Details")) > div').last();
+  if (!await visibleWithin(detail)) return { id: 'core-manager', status: 'failed: core detail did not open' };
+  const edit = detail.getByRole('button', { name: 'Edit', exact: true });
+  if (!await visibleWithin(edit)) return { id: 'core-manager', status: 'skipped: permission' };
+  await clickSafe(edit, 'openCoreEdit');
+  try {
+    const save = detail.getByRole('button', { name: 'Save Changes', exact: true });
+    if (!await visibleWithin(save)) return { id: 'core-manager', status: 'failed: save control not shown' };
+    const detailClip = await box(page, 'div.fixed:has(h3:text-is("Core Details")) > div', true);
+    if (!detailClip) return { id: 'core-manager', status: 'failed: core detail not measurable' };
+    const detailMarks = await measuredMarks(page, ['div.fixed:has(h3:text-is("Core Details")) label:text-is("Status")', 'div.fixed:has(h3:text-is("Core Details")) button:has-text("Save Changes")'], detailClip);
+    if (detailMarks.error) return { id: 'core-manager', status: `failed: ${detailMarks.error}` };
+    const maskError = await maskPage(ctx, WI_MASK_SPECS['core-manager']);
+    if (maskError) return { id: 'core-manager', status: `failed: ${maskError}` };
+    const detailShot = await captureCheckedScreenshot(() => page.screenshot({ clip: detailClip, animations: 'disabled' }), () => maskPage(ctx, WI_MASK_SPECS['core-manager'], false));
+    if (detailShot.ok === false) return { id: 'core-manager', status: `failed: ${detailShot.error}` };
+    return composite(ctx, 'core-manager', [
+      { png: panelShot.value, width: panelClip.width, height: panelClip.height, marks: panelMarks.marks },
+      { png: detailShot.value, width: detailClip.width, height: detailClip.height, marks: detailMarks.marks }
+    ]);
+  } finally {
+    const cancel = detail.getByRole('button', { name: 'Cancel', exact: true });
+    if (await cancel.isVisible().catch(() => false)) await clickSafe(cancel, 'cancelDraft');
+    const close = detail.getByRole('button', { name: 'ปิด', exact: true });
+    if (await close.isVisible().catch(() => false)) await clickSafe(close, 'closePopup');
+    // The detail card animates out after Close; only a card still shown after that counts as not closed.
+    if (!await detail.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false)) throw new SafetyViolation('core draft did not close');
+  }
 }
 
 async function captureSplice(ctx: CaptureContext): Promise<CapturedFigure> {
   await goto(ctx, PROJECT_PATH(ctx.projectId));
   const page = ctx.page;
   if (!await waitProjectReady(page)) return { id: 'splice', status: 'failed: project did not load' };
-  const enclosure = await firstSidebarEntry(page, 'Enclosures', 'sidebar-enclosure-');
-  if (!enclosure) return { id: 'splice', status: 'skipped: data-state' };
+  // A connected enclosure must be selected from the observed scene record.
+  if (!ctx.enclosureId) return { id: 'splice', status: 'skipped: data-state' };
+  // Exact attribute match: the CSS-escaped `#id` form matched nothing for observed IDs.
+  const enclosure = page.locator(`li[id=${JSON.stringify(`sidebar-enclosure-${ctx.enclosureId}`)}]`);
+  if (!await visibleWithin(enclosure, 3_000)) {
+    const heading = page.locator('.glass-panel button').filter({ has: page.locator('span.uppercase').getByText('Enclosures', { exact: true }) }).first();
+    if (!await visibleWithin(heading, 3_000)) return { id: 'splice', status: 'skipped: permission' };
+    await clickSafe(heading, 'expandEnclosuresList');
+  }
+  if (!await visibleWithin(enclosure, 10_000)) return { id: 'splice', status: 'skipped: data-state' };
   await clickSafe(enclosure, 'openSpliceManager');
   const panelSelector = 'div.bg-slate-900.border-l:has(h2:text-matches("^Enclosure:"))';
-  const tool = page.getByRole('button', { name: 'Splicing Tool', exact: true });
-  if (!await visibleWithin(tool)) return { id: 'splice', status: 'skipped: permission' };
-  await clickSafe(tool, 'selectFiberSide');
-  if (!await visibleWithin(page.getByText(/Spliced to|Splice Core/).first())) return { id: 'splice', status: 'skipped: data-state' };
+  const panel = page.locator(panelSelector).first();
+  if (!await visibleWithin(panel)) return { id: 'splice', status: 'failed: splice panel did not open' };
+  const diagram = panel.getByRole('button', { name: 'Diagram', exact: true });
+  if (!await visibleWithin(diagram)) return { id: 'splice', status: 'skipped: permission' };
+  await clickSafe(diagram, 'openSpliceDiagram');
+  // A straight link path has a zero-width or zero-height box, so Playwright never sees it as visible.
+  // Wait for it to attach; the mark measures its group, whose connection dots give it a real box.
+  if (!await panel.locator('[data-wi-splice-link="true"]').first().waitFor({ state: 'attached', timeout: 10_000 }).then(() => true, () => false)) return { id: 'splice', status: 'skipped: data-state' };
+  if (await panel.locator('[data-wi-splice-route="true"]').count() < 2 || !await panel.locator('[data-wi-splice-endpoint="true"]').count()) return { id: 'splice', status: 'skipped: data-state' };
+  // The enclosure info card opens by default and shows the enclosure's coordinates over the top tubes: collapse it (local view state only).
+  if (await panel.locator('.enclosure-diagram-card').isVisible().catch(() => false)) {
+    await clickSafe(panel.locator('.enclosure-diagram-badge'), 'collapseDiagramInfo', 'title');
+    if (!await panel.locator('.enclosure-diagram-card').waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false)) {
+      throw new SafetyViolation('enclosure coordinates are still visible');
+    }
+  }
+  await page.waitForTimeout(1_000); // endpoint layout animation
+  // The side-B route label sits under the diagram toolbar, so ② marks the rightmost tube of the opposite row instead.
+  const sideB = await panel.locator('[data-wi-splice-endpoint="true"]').evaluateAll(elements => {
+    const boxes = elements.map(element => ({ element, box: element.getBoundingClientRect() }));
+    const candidates = boxes.filter(item => Math.abs(item.box.y - boxes[0].box.y) > 20 && item.box.width && item.box.height);
+    const target = candidates.sort((a, b) => b.box.x - a.box.x)[0];
+    target?.element.setAttribute('data-wi-splice-side-b', 'true');
+    return !!target;
+  });
+  if (!sideB) return { id: 'splice', status: 'skipped: data-state' };
   return screenshot(ctx, 'splice', MARK_TARGETS.splice!, panelSelector);
+}
+
+// The read-only preview carries the same data-wi-pii tags as spans, so only the editor's input proves the draft is open.
+const CONTRACTOR_EDITOR = 'input[data-wi-pii="approval-supervisor"]';
+
+async function captureApprovalRequest(ctx: CaptureContext): Promise<CapturedFigure> {
+  const id = 'approval-request';
+  const page = ctx.page;
+  const modal = approvalModal(page);
+  const modalSelector = 'div.fixed:has(h2:has-text("FIBER INFRA SHARING")) > div';
+  const sixthSlide = modal.getByRole('button', { name: '6', exact: true });
+  if (!await visibleWithin(sixthSlide)) return { id, status: 'skipped: data-state' };
+  await clickSafe(sixthSlide, 'openSignSlide');
+  const openDraft = modal.getByRole('button', { name: 'กรอก/แก้ไขข้อมูลผู้รับจ้าง', exact: true });
+  if (!await visibleWithin(openDraft)) return { id, status: 'skipped: permission' };
+  await clickSafe(openDraft, 'openContractorDraft');
+  const editorSpec = { regions: WI_MASK_SPECS[id].regions.filter(region => !region.name.startsWith('approval-request-')) };
+  let slidePart: { png: Buffer; width: number; height: number; marks: Mark[] };
+  try {
+    if (!await visibleWithin(page.locator(CONTRACTOR_EDITOR))) return { id, status: 'failed: contractor draft did not open' };
+    await page.locator('input[data-wi-pii="approval-company"]').scrollIntoViewIfNeeded();
+    const clip = await box(page, modalSelector);
+    if (!clip) return { id, status: 'failed: approval preview not measurable' };
+    // The page buttons sit below the slide, outside this crop; ④ marks the slide's own "SLIDE x / y" header.
+    const measured = await measuredMarks(page, ['input[data-wi-pii="approval-company"]', 'div.fixed:has(h2:has-text("FIBER INFRA SHARING")) span:text-matches("^SLIDE [0-9]+ / [0-9]+$")'], clip);
+    if (measured.error) return { id, status: `failed: ${measured.error}` };
+    const maskError = await maskPage(ctx, editorSpec);
+    if (maskError) return { id, status: `failed: ${maskError}` };
+    const shot = await captureCheckedScreenshot(() => page.screenshot({ clip, animations: 'disabled' }), () => maskPage(ctx, editorSpec, false));
+    if (shot.ok === false) return { id, status: `failed: ${shot.error}` };
+    slidePart = { png: shot.value, width: clip.width, height: clip.height, marks: measured.marks };
+  } finally {
+    const closeDraft = modal.getByRole('button', { name: 'ยกเลิกการแก้ไข', exact: true });
+    if (await closeDraft.isVisible().catch(() => false)) await clickSafe(closeDraft, 'closeContractorDraft');
+    if (await page.locator(CONTRACTOR_EDITOR).isVisible().catch(() => false)) throw new SafetyViolation('contractor draft did not close');
+  }
+  const openForm = modal.getByRole('button', { name: 'ยื่นขออนุมัติใหม่', exact: true });
+  if (!await visibleWithin(openForm)) return { id, status: 'skipped: data-state' };
+  await clickSafe(openForm, 'openApprovalRequestForm');
+  if (!await visibleWithin(modal.getByRole('heading', { name: /ยื่นคำขออนุมัติแบบโครงการใหม่/ }))) return { id, status: 'failed: approval request form did not open' };
+  const formClip = await box(page, modalSelector);
+  if (!formClip) return { id, status: 'failed: approval request form not measurable' };
+  const formMarks = await measuredMarks(page, [
+    'div.fixed:has(h2:has-text("FIBER INFRA SHARING")) input[type="number"]',
+    '[data-wi-pii="approval-request-notes"]',
+    'div.fixed:has(h2:has-text("FIBER INFRA SHARING")) button:has-text("ส่งคำขออนุมัติแบบ")'
+  ], formClip);
+  if (formMarks.error) return { id, status: `failed: ${formMarks.error}` };
+  const formSpec = { regions: WI_MASK_SPECS[id].regions.filter(region => region.name.startsWith('account-') || region.name.startsWith('approval-request-')) };
+  const formMask = await maskPage(ctx, formSpec);
+  if (formMask) return { id, status: `failed: ${formMask}` };
+  const formShot = await captureCheckedScreenshot(() => page.screenshot({ clip: formClip, animations: 'disabled' }), () => maskPage(ctx, formSpec, false));
+  if (formShot.ok === false) return { id, status: `failed: ${formShot.error}` };
+  const result = await composite(ctx, id, [slidePart, { png: formShot.value, width: formClip.width, height: formClip.height, marks: formMarks.marks }]);
+  if (!result.marks || result.marks.length !== 5) return { id, status: 'failed: approval request mark count mismatch' };
+  const [company, preview, distance, notes, submit] = result.marks;
+  return { ...result, marks: [company, distance, notes, preview, submit] };
 }
 
 async function captureMap(ctx: CaptureContext, id: 'map' | 'context-menu'): Promise<CapturedFigure> {
@@ -674,14 +819,18 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
       const button = card.getByRole('button', { name: 'ไฟล์โครงการ' });
       if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openFiles');
-      if (await page.locator('section[role="dialog"] ul').count() < 2) return { id, status: 'skipped: data-state' };
+      const dialog = page.locator('section[role="dialog"][data-wi-fresh="true"]');
+      if (!await visibleWithin(dialog, 20_000)) throw new SafetyViolation('server-fresh files or folders unavailable');
+      if (!await dialog.locator('nav[aria-label="ตำแหน่งโฟลเดอร์"] + ul li').count() || !await dialog.locator('ul li:has(button[title="ดาวน์โหลด"])').count()) return { id, status: 'skipped: data-state' };
     }
     if (id === 'schedule') {
       const button = card.getByRole('button', { name: /แผนงาน/ });
       if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openSchedule');
+      if (!await visibleWithin(page.locator('section[role="dialog"][data-wi-fresh="true"]'), 20_000)) throw new SafetyViolation('server-fresh schedule unavailable');
       await page.locator('section[role="dialog"] button.schedule-row').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined);
-      const task = page.locator('section[role="dialog"] button.schedule-row').filter({ hasNot: page.locator('[aria-label="ซิงก์กับเอกสารอนุมัติ"]') }).first();
+      const task = page.locator('section[role="dialog"] button.schedule-row:has(.schedule-plan)')
+        .filter({ hasNot: page.locator('[aria-label="ซิงก์กับเอกสารอนุมัติ"]') }).first();
       if (!await task.count()) return { id, status: 'skipped: data-state' };
       await clickSafe(task, 'selectTask');
       if (!await page.locator('#schedule-progress').isVisible().catch(() => false)) return { id, status: 'skipped: data-state' };
@@ -690,6 +839,7 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
       const button = card.getByRole('button', { name: /เอกสารอนุมัติ|ลงนาม 2 ระดับ/ });
       if (!await visibleWithin(button)) return { id, status: 'skipped: permission' };
       await clickSafe(button, 'openApprovalDocument');
+      if (id === 'approval-request') return await captureApprovalRequest(ctx);
       if (id === 'approval-sign') {
         console.log('approval-sign action: openApprovalDocument');
         const modal = approvalModal(page);
@@ -700,23 +850,24 @@ export async function captureFigure(ctx: CaptureContext, id: FigureId): Promise<
         if (state === 'skipped: data-state') return { id, status: state };
         try {
           if (state === 'failed: sign-form-not-opened') return { id, status: state };
+          const filled = await page.locator('[data-wi-pii="signer-name"], [data-wi-pii="signer-position"]').evaluateAll(elements =>
+            elements.some(element => element instanceof HTMLInputElement && element.value.trim() !== ''));
+          if (filled) throw new SafetyViolation('signing form identity fields were prefilled');
           return await screenshot(ctx, id, MARK_TARGETS[id]!, 'div.fixed:has([data-wi-pii="signer-name"]) > div');
         } finally {
           await closeApprovalSignForm(page, modal);
         }
       }
-      if (id === 'approval-request' && !await page.locator('[data-wi-pii="approval-supervisor"]').isVisible().catch(() => false)) return { id, status: 'skipped: data-state' };
     }
     const targets = MARK_TARGETS[id];
     if (!targets) return { id, status: 'failed: capture targets unavailable' };
-    const crop = item.clip === 'element' ? id === 'card-actions' ? `[data-wi-project-id="${ctx.projectId}"]` : id === 'project-form' ? 'div.fixed:has(input#project-route-code) .glass-panel-elevated' : id === 'approval-request' ? 'div.fixed:has(h2:has-text("FIBER INFRA SHARING")) > div' : 'section[role="dialog"]' : undefined;
+    const crop = item.clip === 'element' ? id === 'card-actions' ? `[data-wi-project-id="${ctx.projectId}"]` : id === 'project-form' ? 'div.fixed:has(input#project-route-code) .glass-panel-elevated' : 'section[role="dialog"]' : undefined;
     const result = await screenshot(ctx, id, targets, crop);
     if (id === 'project-form') await clickSafe(page.getByRole('button', { name: 'ยกเลิก', exact: true }), 'cancelDraft');
     return result;
   } catch (error) {
     if (error instanceof SafetyViolation || ctx.guardTripped() || ctx.dialogSeen()) throw error;
     const reason = error instanceof Error ? error.message : String(error);
-    if (process.env.WI_SCREENSHOT_DEBUG === '1') console.error(`[debug] ${id}: ${reason.split('\n')[0]}`);
     const needs = WI_FIGURES.find(item => item.id === id)?.needs;
     if (/redirected|not visible|Timeout/i.test(reason) && (needs?.startsWith('permission') || needs === 'admin')) return { id, status: 'skipped: permission' };
     return { id, status: 'failed: capture unavailable' };

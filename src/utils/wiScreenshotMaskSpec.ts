@@ -48,7 +48,7 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
   'enclosure-form': { regions: mapRegions() },
   'route-draw': { regions: mapRegions() },
   'core-manager': { regions: mapRegions() },
-  splice: { regions: mapRegions() },
+  splice: { regions: [...mapRegions(), region('enclosure-coords', 'hide', undefined, false, 'SpliceManager.tsx')] },
   files: { regions: header() },
   schedule: { regions: [...header(), region('task-owner', 'text', WI_MASK_PLACEHOLDERS.supervisor, true, 'ProjectScheduleModal.tsx'), region('schedule-history-name', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'ProjectScheduleModal.tsx')] },
   'approval-request': { regions: [
@@ -56,6 +56,8 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
     region('approval-phone', 'input', WI_MASK_PLACEHOLDERS.phone, true, 'DesignApprovalModal.tsx'),
     region('approval-company', 'input', WI_MASK_PLACEHOLDERS.company, false, 'DesignApprovalModal.tsx'),
     region('approval-contract', 'input', WI_MASK_PLACEHOLDERS.contractNumber, false, 'DesignApprovalModal.tsx'),
+    region('approval-request-company', 'input', WI_MASK_PLACEHOLDERS.company, false, 'DesignApprovalModal.tsx'),
+    region('approval-request-notes', 'input', WI_MASK_PLACEHOLDERS.logDescription, false, 'DesignApprovalModal.tsx'),
     region('approval-signature', 'image', undefined, false, 'DesignApprovalModal.tsx'),
     region('approval-signer-name', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'DesignApprovalModal.tsx'),
     region('previous-signer', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'DesignApprovalModal.tsx')
@@ -91,7 +93,8 @@ export function checkMaskResult(snapshot: PageSnapshot, spec: MaskSpec, knownVal
     if (found?.maskValid?.some(valid => !valid)) return [`mask-region:${region.name}`];
   }
   const content = [snapshot.bodyText, ...snapshot.inputs, ...snapshot.attrs].join('\n');
-  const pii = findPii(content);
+  // Each field is scanned on its own: joined, adjacent dates and numbers in separate inputs read as a phone number.
+  const pii = [snapshot.bodyText, ...snapshot.inputs, ...snapshot.attrs].flatMap(findPii);
   if (pii.length) return [`pii:${pii[0]}`];
   if (findKnownValues(content, knownValues).length) return ['known-value'];
   return [];

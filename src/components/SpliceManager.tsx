@@ -1752,6 +1752,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
               return (
                 <g key={`splice-${i}`}>
                   <path 
+                    data-wi-splice-link="true"
                     d={pathD} 
                     stroke={coreAColor} 
                     strokeWidth="3" 
@@ -1816,6 +1817,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
               <div key={vr.id}>
                 {hasLabel && (
                   <motion.div 
+                    data-wi-splice-route="true"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -1922,6 +1924,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                       const isExpanded = expandedTubes[`diagram-${vr.id}-${item.tubeId}`] ?? expandedTubes[`diagram-${route.id}-${item.tubeId}`];
                       return (
                         <motion.div 
+                          data-wi-splice-endpoint="true"
                           key={`${vr.id}-${item.id}`}
                           layout
                           initial={{ opacity: 0, scale: 0.8, x: translateX, y: translateY }}
@@ -1959,6 +1962,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                       
                       return (
                         <motion.div 
+                          data-wi-splice-endpoint="true"
                           key={`${vr.id}-${item.id}`}
                           layout
                           initial={{ opacity: 0, scale: 0.8, x: translateX, y: translateY }}
@@ -2527,7 +2531,7 @@ export default function SpliceManager({ enclosure, routes, enclosureTypes, fiber
                       </div>
                       <div className="enclosure-diagram-coords flex items-center gap-1.5 mt-1.5 text-[9px] font-mono font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 shadow-inner">
                         <MapPin className="w-2.5 h-2.5 text-slate-500" />
-                        <span>{enclosure.position.lat.toFixed(6)}, {enclosure.position.lng.toFixed(6)}</span>
+                        <span data-wi-pii="enclosure-coords">{enclosure.position.lat.toFixed(6)}, {enclosure.position.lng.toFixed(6)}</span>
                       </div>
                     </div>
                   )}

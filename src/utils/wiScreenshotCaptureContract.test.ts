@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { captureFigure, clickSafe, openApprovalSignForm, closeApprovalSignForm, type CaptureContext } from '../../scripts/wi-screenshot-figures';
 import { runFigures, SafetyViolation } from './wiScreenshotRun';
 import type { Locator, Page } from 'playwright';
@@ -138,4 +139,37 @@ test('a sign opener without a visible form reports its specific failure', async 
   await closeApprovalSignForm(app.page, app.modal);
   assert.equal(app.isSignOpen(), false);
   assert.equal(app.isApprovalOpen(), false);
+});
+
+test('contractor draft open and close checks use the editor input, not the preview span with the same tag', () => {
+  const modal = readFileSync(new URL('../components/DesignApprovalModal.tsx', import.meta.url), 'utf8');
+  assert.match(modal, /<span data-wi-pii="approval-supervisor"/);
+  assert.match(modal, /<input\s+data-wi-pii="approval-supervisor"/);
+  const script = readFileSync(new URL('../../scripts/wi-screenshot-figures.ts', import.meta.url), 'utf8');
+  assert.match(script, /const CONTRACTOR_EDITOR = 'input\[data-wi-pii="approval-supervisor"\]'/);
+  assert.equal(script.match(/locator\(CONTRACTOR_EDITOR\)/g)?.length, 2);
+  assert.doesNotMatch(script, /locator\('\[data-wi-pii="approval-(supervisor|company)"\]'\)/);
+});
+
+test('signing popup heading is matched exactly, not by the slide preview heading that contains it', () => {
+  const modal = readFileSync(new URL('../components/DesignApprovalModal.tsx', import.meta.url), 'utf8');
+  assert.match(modal, /<h3[^>]*>ลงนามอนุมัติ :<\/h3>/);
+  assert.match(modal, />ผู้ลงนามอนุมัติโครงการ<\/h3>/);
+  const script = readFileSync(new URL('../../scripts/wi-screenshot-figures.ts', import.meta.url), 'utf8');
+  assert.match(script, /const SIGN_HEADING = 'h3:text-is\("ลงนามอนุมัติ :"\)'/);
+  assert.doesNotMatch(script, /h3:has-text\("ลงนามอนุมัติ"\)/);
+});
+
+test('profile ⑤ is measured inside its own full-page crop of the security section', () => {
+  const profile = readFileSync(new URL('../components/ProfileSettings.tsx', import.meta.url), 'utf8');
+  assert.match(profile, /<h2[^>]*>Appearance<\/h2>/);
+  assert.match(profile, /<h2[^>]*>Security & Password<\/h2>/);
+  const script = readFileSync(new URL('../../scripts/wi-screenshot-figures.ts', import.meta.url), 'utf8');
+  const capture = script.slice(script.indexOf('async function captureProfile'), script.indexOf('async function captureRouteDraw'));
+  assert.match(script, /const PROFILE_SECURITY = 'section:has\(h2:text-is\("Security & Password"\)\)'/);
+  // The security section lies below the first screen, so a viewport-only crop clamps ⑤.
+  assert.doesNotMatch(capture, /height: 836/);
+  assert.match(capture, /securityClip = \{ x: 0, y: Math\.round\(security\.y\)/);
+  assert.match(capture, /\[securityClip, `\$\{PROFILE_SECURITY\} h2`\]/);
+  assert.match(capture, /fullPage: true/);
 });

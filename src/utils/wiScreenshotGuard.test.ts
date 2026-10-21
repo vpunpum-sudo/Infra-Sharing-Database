@@ -27,21 +27,19 @@ test('classifier blocks writes and every callable except the exact quiet denial'
   assert.equal(functionsOriginFor('demo'), functionsOrigin);
 });
 
-test('observe records requests, enforce aborts quiet requests and trips on blocks', () => {
+test('write blocking applies during sign-in and capture; only authentication and read requests continue', () => {
   const guard = createGuard({ functionsOrigin });
   const blocked = { method: 'POST', url: 'https://unknown.example/x' };
   const quiet = { method: 'POST', url: `${functionsOrigin}/getProjectCreatedDates` };
-  assert.equal(guard.handle(blocked), 'continue');
-  assert.equal(guard.handle(quiet), 'continue');
-  assert.equal(guard.tripped, false);
-  assert.equal(guard.observed.length, 2);
-  guard.enforce();
   assert.equal(guard.handle(quiet), 'abort');
   assert.equal(guard.quietDenied, 1);
   assert.equal(guard.tripped, false);
+  assert.equal(guard.handle({ method: 'POST', url: 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword' }), 'continue');
+  assert.equal(guard.handle({ method: 'POST', url: 'https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel' }), 'continue');
   assert.equal(guard.handle(blocked), 'abort');
   assert.equal(guard.tripped, true);
   assert.equal(guard.blocked.length, 1);
+  assert.equal(guard.observed.length, 1);
 });
 
 test('count comparison detects a changed route, enclosure, or loop count', () => {

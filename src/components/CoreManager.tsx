@@ -387,6 +387,7 @@ export default function CoreManager({ route, appUser, enclosures, selectedPoint,
                                 : 'cursor-not-allowed opacity-50'
                             }`}
                             title={!canExpand ? `Restricted: Owned by ${effectiveOwner}` : ''}
+                            aria-label={canExpand ? `${isExpanded ? 'Collapse' : 'Expand'} tube ${tubeId}` : undefined}
                           >
                             {!canExpand ? (
                               <Lock className="w-3 h-3 text-slate-500" />

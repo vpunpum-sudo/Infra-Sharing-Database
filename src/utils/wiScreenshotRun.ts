@@ -9,24 +9,26 @@ export async function runFigures(options: {
   capture: (id: string, index: number) => Promise<FigureResult>;
   beforeCommit?: () => Promise<void>;
   commitOutputs: (captured: FigureResult[]) => Promise<void>;
-  redact?: (message: string) => string;
 }): Promise<RunSummary> {
   const results: FigureResult[] = [];
   const abort = (status: RunSummary['status']): RunSummary => ({ status, results, quietDenied: options.guard.quietDenied, exitCode: 1 });
   try {
     for (const [index, id] of options.figures.entries()) {
       if (options.guard.tripped) return abort('aborted: guard');
-      results.push(await options.capture(id, index));
+      const result = await options.capture(id, index);
+      results.push(result);
       if (options.guard.tripped) return abort('aborted: guard');
+      if (result.status.startsWith('failed:')) return abort('aborted: safety');
     }
     await options.beforeCommit?.();
     if (options.guard.tripped) return abort('aborted: guard');
-    await options.commitOutputs(results.filter(item => item.status === 'captured'));
+    const captured = results.filter(item => item.status === 'captured');
+    if (captured.length) await options.commitOutputs(captured);
     return { status: 'completed', results, quietDenied: options.guard.quietDenied,
-      exitCode: results.some(item => item.status.startsWith('failed:')) ? 1 : 0 };
-  } catch (error) {
-    const message = `Run error: ${error instanceof Error ? error.message : String(error)}`;
-    console.error(options.redact?.(message) ?? message);
+      exitCode: 0 };
+  } catch {
+    // Browser and capture errors may contain live page values. Never print them.
+    console.error('Run error: capture aborted');
     if (options.guard.tripped) return abort('aborted: guard');
     return abort('aborted: safety');
   }

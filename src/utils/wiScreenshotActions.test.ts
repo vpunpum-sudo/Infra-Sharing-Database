@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { WI_ALLOWED_ACTIONS, ACTION_EXACT_LABELS, assertAllowedAction, assertSafeClickLabel, assertAllowedPath, missingMenuItems } from './wiScreenshotActions';
 
 test('action allowlist contains only approved interactions', () => {
@@ -39,13 +40,26 @@ test('approval openers accept only full labels for their own action', () => {
   ] as const) assert.throws(() => assertSafeClickLabel(label, action), label);
   assert.throws(() => assertSafeClickLabel('ลงนาม 2 ระดับ'));
 
-  assert.deepEqual(Object.keys(ACTION_EXACT_LABELS).sort(), ['exitDrawMode', 'openApprovalDocument', 'openSettingsForm', 'openSettingsTab', 'openSignForm', 'openSignSlide', 'pickOnMap']);
+  assert.deepEqual(Object.keys(ACTION_EXACT_LABELS).sort(), ['closeContractorDraft', 'collapseDiagramInfo', 'exitDrawMode', 'expandTube', 'openApprovalDocument', 'openApprovalRequestForm', 'openContractorDraft', 'openSettingsForm', 'openSettingsTab', 'openSignForm', 'openSignSlide', 'pickOnMap']);
   for (const patterns of Object.values(ACTION_EXACT_LABELS)) {
     for (const pattern of patterns ?? []) {
       assert.ok(pattern.source.startsWith('^'));
       assert.ok(pattern.source.endsWith('$'));
     }
   }
+});
+
+test('approval request capture opens and closes only the local UI views', () => {
+  for (const [label, action] of [
+    ['กรอก/แก้ไขข้อมูลผู้รับจ้าง', 'openContractorDraft'],
+    ['ยกเลิกการแก้ไข', 'closeContractorDraft'],
+    ['ยื่นขออนุมัติใหม่', 'openApprovalRequestForm']
+  ] as const) assert.doesNotThrow(() => assertSafeClickLabel(label, action));
+  for (const [label, action] of [
+    ['บันทึกข้อมูลผู้รับจ้าง', 'openContractorDraft'],
+    ['ส่งคำขออนุมัติแบบ', 'openApprovalRequestForm'],
+    ['ยืนยันการแก้ไข', 'closeContractorDraft']
+  ] as const) assert.throws(() => assertSafeClickLabel(label, action));
 });
 
 test('goto accepts only approved app paths', () => {
@@ -65,4 +79,20 @@ test('open-only settings, map and slide controls match only their exact labels',
   for (const [label, action] of [['Save Specification', 'openSettingsForm'], ['Save Enclosure', 'pickOnMap'], ['ลงนามอนุมัติ', 'openSignSlide'], ['Delete', 'openSettingsTab']] as const) {
     assert.throws(() => assertSafeClickLabel(label, action), label);
   }
+});
+
+test('the splice info card collapses only through its exact collapse title', () => {
+  assert.doesNotThrow(() => assertSafeClickLabel('Click to collapse info', 'collapseDiagramInfo'));
+  for (const label of ['Click to expand info', 'BJ#08 Sample Enclosure', 'Splice', 'Export PDF']) {
+    assert.throws(() => assertSafeClickLabel(label, 'collapseDiagramInfo'), label);
+  }
+});
+
+test('Core Manager tubes expand only through their exact local toggle label', () => {
+  assert.doesNotThrow(() => assertSafeClickLabel('Expand tube 1', 'expandTube'));
+  for (const label of ['Collapse tube 1', 'Expand tube', 'Tube 1', 'Save Changes', 'Edit']) {
+    assert.throws(() => assertSafeClickLabel(label, 'expandTube'), label);
+  }
+  const source = readFileSync(new URL('../components/CoreManager.tsx', import.meta.url), 'utf8');
+  assert.match(source, /aria-label=\{canExpand \? `\$\{isExpanded \? 'Collapse' : 'Expand'\} tube \$\{tubeId\}` : undefined\}/);
 });
