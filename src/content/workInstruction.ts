@@ -3,6 +3,12 @@
 // row to `revisions` whenever the procedure changes.
 
 import { WI_SCREENSHOT_MARKS } from './wiScreenshotMarks';
+import { figureImagePath, type FigureId } from '../utils/wiScreenshotFigures';
+
+function screenshot(figure: FigureId): Pick<WiProcedure, 'figure' | 'image' | 'marks'> {
+  const marks = WI_SCREENSHOT_MARKS[figure];
+  return marks ? { figure, image: figureImagePath(figure), marks } : { figure };
+}
 
 export type WiStep = string | { text: string; sub: string[] };
 export type WiMark = { x: number; y: number };
@@ -28,12 +34,13 @@ export type WiChapter = { id: string; title: string; procedures: WiProcedure[] }
 export const WI_META = {
   number: 'WI-FSD-001',
   title: 'วิธีปฏิบัติงานการใช้งานระบบ Fiber Sharing Database',
-  revision: '03',
+  revision: '04',
   effectiveDate: '2026-10-17',
   department: 'Network Infrastructure'
 };
 
 export const WI_REVISIONS = [
+  { revision: '04', date: '2026-10-20', detail: 'ขยายภาพหน้าจอจริงให้ครอบคลุมทุกหน้าใน WI (ถ่ายด้วยสคริปต์ ปิดบังข้อมูลส่วนบุคคล) พร้อมภาพวาดสำรอง' },
   { revision: '03', date: '2026-10-20', detail: 'เปลี่ยนภาพประกอบแผนที่และเมนูคลิกขวาเป็นภาพหน้าจอจริง พร้อมภาพวาดสำรอง' },
   { revision: '02', date: '2026-10-17', detail: 'จัดทำครั้งแรก ครอบคลุมการใช้งานทุกเมนูของระบบ' }
 ];
@@ -85,6 +92,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'ระบบรองรับการใช้งานผ่านเว็บเบราว์เซอร์ทั้งบนคอมพิวเตอร์และมือถือ แนะนำ Google Chrome หรือ Microsoft Edge รุ่นล่าสุด'
         ],
         figure: 'login',
+        ...screenshot('login'),
         callouts: ['ช่องกรอกอีเมลของบัญชีผู้ใช้', 'ช่องกรอกรหัสผ่าน', 'ลิงก์ "ลืมรหัสผ่าน?" สำหรับขอตั้งรหัสผ่านใหม่', 'ปุ่ม "เข้าสู่ระบบ"'],
         steps: [
           'เปิดเว็บไซต์ระบบ Fiber Sharing Database ระบบจะแสดงหน้า "เข้าสู่ระบบ"',
@@ -101,6 +109,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'forgot', title: 'ลืมรหัสผ่าน', who: 'ผู้ใช้งานทุกคน',
         detail: ['ผู้ใช้ตั้งรหัสผ่านใหม่ได้ด้วยตนเองผ่านลิงก์ที่ระบบส่งไปยังอีเมลของบัญชี โดยไม่ต้องติดต่อ Admin'],
         figure: 'login',
+        ...screenshot('login'),
         callouts: ['ช่องกรอกอีเมล (ต้องกรอกก่อนกดลืมรหัสผ่าน)', 'ช่องรหัสผ่าน (ไม่ต้องกรอก)', 'ลิงก์ "ลืมรหัสผ่าน?"', 'ปุ่ม "เข้าสู่ระบบ" (ใช้หลังตั้งรหัสใหม่แล้ว)'],
         steps: [
           'ที่หน้าเข้าสู่ระบบ กรอกอีเมลของตนในช่อง ①',
@@ -117,6 +126,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'บนมือถือหรือจอขนาดเล็ก เมนูทั้งหมดจะรวมอยู่ในปุ่มเมนู (สามขีด) มุมขวาบน'
         ],
         figure: 'profile',
+        ...screenshot('profile'),
         callouts: ['ชื่อผู้ใช้และบทบาท กดเพื่อเปิด Profile Settings', 'ปุ่มสลับธีมสว่าง/มืด', 'ปุ่ม "ออกจากระบบ"', 'ช่อง "Display Name" และ "Profile Image URL"', 'ส่วนเปลี่ยนรหัสผ่าน "Security & Password"'],
         steps: [
           'กดชื่อผู้ใช้มุมขวาบน ① (บนมือถือกดปุ่มเมนู แล้วเลือกชื่อผู้ใช้)',
@@ -141,6 +151,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'การ์ดแต่ละใบสรุปสถานะเอกสารอนุมัติ Operator ที่มีสิทธิ์ วันที่สร้าง และวันที่อนุมัติขั้นสุดท้าย และมีปุ่มเข้าถึงทุกฟังก์ชันของโครงการที่ท้ายการ์ด'
         ],
         figure: 'dashboard',
+        ...screenshot('dashboard'),
         callouts: ['เมนูหลัก: ผู้ใช้งาน ประวัติการใช้งาน สิทธิ์ โลโก้ Owner ตั้งค่า และ WI การใช้งาน (แสดงตามสิทธิ์)', 'ช่องค้นหาชื่อโครงการ', 'ปุ่มกรองตาม Operator', 'ปุ่ม "สร้างโครงการ"', 'การ์ดโครงการ: ชื่อ สถานะอนุมัติ ปุ่มเอกสารอนุมัติ และ Operator ที่มีสิทธิ์', 'ปุ่มคำสั่งท้ายการ์ด: แผนงาน ไฟล์โครงการ Export KMZ และเปิดแผนที่'],
         steps: [
           'พิมพ์ชื่อหรือบางส่วนของชื่อโครงการในช่องค้นหา ② รายการจะกรองทันที',
@@ -158,6 +169,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'Operator ที่เลือกในโครงการเป็นตัวกำหนดว่าผู้ใช้ของ Operator ใดจะมองเห็นและทำงานในโครงการนี้ได้ และใช้กำหนดผู้ลงนามในเอกสารอนุมัติ'
         ],
         figure: 'project-form',
+        ...screenshot('project-form'),
         callouts: ['ช่อง "ชื่อโครงการ"', 'ช่อง "รหัสเส้นทาง" (ไม่บังคับ)', 'ตัวเลือก Operator ที่มีสิทธิ์ (เลือกได้หลายราย)', 'ปุ่ม "สร้างโครงการ" / "บันทึกการแก้ไข"'],
         steps: [
           'ที่หน้าโครงการ กดปุ่ม "สร้างโครงการ" มุมขวาบน',
@@ -174,6 +186,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'project-delete', title: 'ลบโครงการ', who: 'Admin หรือผู้สร้างโครงการ',
         detail: ['การลบโครงการจะลบข้อมูลทั้งหมดของโครงการ ได้แก่ เส้นทาง Enclosure Loop การ Splice ไฟล์ โฟลเดอร์ และแผนงาน ใช้เฉพาะกรณีสร้างโครงการผิดหรือยกเลิกโครงการแล้วเท่านั้น'],
         figure: 'card-actions',
+        ...screenshot('card-actions'),
         callouts: ['ปุ่ม "แผนงาน"', 'ปุ่ม "ไฟล์โครงการ"', 'ปุ่ม "Export KMZ"', 'ปุ่ม "เปิดแผนที่"', 'ปุ่มแก้ไขโครงการ (รูปดินสอ)', 'ปุ่มลบโครงการ (รูปถังขยะ)'],
         steps: [
           'Export KMZ ③ และดาวน์โหลดไฟล์โครงการที่จำเป็นเก็บไว้ก่อน',
@@ -196,8 +209,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'สัญลักษณ์บนแผนที่: เส้น Fiber แสดงสีตามชนิดสายและ Tier, Enclosure แสดงไอคอนตามประเภท (หรือจุดสีถ้าไม่มีไอคอน), Fiber Loop แสดงเป็นวงกลมซ้อนสีเดียวกับเส้นที่ Loop อยู่'
         ],
         figure: 'map',
-        image: '/wi/map-overview.png',
-        marks: WI_SCREENSHOT_MARKS.map,
+        ...screenshot('map'),
         callouts: ['ปุ่ม "Back to Projects" และชื่อโครงการพร้อมสถานะอนุมัติ', 'เครื่องมือ Enclosure / Route / Loop / Select', 'รายการ Routes / Enclosures / Loops (คลิกเพื่อไปยังตำแหน่ง)', 'เลือกชั้นแผนที่ และเปิด-ปิดการแสดงแต่ละประเภท', 'Pop up รายละเอียด (คลิกซ้ายที่เส้นหรือจุด)', 'ปุ่มยุบ/ขยายแถบด้านซ้าย'],
         steps: [
           'ตรวจสอบชื่อโครงการและสถานะที่ ① ทุกครั้งก่อนแก้ไข เพื่อป้องกันการแก้ผิดโครงการ',
@@ -216,6 +228,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'ตัวเลือก "Snap to Fiber route" จะวางจุดบนเส้น Fiber ที่ใกล้ที่สุดพอดี ทำให้ระบบรู้ว่า Enclosure อยู่บนเส้นใด ใช้สำหรับการแบ่งช่วงสายและการ Splice'
         ],
         figure: 'enclosure-form',
+        ...screenshot('enclosure-form'),
         callouts: ['ช่อง "Enclosure Name"', 'ตัวเลือก "Snap to Fiber route" / "Keep clicked location"', '"Enclosure Type"', '"Location Type" และ "Location Name"', 'พิกัด Latitude / Longitude', 'ปุ่มบันทึก'],
         steps: [
           'กดเครื่องมือ "Enclosure" ที่แถบซ้าย แล้วคลิกตำแหน่งบนแผนที่',
@@ -235,6 +248,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'ควรวาดเส้นตามแนวสายจริง เริ่มจาก Enclosure ต้นทางไปยัง Enclosure ปลายทาง และวางจุดหักมุมตามแนวถนน/เสาไฟ'
         ],
         figure: 'route-draw',
+        ...screenshot('route-draw'),
         callouts: ['จุดที่คลิกวาดตามแนวสาย', 'ปุ่ม "Finish Drawing" และ "Cancel"', 'ช่อง "Route Name"', '"Capacity / Fiber Type" (ขนาดสาย)', '"Tier" และ Operator ที่ใช้ร่วม', '"Mark Length" ค่า ML Start / End'],
         steps: [
           'กดเครื่องมือ "Route" แล้วคลิกบนแผนที่ทีละจุดตามแนวสาย ①',
@@ -251,8 +265,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'loop-add', title: 'เพิ่ม Fiber Loop', who: 'Admin, Design, Sub-contract (ตามสิทธิ์)',
         detail: ['Fiber Loop คือจุดที่ขดสายสำรองไว้ (Slack Loop) เพื่อใช้ซ่อมหรือย้ายแนวในอนาคต ความยาว Loop รวมอยู่ในการคำนวณปริมาณสาย'],
         figure: 'map',
-        image: '/wi/map-overview.png',
-        marks: WI_SCREENSHOT_MARKS.map,
+        ...screenshot('map'),
         callouts: ['ชื่อโครงการและสถานะ', 'เครื่องมือ "Loop" ในกลุ่มเครื่องมือ', 'รายการ Loops', 'ชั้นแผนที่ (เปิดการแสดง Loops)', 'Pop up รายละเอียดเส้น Fiber (ตัวอย่างตำแหน่งแสดงข้อมูล)', 'ปุ่มยุบ/ขยายแถบ'],
         steps: [
           'กดเครื่องมือ "Loop" ② แล้วคลิกบนเส้น Fiber ตรงตำแหน่งที่ขดสายสำรอง',
@@ -268,8 +281,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           '"Split at Enclosure" ใช้แบ่งเส้นยาวหนึ่งเส้นออกเป็นสองช่วงที่ Enclosure ที่อยู่บนเส้น เช่น เมื่อเพิ่มจุด Splice กลางทาง'
         ],
         figure: 'context-menu',
-        image: '/wi/route-context-menu.png',
-        marks: WI_SCREENSHOT_MARKS['context-menu'],
+        ...screenshot('context-menu'),
         callouts: ['คลิกขวาบนเส้น Fiber ตรงตำแหน่งที่ต้องการ', 'คำสั่ง "Cut Fiber Here"', 'คำสั่ง "Split at Enclosure"', 'คำสั่งแก้ไขเส้น'],
         steps: [
           'คลิกขวาบนเส้น Fiber ตรงตำแหน่งที่ต้องการ ①',
@@ -292,6 +304,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'Owner ของ Tube ใช้กับทั้งเส้น ส่วน Tube Priority กำหนดแยกตามช่วงระหว่าง Enclosure และ Status/Label ของแต่ละ Core ใช้บันทึกการใช้งานจริง เช่น Circuit ID'
         ],
         figure: 'core-manager',
+        ...screenshot('core-manager'),
         callouts: ['ตัวกรอง "Filter by Owner" และ "Filter by Priority"', 'เลือกช่วง "Enclosure span for Tube Priority"', 'ตัวเลือก Owner ของ Tube', 'Core แต่ละเส้น (สีตามมาตรฐาน) คลิกเพื่อแก้ไข', 'รายละเอียด Core: Status, Label, Usage Description', 'ปุ่ม "Confirm Changes?"'],
         steps: [
           'คลิกที่เส้น Fiber บนแผนที่ แล้วเปิดรายละเอียดเส้น ระบบจะแสดง Core Manager',
@@ -311,6 +324,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'นอกจากการ Splice แล้ว ยังใช้กำหนด Port ที่สายหลักเข้า และ Owner ของถาด Splice (Tray) ซึ่งจะแสดงในเอกสารอนุมัติ'
         ],
         figure: 'splice',
+        ...screenshot('splice'),
         callouts: ['เลือกเส้น Fiber ฝั่ง A', 'เลือกเส้น Fiber ฝั่ง B', 'Core ฝั่ง A และ B (คลิกเลือก)', 'เส้นแสดงการ Splice ที่ทำแล้ว', 'ปุ่ม Splice / Unsplice', 'ปุ่ม Zoom, Fit และ "Export Diagram as PDF"'],
         steps: [
           'คลิกที่ Enclosure บนแผนที่ แล้วเปิดรายละเอียด ระบบจะแสดง Splice Manager',
@@ -336,6 +350,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'อัปโหลดได้ไม่จำกัดขนาด และจัดเป็นโฟลเดอร์ซ้อนกันได้'
         ],
         figure: 'files',
+        ...screenshot('files'),
         callouts: ['ปุ่ม "สร้างโฟลเดอร์"', 'ปุ่ม "เพิ่มไฟล์" (แสดง % ระหว่างอัปโหลด)', 'แถบตำแหน่งโฟลเดอร์ "ไฟล์ทั้งหมด › …"', 'โฟลเดอร์ (คลิกเพื่อเปิด)', 'ไฟล์ พร้อมขนาดและวันที่แก้ไข', 'ไอคอน ดาวน์โหลด / แก้ชื่อ / แทนไฟล์ / ลบ'],
         steps: [
           'กด "ไฟล์โครงการ" ที่การ์ดโครงการ',
@@ -355,6 +370,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'ไฟล์แสดงสีเส้น ไอคอน Enclosure และไอคอน Loop เหมือนในระบบ และคลิกจุดหรือเส้นจะเห็นรายละเอียดเดียวกับ Pop up ในระบบ'
         ],
         figure: 'card-actions',
+        ...screenshot('card-actions'),
         callouts: ['ปุ่ม "แผนงาน"', 'ปุ่ม "ไฟล์โครงการ"', 'ปุ่ม "Export KMZ"', 'ปุ่ม "เปิดแผนที่"', 'ปุ่มแก้ไขโครงการ', 'ปุ่มลบโครงการ'],
         steps: [
           'กด "Export KMZ" ③ ที่การ์ดโครงการ ปุ่มจะแสดง "กำลังสร้างไฟล์..."',
@@ -372,6 +388,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'สถานะงาน: เสร็จแล้ว / กำลังทำ / ล่าช้า (ช้ากว่าแผนเกิน 10%) / ล่าช้ามาก (ช้ากว่าแผนเกิน 40%) / ยังไม่เริ่ม'
         ],
         figure: 'schedule',
+        ...screenshot('schedule'),
         callouts: ['สถานะรวมของโครงการ (ตามแผน / ล่าช้ากว่าแผน x%)', 'แถบความคืบหน้าจริงเทียบกับตามแผน (เส้นประ)', 'สรุปจำนวนงานทั้งหมด เสร็จแล้ว กำลังทำ ล่าช้า', 'ไทม์ไลน์: กรอบ = แผน แถบสี = ทำได้จริง เส้นประแดง = วันนี้', 'รายละเอียดงาน: ผู้รับผิดชอบ วันเริ่ม วันสิ้นสุด', 'แถบ "ความคืบหน้า" ช่องบันทึก และปุ่ม "บันทึก"'],
         steps: [
           'กด "แผนงาน" ที่การ์ดโครงการ',
@@ -398,6 +415,7 @@ export const WI_CHAPTERS: WiChapter[] = [
           'การอนุมัติมี 2 ระดับ ระดับที่ 1 Planning ของทุก Operator ในโครงการ และระดับที่ 2 O&M (Management) ระบบส่งอีเมลแจ้งผู้มีหน้าที่ลงนามในแต่ละระดับ'
         ],
         figure: 'approval-request',
+        ...screenshot('approval-request'),
         callouts: ['ข้อมูลผู้รับจ้าง: ชื่อบริษัท ผู้ควบคุมงาน เบอร์โทร เลขที่สัญญา/PO ขอบเขตงาน', 'กำหนดการติดตั้งและระยะทางดำเนินงาน', 'บันทึกประกอบการยื่นขออนุมัติ', 'ตัวอย่างเอกสาร (สไลด์) และปุ่มเปลี่ยนหน้า', 'ปุ่ม "ส่งคำขออนุมัติแบบ (เริ่มระดับที่ 1: Planning)"'],
         steps: [
           'ตรวจสอบเส้นทาง Enclosure Core และ Splice ของโครงการให้ครบถ้วนและถูกต้อง',
@@ -413,13 +431,14 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'approval-sign', title: 'ลงนามอนุมัติหรือไม่อนุมัติ', who: 'Planning (ระดับที่ 1), Management/O&M (ระดับที่ 2)',
         detail: ['ผู้ลงนามแต่ละ Operator ลงนามในนามของ Operator ตนเอง เอกสารจะเลื่อนไประดับถัดไปเมื่อผู้ลงนามของทุก Operator ในระดับนั้นลงนามครบ'],
         figure: 'approval-sign',
-        callouts: ['สถานะเอกสาร เช่น "รอลงนามระดับ Planning"', 'ช่อง "ชื่อ-นามสกุล ผู้ลงนาม"', 'ช่อง "ตำแหน่ง"', 'กรอบ "ลายเซ็น (Digital Signature)" วาดหรือแทรกรูป', 'ปุ่มลงนามอนุมัติ', 'ปุ่ม "ไม่อนุมัติ / ขอแก้ไข"'],
+        ...screenshot('approval-sign'),
+        callouts: ['ระดับการลงนามที่กำลังเปิด (Planning/O&M)', 'ช่อง "ชื่อ-นามสกุล ผู้ลงนาม"', 'ช่อง "ตำแหน่ง"', 'กรอบ "ลายเซ็น (Digital Signature)" วาดหรือแทรกรูป', 'ปุ่ม "อนุมัติ (Approve)"', 'ปุ่ม "ไม่อนุมัติ / ขอแก้ไข"'],
         steps: [
-          'เมื่อได้รับอีเมลแจ้ง ให้เข้าสู่ระบบ แล้วเปิด "เอกสารอนุมัติ" ของโครงการ ตรวจสอบสถานะที่ ①',
+          'เมื่อได้รับอีเมลแจ้ง ให้เข้าสู่ระบบ แล้วเปิด "เอกสารอนุมัติ" ของโครงการ ตรวจสอบระดับการลงนามที่ ①',
           'อ่านรายละเอียดเอกสารทุกหน้า',
           'กรอกชื่อ-นามสกุลจริงที่ ② และตำแหน่งที่ ③',
           'วาดลายเซ็นหรือแทรกรูปลายเซ็นที่ ④',
-          'กดลงนามอนุมัติ ⑤',
+          'กดปุ่มอนุมัติ ⑤',
           'กรณีไม่อนุมัติ กด ⑥ "ไม่อนุมัติ / ขอแก้ไข" แล้วแจ้งเหตุผลและจุดที่ต้องแก้ให้ผู้ออกแบบทราบ (เช่น ทางอีเมล) เพื่อแก้ไขและยื่นใหม่'
         ],
         result: 'เมื่อ Planning ลงนามครบ เอกสารไปที่ระดับ O&M และเมื่อ O&M ลงนามครบ โครงการเป็น "อนุมัติแล้ว" พร้อมวันที่อนุมัติขั้นสุดท้าย',
@@ -429,7 +448,8 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'approval-admin', title: 'ดาวน์โหลดเอกสารและถอยขั้นตอนอนุมัติ', who: 'ทุกคน (ดาวน์โหลด) / Admin (ถอยขั้นตอน)',
         detail: ['เอกสารอนุมัติดาวน์โหลดเป็น PDF หรือเปิดเป็นสไลด์นำเสนอได้ทุกขั้นตอน การถอยขั้นตอนใช้เมื่อต้องแก้ไขเอกสารหลังมีการลงนามแล้ว และทำได้เฉพาะ Admin'],
         figure: 'approval-sign',
-        callouts: ['สถานะเอกสาร', 'ชื่อผู้ลงนาม', 'ตำแหน่ง', 'ลายเซ็น', 'ปุ่มลงนาม', 'ปุ่มไม่อนุมัติ'],
+        ...screenshot('approval-sign'),
+        callouts: ['ระดับการลงนาม', 'ชื่อผู้ลงนาม', 'ตำแหน่ง', 'ลายเซ็น', 'ปุ่มอนุมัติ', 'ปุ่มไม่อนุมัติ'],
         steps: [
           'เปิด "เอกสารอนุมัติ" แล้วกด "Export / PDF" หรือ "ดาวน์โหลดเอกสาร PDF" เพื่อบันทึกเอกสาร',
           'กด "สไลด์นำเสนอ" เพื่อแสดงเอกสารแบบเต็มจอสำหรับการประชุม',
@@ -447,6 +467,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'users', title: 'จัดการผู้ใช้งาน', who: 'Admin',
         detail: ['หน้า "User Access Management" ใช้สร้างบัญชี อนุมัติ/ระงับบัญชี และกำหนดบทบาทกับ Operator ของผู้ใช้ทุกคน'],
         figure: 'users',
+        ...screenshot('users'),
         callouts: ['ช่องอีเมลและรหัสผ่านเริ่มต้น (ไม่บังคับ)', 'เลือกบทบาท', 'เลือก Operator', 'ปุ่มเพิ่มผู้ใช้', 'สถานะอนุมัติ (กดเพื่ออนุมัติ/ระงับ)', 'ปุ่ม "Edit User" และ "Delete User"'],
         steps: [
           'กด "ผู้ใช้งาน" ที่แถบด้านบน',
@@ -461,6 +482,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'permissions', title: 'กำหนดสิทธิ์ตามบทบาท', who: 'Admin',
         detail: ['"Role Permissions Matrix" กำหนดว่าแต่ละบทบาททำอะไรได้บ้าง เช่น สร้าง/แก้ไขโครงการ แก้ไขแผนที่ จัดการ Splice ยื่นและลงนามอนุมัติ การเปลี่ยนแปลงมีผลกับผู้ใช้ทุกคนในบทบาทนั้นทันที'],
         figure: 'permissions',
+        ...screenshot('permissions'),
         callouts: ['หมวดฟีเจอร์', 'คอลัมน์บทบาท', 'ช่องเปิด/ปิดสิทธิ์', 'ปุ่มบันทึก'],
         steps: [
           'กด "สิทธิ์" ที่แถบด้านบน',
@@ -473,6 +495,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'settings', title: 'ตั้งค่ามาตรฐานอุปกรณ์ สี และโลโก้', who: 'Admin',
         detail: ['ค่ามาตรฐานในหน้านี้ใช้ร่วมกันทุกโครงการ ได้แก่ ประเภท Enclosure ชนิดสาย สีเส้นบนแผนที่ และโลโก้ของ Operator ในเอกสารอนุมัติ'],
         figure: 'settings',
+        ...screenshot('settings'),
         callouts: ['แท็บ Enclosure Types / Fiber Specs / Fiber Color Management / Owner Logos', 'รายการค่าที่มีอยู่ พร้อมปุ่มแก้ไข/ลบ', 'ฟอร์มกรอกชื่อและขนาด', 'อัปโหลดไอคอนบนแผนที่ และรูปประกอบรายงาน (วางด้วย Ctrl+V ได้)', 'ปุ่มบันทึก'],
         steps: [
           'กด "ตั้งค่า" ที่แถบด้านบน แล้วเลือกแท็บที่ ①',
@@ -488,6 +511,7 @@ export const WI_CHAPTERS: WiChapter[] = [
         id: 'logs', title: 'ตรวจสอบประวัติการใช้งาน', who: 'Admin',
         detail: ['"System Activity Logs" บันทึกการกระทำสำคัญของผู้ใช้ทุกคน เช่น เข้าสู่ระบบ สร้าง/ลบข้อมูล เปลี่ยนสิทธิ์ และอนุมัติบัญชี ใช้ตรวจสอบย้อนหลังเมื่อพบข้อมูลผิดปกติ'],
         figure: 'logs',
+        ...screenshot('logs'),
         callouts: ['เวลา (Timestamp)', 'ผู้ใช้ (User)', 'การกระทำ (Action)', 'รายละเอียด (Description)'],
         steps: [
           'กด "ประวัติการใช้งาน" ที่แถบด้านบน',

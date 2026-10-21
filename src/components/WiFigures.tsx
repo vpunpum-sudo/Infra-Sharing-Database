@@ -418,10 +418,14 @@ const FIGURES: Record<string, () => React.ReactElement> = {
   'approval-request': ApprovalRequest, 'approval-sign': ApprovalSign, users: Users, permissions: Permissions, settings: Settings, logs: Logs
 };
 
+export function wiFigureView({ image, failed }: { image?: string; failed: boolean }): 'drawing' | 'image' {
+  return image && !failed ? 'image' : 'drawing';
+}
+
 export function WiScreenshot({ src, alt, marks, fallback }: { src: string; alt: string; marks: { x: number; y: number }[]; fallback: string }) {
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => setFailed(false), [src]);
-  if (failed) return <WiFigure id={fallback} />;
+  if (wiFigureView({ image: src, failed }) === 'drawing') return <WiFigure id={fallback} />;
   return <div className="wi-shot">
     <img src={src} alt={alt} onError={() => setFailed(true)} />
     {marks.map((mark, index) => <span key={index} className="wi-shot-mark" aria-hidden="true" style={{ left: `${mark.x}%`, top: `${mark.y}%` }}>{markLabel(index + 1)}</span>)}

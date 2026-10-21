@@ -360,7 +360,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             title="ตั้งค่าโปรไฟล์" aria-label="ตั้งค่าโปรไฟล์"
           >
             <div className="flex flex-col items-end">
-              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{displayName}</span>
+              <span data-wi-pii="account-name" className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{displayName}</span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-xs text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
@@ -368,7 +368,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             </div>
             <div className="w-7 h-7 bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all overflow-hidden border border-slate-600">
               {appUser?.photoURL ? (
-                <img src={appUser.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img data-wi-pii="account-avatar" src={appUser.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <UserIcon size={14} />
               )}
@@ -397,7 +397,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                   className="flex w-full items-center gap-3 border-b border-slate-800 px-4 py-3 text-left hover:bg-slate-800">
                   <UserIcon className="w-4 h-4 text-slate-300" />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-bold text-slate-100">{displayName}</span>
+                    <span data-wi-pii="account-name" className="block truncate text-sm font-bold text-slate-100">{displayName}</span>
                     <span className="block text-xs text-slate-400">{appUser?.role || 'Viewer'}</span>
                   </span>
                 </button>
@@ -540,6 +540,8 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                   return (
                     <motion.div 
                       key={project.id}
+                      data-wi-pii="other-project-card"
+                      data-wi-project-id={project.id}
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => userPermissions.viewMap && navigate(`/project/${project.id}`)}
@@ -565,7 +567,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                               )}
                               {project.uid === user.uid && (
                                 <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
-                                  คุณเป็นผู้สร้าง
+                                  <span data-wi-pii="creator-name">คุณเป็นผู้สร้าง</span>
                                 </span>
                               )}
                             </div>

@@ -1,12 +1,10 @@
-# Work Instruction map screenshots
+# Work Instruction screenshots
 
-Run `npm run wi:screenshots` locally when the map interface changes. The script captures the map detail popup and route context menu, then updates the two PNGs in `public/wi/` and `src/content/wiScreenshotMarks.ts`. The Work Instruction keeps its drawn figures until both PNGs are present.
+`npm run wi:screenshots` captures Work Instruction (WI) figures from a local browser connected to the approved production Firebase project. Run it only with a dedicated account and a sample project whose visible data may be published. The script reads production data. Sign-in may create an activity log or update a user record. The script is not part of CI or `npm run verify`.
 
-## Setup
+## Setup and selection
 
-Run `npm install`. Playwright is already a development dependency. Then run `npx playwright install chromium` once per machine (about 150 MB). Installing the browser is a human step. The normal `npm run verify` does not launch Playwright or require its browser binary.
-
-Create an ignored `.env.local` with placeholder values, replacing them locally:
+Install dependencies with `npm install`, then install Chromium locally with `npx playwright install chromium`. Put these values in an ignored `.env.local` file, or set them in the shell:
 
 ```dotenv
 WI_SCREENSHOT_EMAIL=sample-account@example.invalid
@@ -16,34 +14,56 @@ WI_SCREENSHOT_BASE_URL=
 WI_SCREENSHOT_ROUTE_NAME=
 ```
 
-`WI_SCREENSHOT_EMAIL`, `WI_SCREENSHOT_PASSWORD`, and `WI_SCREENSHOT_PROJECT_ID` are required. `WI_SCREENSHOT_BASE_URL` is optional; when blank, the script starts and stops a local Vite server on a free port. `WI_SCREENSHOT_ROUTE_NAME` is optional; when blank, the first route listed is used. If set, it must match exactly one route name after trimming. Shell environment variables override `.env.local`. No credential values are printed or written to the output directory.
+Email, password, and project ID are required. A blank base URL starts a local Vite server. A blank route name selects the first listed route; a supplied name must match exactly one route after trimming. Credentials are never printed or written into the image output.
 
-## Account and sample project
+Run `npm run wi:screenshots` for all 19 figures, or `npm run wi:screenshots -- --only=dashboard,card-actions` for a subset. IDs are validated before the browser opens. An unknown ID, empty list, or duplicate ID exits 1 and prints the valid IDs. Subsets run in registry order.
 
-Use a dedicated, approved, low privilege test account that does not need a password change. It must have permission to see **Cut Fiber Here**, **Split at Enclosure**, and **Edit** in the route context menu. Sign-ins appear in production activity logs.
+## Figures and prerequisites
 
-Use a sample project with no real customer data. It needs at least one Fiber route with an Enclosure on it, an unambiguous name if `WI_SCREENSHOT_ROUTE_NAME` is set, and the Routes layer turned on (the default). Keep it small enough that every route is clearly visible when **Focus all objects** shows all objects; the selected route must not be hidden by the sidebar or controls. If no route point is usable, choose a smaller project or another route.
+| Figure | Screen and data needed |
+| --- | --- |
+| login | `/login`, signed out, empty fields |
+| dashboard | `/`, sample project card |
+| card-actions | `/`, sample card with edit and delete buttons |
+| project-form | Create Projects permission, empty form |
+| profile | Dashboard header and `/profile` |
+| map | Sample project with a route |
+| enclosure-form | Edit Map permission and route |
+| route-draw | Edit Map permission and clear map area |
+| context-menu | Route with Cut, Split, and Edit commands visible |
+| core-manager | Route and an existing state showing all six callouts |
+| splice | Enclosure with a splice |
+| files | Sample project with at least one folder and one file |
+| schedule | Sample project with at least one task |
+| approval-request | Project with approval request form available |
+| approval-sign | Approval awaiting this account's signature |
+| users | View Users permission |
+| permissions | Admin |
+| settings | View Settings permission |
+| logs | Admin |
 
-The script waits up to 20 seconds for the Routes list to load and remain at the same count for about one second. An empty list at first is normal while data loads. An empty-list timeout means either that the project has no routes or that route data did not load in time.
+Figures with unavailable permissions or data states are skipped and retain their existing drawing or screenshot. The runner never creates or edits data to prepare a scene. It never clicks Save, Submit, Confirm, Delete, Upload, approval or rejection submission, Splice, Unsplice, Export, or Logout, and never presses Enter in a form or selects a file. Route drawing is an unsaved draft that is cancelled after capture. The route, enclosure, and loop totals are compared before and after the run. This comparison cannot detect an edit that leaves totals unchanged.
 
-## Actions and capture
+For `approval-sign`, two narrowly scoped click exceptions open UI only. `openApprovalDocument` accepts exactly `ลงนาม 2 ระดับ` or `เอกสารอนุมัติ` on the sample card. Inside that approval modal, `openSignForm` accepts exactly `ลงนาม Planning (<owner>)` or `ลงนาม O&M (<owner>)`, with one nonempty owner and no extra parentheses. The script chooses the first visible exact match. These buttons only open the approval document and empty signing form in the current UI; they do not submit a signature. A missing sign button closes the modal and skips the figure. The form's approval, rejection, re-sign, clear-signature, and upload controls are never clicked. The script measures the approval and rejection buttons as callout targets, captures the masked form, then closes the form with Escape or its `ปิด` button. The general deny rule still applies to every other label. After a live run, confirm that the document's sign-off state is unchanged.
 
-The script signs in, opens the project, expands the ROUTES header if collapsed, clicks **Focus all objects**, left-clicks a validated point on the route, closes the detail popup with Escape or its close button, right-clicks the same geographic point, and closes the context menu with Escape. Focus all fits the loaded objects through `map.fitBounds`; the script does not rely on the initial map fit. It recomputes and validates the same length fraction on the route before each click because the popup may pan the map. The static `wi-route-*` classes on route polylines identify the path; changing them breaks the capture script.
+## Privacy masks and review
 
-It never clicks a sidebar route entry, context-menu command, zoom control, save or confirm button. It never drags or scroll-zooms the map, and it never accepts a native dialog. A dialog aborts the run. The account's access is deliberately limited because the script reads production project data and signs in to production Firebase.
+`src/utils/wiScreenshotMaskSpec.ts` declares required and optional regions for every figure. `data-wi-pii` identifies personal data in the application. The runner replaces text and input values only in the browser DOM, without input or change events. It hides images, canvases, and signature SVGs and places a placeholder over them. It checks that required regions exist, every declared image is masked, and no email, phone number, or known account name remains in page text, input values or placeholders, titles, alt text, or ARIA labels. This is a whole-page check, including areas outside the image crop.
 
-Before either image is saved, all visible tiles must load and no Core Manager or Splice Manager panel may be open. If a mark cannot be measured, the script warns and keeps its previous position. To adjust a mark by hand, edit the corresponding `{ x, y }` percentage in `src/content/wiScreenshotMarks.ts`, then check the figure on screen and in print.
+Placeholders include `ผู้ใช้ตัวอย่าง N`, `อีเมลผู้ใช้ N (ปิดบัง)`, `เบอร์โทร (ปิดบัง)`, `ลิงก์รูปโปรไฟล์ (ปิดบัง)`, `ผู้รับผิดชอบตัวอย่าง`, `บริษัทตัวอย่าง จำกัด`, `เลขที่สัญญา (ปิดบัง)`, and `รายละเอียดการกระทำ (ปิดบังข้อมูล)`. None contains an email address or phone-number-like digit run. Automatic checks cannot recognize every person's name or visually verify a mask.
 
-## Outputs and recovery
+**A human must open and inspect every generated PNG before commit.** Check names, emails, phone numbers, photos, signatures, other projects' data, and marks ①… against their callouts. Check `/manual`, its print preview, and a temporarily renamed PNG to confirm the drawing appears on image load failure. Restore the PNG name afterward. A committed image remains in Git history even if later removed.
 
-The script stages both PNGs and the marks module in an ignored `.wi-screenshots-tmp-*/` directory. It backs up existing targets and rolls back if a caught replacement error occurs. A process killed during replacement may leave a mixture of versions. Recover tracked files with:
+For `approval-sign.png`, also confirm that the signer name and position fields are empty, the signature pad is masked, and the current signing level and both action buttons align with marks ①…⑥. Compare the app's sign-off state before and after capture; the screenshot script must not change it.
 
-```sh
-git checkout -- public/wi src/content/wiScreenshotMarks.ts
-```
+## Network guard and results
 
-On a first run, also delete any untracked `public/wi/*.png` files. A later run warns about and deletes stale temporary directories without restoring them. If rollback itself fails, preserve the printed temporary directory and `.bak` files for manual recovery.
+The browser blocks service workers. Until sign-in succeeds and `/` settles, the guard is in **observe** mode: it logs request method, host, and path for requests it would block, but allows them so sign-in can complete. It then switches to **enforce** mode:
 
-Before the first run and any later run using a different account or project, start from a clean committed implementation tree. After the first run, and after changing accounts or projects, open the sample project and confirm its routes, enclosures, and cuts are unchanged. **Before every commit, open both PNGs and check them by eye for customer names, addresses, locations, network layout, or any other sensitive data.** A successful run should leave only the two PNGs and marks module changed or untracked.
+- `allow`: GET, HEAD, OPTIONS outside Cloud Functions, plus narrowly listed Firebase read and authentication requests.
+- `block`: every other request, including all writes and other Cloud Functions. The request is aborted and the whole run exits 1 without committing any output.
+- `deny-quiet`: only POST to the exact `getProjectCreatedDates` callable at this project's `asia-southeast1` Cloud Functions origin. It is aborted and counted without failing the run. The dashboard calls this read-only function on every mount and silently ignores its error; an old project without `createdAt` may show no created date.
 
-The Work Instruction's numbered markers use fixed colours in light and dark themes and request exact print colours. Browsers and printers may still omit background colours when background graphics are off; check print preview and PDF output before sharing.
+Native dialogs, sign-in failure or account gating, an inaccessible sample project, disallowed actions or labels, a guard trip, and changed counts also abort the whole run before output commit. Otherwise, captured figures are committed in one replacement operation, even if another figure failed. Skipped figures do not make the exit code nonzero; failed figures do. The results table identifies each figure as captured, skipped for permission or data state, or failed with a reason. The summary prints files to inspect, the observe-phase request log, and `quiet-denied: N`. It omits query strings and request bodies and redacts configured credential values.
+
+The script stages images and merged marks before replacement. A caught replacement error rolls back existing outputs. A killed process may leave partial replacement; recover tracked outputs with `git checkout -- public/wi src/content/wiScreenshotMarks.ts`, then inspect untracked files. To remove one screenshot deliberately, delete its key from `WI_SCREENSHOT_MARKS`, delete its PNG, and verify the WI shows the drawing. Skipping a figure never removes an old key or PNG automatically.

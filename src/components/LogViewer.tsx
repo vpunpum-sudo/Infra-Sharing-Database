@@ -77,13 +77,13 @@ export const LogViewer = () => {
                       {expandedLogId === log.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </td>
                     <td className="p-4 text-sm text-slate-300 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
-                    <td className="p-4 text-sm font-bold text-brand-400">{log.userEmail}</td>
+                    <td data-wi-pii="log-user" className="p-4 text-sm font-bold text-brand-400">{log.userEmail}</td>
                     <td className="p-4 text-sm">
                       <span className="bg-slate-800 text-slate-300 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
                         {log.action}
                       </span>
                     </td>
-                    <td className="p-4 text-sm text-slate-300">{log.description}</td>
+                    <td data-wi-pii="log-description" className="p-4 text-sm text-slate-300">{log.description}</td>
                   </tr>
                   {expandedLogId === log.id && (
                     <tr className="bg-slate-900/40">

@@ -1546,12 +1546,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
             <div className="flex items-center justify-between gap-1 p-1 bg-slate-950/40 rounded-xl border border-slate-800/80">
               <div className="flex items-center gap-1">
                 <button 
+                  data-wi-pii="map-account-name"
                   onClick={() => navigate('/profile')} 
                   className="p-2 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all overflow-hidden" 
                   title="Profile Settings" aria-label="Profile Settings"
                 >
                   {appUser?.photoURL ? (
-                    <img src={appUser.photoURL} alt="Profile" className="w-5 h-5 rounded object-cover border border-slate-700" referrerPolicy="no-referrer" />
+                    <img data-wi-pii="map-account-avatar" src={appUser.photoURL} alt="Profile" className="w-5 h-5 rounded object-cover border border-slate-700" referrerPolicy="no-referrer" />
                   ) : (
                     <UserIcon size={16} />
                   )}

@@ -149,7 +149,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                   <div className="relative group shrink-0">
                     <div className="w-40 h-40 bg-slate-800 rounded-[2rem] overflow-hidden border-4 border-slate-800 shadow-2xl transition-transform group-hover:scale-[1.02] duration-500">
                       {photoURL ? (
-                        <img src={photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img data-wi-pii="profile-avatar" src={photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-700">
                           <UserIcon size={64} />
@@ -165,6 +165,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                     <div className="space-y-2">
                       <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Display Name</label>
                       <input 
+                        data-wi-pii="profile-display-name"
                         type="text" 
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
@@ -175,6 +176,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                     <div className="space-y-2">
                       <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Profile Image URL</label>
                       <input 
+                        data-wi-pii="profile-image-url"
                         type="text" 
                         value={photoURL}
                         onChange={(e) => setPhotoURL(e.target.value)}
@@ -186,6 +188,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, appUser,
                       <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Email Address</label>
                       <div className="relative">
                         <input 
+                          data-wi-pii="profile-email"
                           type="email" 
                           value={user.email || ''}
                           disabled
