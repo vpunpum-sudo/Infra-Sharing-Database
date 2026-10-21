@@ -70,7 +70,8 @@ test('every screenshot key has a PNG and all procedures using it have matching m
 });
 
 test('a key without a PNG reports its figure', () => {
-  const figure = WI_FIGURES.find(item => !WI_SCREENSHOT_MARKS[item.id])!;
+  // Every figure is keyed now, so hide one figure's PNG instead of picking an unkeyed figure.
+  const figure = WI_FIGURES[0];
   const missing = resolve('public', figureImagePath(figure.id).slice(1));
   assert.throws(() => checkScreenshotContent({ ...WI_SCREENSHOT_MARKS, [figure.id]: Array.from({ length: figure.markCount }, () => ({ x: 10, y: 10 })) },
     path => path !== missing && existsSync(path)), new RegExp(`${figure.id}: PNG missing`));

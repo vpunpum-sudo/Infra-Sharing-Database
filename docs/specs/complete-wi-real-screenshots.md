@@ -2,9 +2,9 @@
 
 Archived by `agent-flow` on 2026-10-22 after an approved review.
 
-- Branch: `vpunpum-sudo/chat-continuation`
-- Base commit: `ec55614`
-- Verification: `npm run verify`, Started: 2026-10-21T22:25:36Z, Exit code: 0
+- Branch: `vpunpum-sudo/wi-map-fix-v1`
+- Base commit: `b9fcefa`
+- Verification: `npm run verify`, Started: 2026-10-21T22:44:15Z, Exit code: 0
 
 ## Delivery plan
 
@@ -102,25 +102,22 @@ Status: APPROVED
 
 ### Diff reviewed
 
-I read `.context/plan.md` (acceptance scenarios 1–10), `.context/implementation.md` including the 2026-10-22 review-fix log, and the previous `.context/review.md`. I also checked the working-tree changes, focusing on the review-fix delta. That delta covers `src/utils/wiScreenshotPrerequisites.ts`, its untracked test `src/utils/wiScreenshotPrerequisites.test.ts`, the preflight in `scripts/wi-screenshots.ts:67-90`, and the gate documentation in `docs/wi-screenshots.md:62`. The 12 base PNGs are unchanged. The untracked `public/wi/*.png` files are the five owner-approved captures plus `profile.png`, which is still waiting for owner review. The supplied verification result was `npm run verify` with exit 0.
+I read the acceptance scenarios in `.context/plan.md`, the files-capture record in `.context/implementation.md`, and the previous `.context/review.md`. I checked `git status`, the full tracked diff, and the untracked `public/wi/files.png` directly. The changes are limited to that PNG, `docs/wi-screenshots.md`, `src/content/wiScreenshotMarks.ts`, and `src/content/workInstruction.test.ts`. The supplied `npm run verify` result is exit 0.
 
 ### Findings
 
-- Resolved (previous HIGH): Capture gates are now tied to the selected project. `src/utils/wiScreenshotPrerequisites.ts:9,24-26` requires the recorded `projectId` to equal the selected project for `core-manager`, `splice`, `files`, `schedule`, `approval-request` and `approval-sign`. A missing ID or a different ID fails closed. `scripts/wi-screenshots.ts:84-86` re-checks the gates against `config.projectId` after the config is resolved. If any selected figure doesn't match, the whole selection aborts before the guard, the browser, sign-in, or any production read. `splice` keeps its separate project-and-enclosure check (`scripts/wi-screenshots.ts:87-90`). `profile` correctly stays account-scoped. `src/utils/wiScreenshotPrerequisites.test.ts:39-51` covers a matching ID, a different ID and a missing ID for all six project figures, plus the `profile` exemption.
-- MEDIUM: `public/wi/profile.png` and its `profile` marks entry are still waiting for the owner's visual approval of privacy and the five callouts. Do not commit them until the owner approves. `files` is still a drawing because no publishable root folder with a file exists yet, so the 19-figure completion criterion is still unmet. The handoff correctly labels coverage as PARTIAL.
-- MEDIUM: The ignored local gate manifest still has ready `core-manager`, `schedule` and `approval-sign` entries with no `projectId`. They now fail closed, which is correct. Before any recapture of those figures, someone must re-record the exact project the scene was observed in, not guess it. A selection that includes them will abort as a safety failure rather than skip. That is acceptable, but the operator should expect it.
-- LOW: When the project doesn't match, the result reuses the status `failed: unpublishable content` (`src/utils/wiScreenshotPrerequisites.ts:25`). The run still aborts correctly, but the operator-facing output can't tell a project mismatch apart from content that is truly unpublishable. The CLI message at `scripts/wi-screenshots.ts:86` names both cases, which partly makes up for this. A separate status such as `failed: project mismatch` would make the cause clear.
-- LOW (carried over): `scripts/wi-screenshot-figures.ts:390-403` still treats viewport-relative element boxes as page coordinates for full-page clips. This is only correct while the page is scrolled to the top. Assert that scroll position, or account for scroll, before the next profile recapture.
-- LOW (carried over): `public/wi/profile.png` shows a small clipped link fragment at the seam between the header and body. It doesn't hide a callout or expose private data.
+- MEDIUM: The owner has not yet visually approved `public/wi/files.png` and its six marks (`docs/wi-screenshots.md:110`, `src/content/wiScreenshotMarks.ts:87`). The image contains real project and file names, including names suggesting a signed document. The PNG remains untracked, and the documentation correctly labels coverage PARTIAL. Obtain the owner's privacy and callout approval before committing it.
+- LOW: Marks ③–⑥ use measured top-left anchors (`src/content/wiScreenshotMarks.ts:90`). They identify the breadcrumb, folder row, first file row, and action icons in the actual PNG, though the row-edge placement is less clear than centred marks. Include their readability in the owner's visual review.
+- LOW: Browser checks of `/manual`, print preview, and image-load fallback for the new PNG remain unrecorded (`src/content/workInstruction.ts:352`, `docs/wi-screenshots.md:110`). Automated content and fallback checks pass, but those checks do not establish the rendered result.
 
 ### Acceptance-criteria result
 
-The HIGH finding from the previous review is fixed with a regression test. The check runs before authentication and production reads, which satisfies the plan's requirement to confirm publishability before capture (scenario 9 and the per-figure gate criterion). No scenario regressed. Scenarios 2, 3, 5, 6 and 7 stay owner-approved and untouched. Scenario 1 (profile) is captured with masked identity fields and five measured marks, and is waiting on the owner's PNG review. Scenario 4 (files) is still blocked on a missing pre-existing scene. Scenarios 8–10 are covered by the focused tests and the passing verify run. The feature is still PARTIAL, not complete, and the handoff states that correctly.
+Scenario 4 has a real capture of the existing folder, files, breadcrumb, and action controls. The handoff records the prerequisite, project-bound gate, publishability confirmation, guarded capture, and unchanged before-and-after state. The actual diff contains no capture or guard changes. The test adjustment at `src/content/workInstruction.test.ts:72` preserves the missing-PNG assertion now that every figure has a mark entry. The other 18 PNGs are unchanged.
+
+The feature remains PARTIAL until the owner approves the new PNG and marks. There are no unresolved BLOCKER or HIGH findings in this stage.
 
 ### Verdict
 
-No BLOCKER or HIGH findings remain. The remaining open items are human visual approval and a missing sample scene, both correctly gated and labelled PARTIAL.
-
 Verdict: APPROVED
 
-Independence: SELF_REVIEW (Claude reviewed code it wrote; Codex was unavailable)
+Independence: INDEPENDENT (Codex reviewed the Claude implementation and the actual working tree)

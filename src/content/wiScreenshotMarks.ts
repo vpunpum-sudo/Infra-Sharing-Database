@@ -84,6 +84,14 @@ export const WI_SCREENSHOT_MARKS: Partial<Record<FigureId, Mark[]>> = {
     { x: 55.4, y: 13.3 },
     { x: 91.6, y: 18.8 }
   ],
+  files: [
+    { x: 66.4, y: 19.7 },
+    { x: 84.9, y: 19.7 },
+    { x: 2.7, y: 29.0 },
+    { x: 2.7, y: 35.2 },
+    { x: 2.7, y: 46.7 },
+    { x: 76.8, y: 49.6 }
+  ],
   schedule: [
     { x: 90.7, y: 4.6 },
     { x: 2.1, y: 15.0 },
