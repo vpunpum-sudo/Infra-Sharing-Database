@@ -26,6 +26,7 @@ import { attachEnclosureToRouteCut, prepareRouteCut, prepareRouteSplit } from '.
 import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdates } from './utils/tubeOwnership';
 import { getRouteEnclosureSpans } from './utils/routeSegments';
 import { getConnectedEnclosureRoutes } from './utils/enclosureRoutes';
+import { remapApprovalDraftSelections } from './utils/approvalSnapshot';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -460,23 +461,11 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       changes.updatedRoutes.forEach(item => batch.set(doc(db, routePath, item.id), item));
       changes.updatedEnclosures.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/enclosures/${item.id}`), item));
       changes.updatedLoops.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/loops/${item.id}`), item));
-      const approval = currentProject?.designApproval;
-      const selections = approval?.routeEnclosureSelections;
-      if (approval && selections?.[route.id]) {
-        const selected = new Set(selections[route.id]);
-        batch.set(doc(db, 'projects', activeProjectId), {
-          designApproval: {
-            ...approval,
-            routeEnclosureSelections: {
-              ...selections,
-              [route.id]: changes.firstEnclosureIds.filter(id => selected.has(id)),
-              [changes.second.id]: changes.secondEnclosureIds.filter(id => selected.has(id))
-            }
-          }
-        }, { merge: true });
-      }
+      const remappedDraft = remapApprovalDraftSelections(currentProject, route.id, changes.second.id,
+        changes.firstEnclosureIds, changes.secondEnclosureIds);
+      if (remappedDraft) batch.set(doc(db, 'projects', activeProjectId), { approvalDraft: remappedDraft }, { merge: true });
       if (2 + changes.updatedRoutes.length + changes.updatedEnclosures.length + changes.updatedLoops.length +
-          (approval && selections?.[route.id] ? 1 : 0) > 500) {
+          (remappedDraft ? 1 : 0) > 500) {
         throw new Error('This cut affects too many records. Please contact the project administrator.');
       }
       await batch.commit();
@@ -510,22 +499,10 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       changes.updatedEnclosures.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/enclosures/${item.id}`), item));
       changes.updatedLoops.forEach(item => batch.set(doc(db, `projects/${activeProjectId}/loops/${item.id}`), item));
 
-      const approval = currentProject?.designApproval;
-      const selections = approval?.routeEnclosureSelections;
-      if (approval && selections?.[route.id]) {
-        const selected = new Set(selections[route.id]);
-        batch.set(doc(db, 'projects', activeProjectId), {
-          designApproval: {
-            ...approval,
-            routeEnclosureSelections: {
-              ...selections,
-              [route.id]: changes.firstEnclosureIds.filter(id => selected.has(id)),
-              [changes.second.id]: changes.secondEnclosureIds.filter(id => selected.has(id))
-            }
-          }
-        }, { merge: true });
-      }
-      if (2 + changes.updatedRoutes.length + changes.updatedEnclosures.length + changes.updatedLoops.length + (approval && selections?.[route.id] ? 1 : 0) > 500) {
+      const remappedDraft = remapApprovalDraftSelections(currentProject, route.id, changes.second.id,
+        changes.firstEnclosureIds, changes.secondEnclosureIds);
+      if (remappedDraft) batch.set(doc(db, 'projects', activeProjectId), { approvalDraft: remappedDraft }, { merge: true });
+      if (2 + changes.updatedRoutes.length + changes.updatedEnclosures.length + changes.updatedLoops.length + (remappedDraft ? 1 : 0) > 500) {
         throw new Error('This split affects too many records. Please contact the project administrator.');
       }
       await batch.commit();
