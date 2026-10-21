@@ -1,12 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, startAfter, limit, getDocs, doc, getDoc, type QueryConstraint, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { UserLog } from '../types';
-import { ChevronDown, ChevronUp, Monitor, Globe, MapPin, Info, ChevronLeft } from 'lucide-react';
+import { ChevronDown, ChevronUp, Monitor, Info, ChevronLeft, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+  canLoadMore, canRefresh, fetchLogPage, initialLogListState, isEndOfList,
+  logListReducer, shouldQueryLogs, type LogListAction, type LogListState,
+  type LogPageQuerySpec, type RequestKind,
+} from '../utils/logPagination';
+
+type LogCursor = QueryDocumentSnapshot;
+type ViewerState = LogListState<UserLog, LogCursor>;
+type ViewerAction = LogListAction<UserLog, LogCursor>;
 
 export const LogViewer = () => {
-  const [logs, setLogs] = useState<UserLog[]>([]);
+  const [listState, dispatch] = useReducer(logListReducer<UserLog, LogCursor>, initialLogListState<UserLog, LogCursor>());
+  const listStateRef = useRef<ViewerState>(listState);
+  const requestIdRef = useRef(0);
+  const firstLoadStartedRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
@@ -25,17 +37,44 @@ export const LogViewer = () => {
     checkAdmin();
   }, []);
 
+  const dispatchList = (action: ViewerAction) => {
+    listStateRef.current = logListReducer(listStateRef.current, action);
+    dispatch(action);
+  };
+
+  const fetcher = async (spec: LogPageQuerySpec<LogCursor>) => {
+    const constraints: QueryConstraint[] = [orderBy(spec.orderByField, spec.direction)];
+    if (spec.startAfter) constraints.push(startAfter(spec.startAfter));
+    constraints.push(limit(spec.limit));
+    const snapshot = await getDocs(query(collection(db, 'logs'), ...constraints));
+    return snapshot.docs.map(d => ({ id: d.id, data: d.data() as UserLog, cursor: d }));
+  };
+
+  const run = async (kind: RequestKind) => {
+    const current = listStateRef.current;
+    if (kind === 'refresh' ? !canRefresh(current) : !canLoadMore(current)) return;
+    const requestId = ++requestIdRef.current;
+    dispatchList({ type: 'start', kind, requestId });
+    try {
+      const page = await fetchLogPage(fetcher, kind === 'more' ? current.cursor : null);
+      dispatchList({ type: 'success', requestId, page });
+    } catch (error) {
+      console.error('Failed to load system activity logs:', error);
+      dispatchList({ type: 'failure', requestId, error: 'Could not load logs. Please try again.' });
+    }
+  };
+
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!shouldQueryLogs(isAdmin, !loading) || firstLoadStartedRef.current) return;
+    firstLoadStartedRef.current = true;
+    void run('refresh');
+  }, [isAdmin, loading]);
 
-    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const logsData = snapshot.docs.map(doc => doc.data() as UserLog);
-      setLogs(logsData);
-    });
-
-    return () => unsubscribe();
-  }, [isAdmin]);
+  useEffect(() => {
+    if (expandedLogId !== null && !listState.rows.some(row => row.id === expandedLogId)) {
+      setExpandedLogId(null);
+    }
+  }, [listState.rows, expandedLogId]);
 
   const toggleExpand = (id: string) => {
     setExpandedLogId(expandedLogId === id ? null : id);
@@ -43,6 +82,8 @@ export const LogViewer = () => {
 
   if (loading) return <div className="p-8 text-white">Loading logs...</div>;
   if (!isAdmin) return <div className="p-8 text-white">Access Denied. Only administrators can view system logs.</div>;
+
+  const logs = listState.rows;
 
   return (
     <div className="p-8 bg-slate-950 text-white min-h-screen">
@@ -54,6 +95,24 @@ export const LogViewer = () => {
         <span className="uppercase tracking-widest text-xs">Back to Dashboard</span>
       </button>
       <h2 className="text-5xl font-black mb-8 tracking-tighter font-display">System Activity Logs</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-slate-400">Showing {logs.length} logs</span>
+        <button
+          type="button"
+          onClick={() => void run('refresh')}
+          disabled={!canRefresh(listState)}
+          className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={listState.pending?.kind === 'refresh' ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+      {listState.error && (
+        <div role="alert" className="mb-4 flex items-center gap-3 rounded-xl border border-red-800 bg-red-950/40 p-4 text-sm text-red-200">
+          <span>{listState.error.message}</span>
+          <button type="button" onClick={() => void run(listState.error!.kind)} className="font-bold underline">Retry</button>
+        </div>
+      )}
       <div className="glass-panel rounded-[2rem] overflow-hidden border border-slate-800">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -67,14 +126,14 @@ export const LogViewer = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
-              {logs.map((log) => (
-                <React.Fragment key={log.id}>
+              {logs.map(({ id, data: log }) => (
+                <React.Fragment key={id}>
                   <tr 
-                    className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${expandedLogId === log.id ? 'bg-slate-800/30' : ''}`}
-                    onClick={() => toggleExpand(log.id)}
+                    className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${expandedLogId === id ? 'bg-slate-800/30' : ''}`}
+                    onClick={() => toggleExpand(id)}
                   >
                     <td className="p-4 text-slate-500">
-                      {expandedLogId === log.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {expandedLogId === id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </td>
                     <td className="p-4 text-sm text-slate-300 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
                     <td data-wi-pii="log-user" className="p-4 text-sm font-bold text-brand-400">{log.userEmail}</td>
@@ -85,7 +144,7 @@ export const LogViewer = () => {
                     </td>
                     <td data-wi-pii="log-description" className="p-4 text-sm text-slate-300">{log.description}</td>
                   </tr>
-                  {expandedLogId === log.id && (
+                  {expandedLogId === id && (
                     <tr className="bg-slate-900/40">
                       <td colSpan={5} className="p-6 border-t border-slate-800/50">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -135,7 +194,7 @@ export const LogViewer = () => {
                   )}
                 </React.Fragment>
               ))}
-              {logs.length === 0 && (
+              {logs.length === 0 && !listState.pending && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-500">No activity logs found.</td>
                 </tr>
@@ -143,6 +202,19 @@ export const LogViewer = () => {
             </tbody>
           </table>
         </div>
+      </div>
+      <div className="mt-4 flex justify-center">
+        {listState.hasMore && (
+          <button
+            type="button"
+            onClick={() => void run('more')}
+            disabled={!canLoadMore(listState)}
+            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {listState.pending?.kind === 'more' ? 'Loading…' : 'Load more'}
+          </button>
+        )}
+        {isEndOfList(listState) && <span className="text-sm text-slate-500">No more logs</span>}
       </div>
     </div>
   );
