@@ -3974,6 +3974,7 @@ export function DesignApprovalModal({
                 <div>
                   <label className="block font-bold text-slate-300 mb-1">ชื่อผู้รับจ้างที่ดำเนินการติดตั้ง (Contractor)</label>
                   <input
+                    data-wi-pii="approval-request-company"
                     type="text"
                     value={contractorInput}
                     onChange={e => setContractorInput(e.target.value)}
@@ -3997,6 +3998,7 @@ export function DesignApprovalModal({
                 <div>
                   <label className="block font-bold text-slate-300 mb-1">บันทึกหรือข้อความประกอบการยื่นขออนุมัติ</label>
                   <textarea
+                    data-wi-pii="approval-request-notes"
                     rows={3}
                     value={requestNotes}
                     onChange={e => setRequestNotes(e.target.value)}

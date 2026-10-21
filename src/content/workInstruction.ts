@@ -305,14 +305,14 @@ export const WI_CHAPTERS: WiChapter[] = [
         ],
         figure: 'core-manager',
         ...screenshot('core-manager'),
-        callouts: ['ตัวกรอง "Filter by Owner" และ "Filter by Priority"', 'เลือกช่วง "Enclosure span for Tube Priority"', 'ตัวเลือก Owner ของ Tube', 'Core แต่ละเส้น (สีตามมาตรฐาน) คลิกเพื่อแก้ไข', 'รายละเอียด Core: Status, Label, Usage Description', 'ปุ่ม "Confirm Changes?"'],
+        callouts: ['ตัวกรอง "Filter by Owner" และ "Filter by Priority"', 'เลือกช่วง "Enclosure span for Tube Priority"', 'ตัวเลือก Owner ของ Tube', 'Core แต่ละเส้น (สีตามมาตรฐาน) คลิกเพื่อแก้ไข', 'รายละเอียด Core: Status, Owner, Usage Details', 'ปุ่ม "Save Changes"'],
         steps: [
           'คลิกที่เส้น Fiber บนแผนที่ แล้วเปิดรายละเอียดเส้น ระบบจะแสดง Core Manager',
           'ใช้ตัวกรองที่ ① เพื่อดูเฉพาะ Core ของ Owner หรือระดับ Priority ที่ต้องการ',
           'กำหนด Owner ของแต่ละ Tube ที่ ③ ตามสัดส่วนที่ตกลงกันระหว่าง Operator',
           'กำหนด Tube Priority: เลือกช่วงที่ ② แล้วตั้ง High / Medium / Low (มีผลเฉพาะช่วงนั้น)',
-          'คลิก Core ที่ ④ แล้วแก้ Status (Used / Reserved / Bad), Label และ Usage Description ที่ ⑤',
-          'กด "Confirm Changes?" ⑥ เพื่อบันทึก'
+          'คลิก Core ที่ ④ แล้วกด Edit เพื่อแก้ Status (Used / Reserved / Bad), Owner และ Usage Details ที่ ⑤',
+          'กด "Save Changes" ⑥ เพื่อบันทึก'
         ],
         result: 'สัดส่วนการใช้ Core ของแต่ละ Operator อัปเดตใน Pop up เส้น เอกสารอนุมัติ และไฟล์ KMZ',
         tips: ['ทุกการแก้ไข Core ถูกบันทึกใน "Usage History" ของ Core นั้น ใช้ตรวจสอบย้อนหลังได้']
@@ -325,12 +325,12 @@ export const WI_CHAPTERS: WiChapter[] = [
         ],
         figure: 'splice',
         ...screenshot('splice'),
-        callouts: ['เลือกเส้น Fiber ฝั่ง A', 'เลือกเส้น Fiber ฝั่ง B', 'Core ฝั่ง A และ B (คลิกเลือก)', 'เส้นแสดงการ Splice ที่ทำแล้ว', 'ปุ่ม Splice / Unsplice', 'ปุ่ม Zoom, Fit และ "Export Diagram as PDF"'],
+        callouts: ['เส้น Fiber ฝั่ง A', 'เส้น Fiber ฝั่ง B', 'Core หรือ Tube ของทั้งสองฝั่ง', 'เส้นแสดงการ Splice ที่ทำแล้ว', 'แท็บ "Splice Summary" สำหรับตรวจสอบการเชื่อมต่อ', 'ปุ่ม Zoom, Fit และ "Export Diagram as PDF"'],
         steps: [
           'คลิกที่ Enclosure บนแผนที่ แล้วเปิดรายละเอียด ระบบจะแสดง Splice Manager',
-          'เลือกเส้นฝั่ง A ที่ ① และฝั่ง B ที่ ②',
-          'คลิก Core ฝั่ง A และ Core ฝั่ง B ที่ ③ แล้วกดปุ่ม Splice ⑤ (เลือก Tube ทั้งสองฝั่งเพื่อต่อทั้ง Tube "Full Tube Splice" 12 Core)',
-          'ตรวจสอบเส้นเชื่อมที่ ④ ยกเลิกด้วย "Unsplice", "Unsplice Tube" หรือ "Unsplice all cores in this route"',
+          'แท็บ "Diagram" ในภาพแสดงเส้น Fiber ฝั่ง A ที่ ① ฝั่ง B ที่ ② และ Core หรือ Tube ของทั้งสองฝั่งที่ ③',
+          'ทำ Splice ที่แท็บ "Splicing Tool": เลือกเส้นฝั่ง A และฝั่ง B คลิก Core ของทั้งสองฝั่ง แล้วกดปุ่ม Splice (เลือก Tube ทั้งสองฝั่งเพื่อต่อทั้ง Tube "Full Tube Splice" 12 Core)',
+          'ตรวจสอบเส้นเชื่อมที่ ④ และรายการเชื่อมต่อในแท็บ "Splice Summary" ที่ ⑤ ยกเลิกในแท็บ "Splicing Tool" ด้วย "Unsplice", "Unsplice Tube" หรือ "Unsplice all cores in this route"',
           'กำหนดเส้น Fiber Main หรือ Owner ของแต่ละ Port และ Owner ของ Splice Tray',
           'ใช้ปุ่มที่ ⑥ เพื่อซูม/ปรับให้พอดีจอ และ "Export Diagram as PDF" เพื่อบันทึกผัง'
         ],
@@ -416,12 +416,12 @@ export const WI_CHAPTERS: WiChapter[] = [
         ],
         figure: 'approval-request',
         ...screenshot('approval-request'),
-        callouts: ['ข้อมูลผู้รับจ้าง: ชื่อบริษัท ผู้ควบคุมงาน เบอร์โทร เลขที่สัญญา/PO ขอบเขตงาน', 'กำหนดการติดตั้งและระยะทางดำเนินงาน', 'บันทึกประกอบการยื่นขออนุมัติ', 'ตัวอย่างเอกสาร (สไลด์) และปุ่มเปลี่ยนหน้า', 'ปุ่ม "ส่งคำขออนุมัติแบบ (เริ่มระดับที่ 1: Planning)"'],
+        callouts: ['ข้อมูลผู้รับจ้าง: ชื่อบริษัท ผู้ควบคุมงาน เบอร์โทร เลขที่สัญญา/PO ขอบเขตงาน', 'ระยะดำเนินการเคเบิล (Total km)', 'บันทึกประกอบการยื่นขออนุมัติ', 'ตัวอย่างเอกสาร (SLIDE x / 6) ปุ่มเปลี่ยนหน้าอยู่ใต้สไลด์', 'ปุ่ม "ส่งคำขออนุมัติแบบ (เริ่มระดับที่ 1: Planning)"'],
         steps: [
           'ตรวจสอบเส้นทาง Enclosure Core และ Splice ของโครงการให้ครบถ้วนและถูกต้อง',
           'กด "เอกสารอนุมัติ" ที่การ์ดโครงการ (หรือปุ่มอนุมัติแบบในหน้าแผนที่)',
-          'กรอกข้อมูลผู้รับจ้างที่ ① กำหนดการติดตั้งที่ ② และบันทึกประกอบที่ ③ (เลือก Enclosure ประจำแต่ละเส้นทางตามที่ระบบแสดง)',
-          'ตรวจสอบเอกสารทุกหน้าที่ ④ ด้วยปุ่มหมายเลขหน้าหรือ "ถัดไป"',
+          'กรอกข้อมูลผู้รับจ้างที่ ① ระยะดำเนินการเคเบิลที่ ② และบันทึกประกอบที่ ③ (เลือก Enclosure ประจำแต่ละเส้นทางตามที่ระบบแสดง)',
+          'ตรวจสอบเอกสารทุกหน้าที่ ④ โดยเลื่อนลงไปใช้ปุ่มหมายเลขหน้าหรือ "ถัดไป" ใต้สไลด์',
           'กดปุ่ม ⑤ เพื่อส่งคำขออนุมัติ'
         ],
         result: 'ระบบออกเลขที่เอกสาร สถานะโครงการเปลี่ยนเป็น "รอลงนามระดับ Planning" และส่งอีเมลแจ้งผู้อนุมัติ',

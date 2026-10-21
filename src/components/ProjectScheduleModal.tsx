@@ -29,16 +29,19 @@ export function ProjectScheduleModal({ project, appUser, canEdit, onClose }: {
 }) {
   const [tasks, setTasks] = useState<ScheduleTask[] | null>(null);
   const [logs, setLogs] = useState<ScheduleLogEntry[]>([]);
+  const [freshLists, setFreshLists] = useState<string[]>([]);
   const notify = useToast();
   const base = `projects/${project.id}`;
 
-  useEffect(() => onSnapshot(collection(db, `${base}/schedule`), snapshot => {
+  useEffect(() => onSnapshot(collection(db, `${base}/schedule`), { includeMetadataChanges: true }, snapshot => {
     setTasks(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as ScheduleTask)
       .sort((a, b) => a.order - b.order || a.start.localeCompare(b.start)));
+    if (!snapshot.metadata.fromCache) setFreshLists(previous => previous.includes('tasks') ? previous : [...previous, 'tasks']);
   }, () => { setTasks([]); notify('โหลดแผนงานไม่สำเร็จ กรุณาตรวจสอบสิทธิ์', 'error'); }), [base, notify]);
 
-  useEffect(() => onSnapshot(query(collection(db, `${base}/scheduleLogs`), orderBy('at', 'desc')), snapshot => {
+  useEffect(() => onSnapshot(query(collection(db, `${base}/scheduleLogs`), orderBy('at', 'desc')), { includeMetadataChanges: true }, snapshot => {
     setLogs(snapshot.docs.map(item => item.data() as ScheduleLogEntry));
+    if (!snapshot.metadata.fromCache) setFreshLists(previous => previous.includes('logs') ? previous : [...previous, 'logs']);
   }, () => setLogs([])), [base]);
 
   const save: SaveSchedule = async (next, changed, removed = [], log) => {
@@ -62,13 +65,14 @@ export function ProjectScheduleModal({ project, appUser, canEdit, onClose }: {
     }
   };
 
-  return <ScheduleView project={project} canEdit={canEdit} onClose={onClose} tasks={tasks} logs={logs} save={save} />;
+  return <ScheduleView project={project} canEdit={canEdit} onClose={onClose} tasks={tasks} logs={logs} save={save}
+    captureFresh={freshLists.includes('tasks') && freshLists.includes('logs')} />;
 }
 
 /** The schedule window itself; data and saving come from the caller. */
-export function ScheduleView({ project, canEdit, onClose, tasks, logs, save: persist }: {
+export function ScheduleView({ project, canEdit, onClose, tasks, logs, save: persist, captureFresh }: {
   project: Project; canEdit: boolean; onClose: () => void;
-  tasks: ScheduleTask[] | null; logs: ScheduleLogEntry[]; save: SaveSchedule;
+  tasks: ScheduleTask[] | null; logs: ScheduleLogEntry[]; save: SaveSchedule; captureFresh?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ScheduleTask | null>(null);
@@ -165,7 +169,7 @@ export function ScheduleView({ project, canEdit, onClose, tasks, logs, save: per
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-2 sm:p-4" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section role="dialog" aria-modal="true" aria-label={`แผนงานโครงการ ${project.name}`}
+      <section role="dialog" aria-modal="true" aria-label={`แผนงานโครงการ ${project.name}`} data-wi-fresh={captureFresh ? 'true' : undefined}
         className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-slate-700 p-4 sm:p-5">
           <div className="min-w-0">

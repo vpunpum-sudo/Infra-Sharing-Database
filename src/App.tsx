@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2, Search, ArrowUpDown } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
@@ -33,6 +33,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { logActivity } from './services/logService';
 import { passwordChangeGate } from './utils/passwordChangeGate';
 import { ThemeToggle } from './components/ThemeToggle';
+import { captureState } from './utils/wiScreenshotState';
 import { useTheme } from './context/ThemeContext';
 
 function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User, appUser: AppUser | null, quotaExceeded?: boolean }) {
@@ -72,14 +73,17 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   }, [user, activeProjectId]);
 
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [projectServerReady, setProjectServerReady] = useState(false);
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
 
   useEffect(() => {
     if (!activeProjectId) return;
-    const unsubProject = onSnapshot(doc(db, 'projects', activeProjectId), (snapshot) => {
+    setProjectServerReady(false);
+    const unsubProject = onSnapshot(doc(db, 'projects', activeProjectId), { includeMetadataChanges: true }, (snapshot) => {
       if (snapshot.exists()) {
         setCurrentProject({ id: snapshot.id, ...snapshot.data() } as Project);
-      }
+      } else setCurrentProject(null);
+      if (!snapshot.metadata.fromCache) setProjectServerReady(true);
     });
     return () => unsubProject();
   }, [activeProjectId]);
@@ -1503,6 +1507,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
   const panelRoute = detailPanel?.type === 'route' ? routes.find(r => r.id === detailPanel.id) : undefined;
   const panelEnclosure = detailPanel?.type === 'enclosure' ? enclosures.find(e => e.id === detailPanel.id) : undefined;
+  const routesFresh = projectServerReady && loadedLists.includes('routes');
+  const wiState = useMemo(() => routesFresh ? captureState(currentProject, routes) : undefined, [routesFresh, currentProject, routes]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden font-sans bg-slate-950 text-slate-100">
@@ -1537,6 +1543,9 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       <div className="relative flex h-full shrink-0 z-[1002]">
         <div 
           data-wi-loaded={loadedLists.join(' ')}
+          data-wi-project-fresh={projectServerReady ? 'true' : undefined}
+          data-wi-approval-state={wiState?.approval}
+          data-wi-splice-state={wiState?.splices}
           className={`glass-panel h-full flex flex-col transition-all duration-500 ease-in-out overflow-hidden ${sidebarCollapsed ? '-translate-x-full w-0' : 'translate-x-0 w-84 md:w-[350px]'}`}
         >
           {/* Sidebar Top Header */}

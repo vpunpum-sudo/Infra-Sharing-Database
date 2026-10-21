@@ -27,6 +27,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
 }) {
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [freshLists, setFreshLists] = useState<string[]>([]);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -41,17 +42,19 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
   const confirm = useConfirm();
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, `projects/${project.id}/files`), snapshot => {
+    const unsubscribe = onSnapshot(collection(db, `projects/${project.id}/files`), { includeMetadataChanges: true }, snapshot => {
       setFiles(snapshot.docs.map(item => item.data() as ProjectFile)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      if (!snapshot.metadata.fromCache) setFreshLists(previous => previous.includes('files') ? previous : [...previous, 'files']);
       setError('');
     }, () => setError('ไม่สามารถโหลดไฟล์โครงการได้ กรุณาตรวจสอบสิทธิ์และลองใหม่'));
     return unsubscribe;
   }, [project.id]);
 
-  useEffect(() => onSnapshot(collection(db, `projects/${project.id}/folders`), snapshot => {
+  useEffect(() => onSnapshot(collection(db, `projects/${project.id}/folders`), { includeMetadataChanges: true }, snapshot => {
     setFolders(snapshot.docs.map(item => item.data() as ProjectFolder)
       .sort((a, b) => a.name.localeCompare(b.name, 'th')));
+    if (!snapshot.metadata.fromCache) setFreshLists(previous => previous.includes('folders') ? previous : [...previous, 'folders']);
   }, () => setError('ไม่สามารถโหลดโฟลเดอร์ได้ กรุณาตรวจสอบสิทธิ์และลองใหม่')), [project.id]);
 
   // Return to the top level if the open folder is deleted elsewhere.
@@ -160,7 +163,7 @@ export function ProjectFilesModal({ project, canManage, onClose }: {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section role="dialog" aria-modal="true" aria-label={`ไฟล์โครงการ ${project.name}`}
+      <section role="dialog" aria-modal="true" aria-label={`ไฟล์โครงการ ${project.name}`} data-wi-fresh={freshLists.includes('files') && freshLists.includes('folders') ? 'true' : undefined}
         className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-slate-700 p-5">
           <div>

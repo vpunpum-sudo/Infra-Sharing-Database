@@ -27,6 +27,21 @@ test('every screenshot has a drawn fallback, matching bounded marks, and a WI pa
   }
 });
 
+test('Splice instructions keep callout ⑤ on the summary tab', () => {
+  const procedure = WI_CHAPTERS.flatMap(chapter => chapter.procedures).find(item => item.id === 'splice');
+  assert.ok(procedure);
+  assert.match(procedure.callouts?.[4] ?? '', /Splice Summary/);
+  assert.ok(procedure.steps?.some(step => /Splice ⑤/.test(typeof step === 'string' ? step : step.text)) === false);
+});
+
+test('Splice steps send the Splice action to the Splicing Tool tab, not the diagram figure', () => {
+  const procedure = WI_CHAPTERS.flatMap(chapter => chapter.procedures).find(item => item.id === 'splice');
+  const texts = (procedure?.steps ?? []).map(step => typeof step === 'string' ? step : step.text);
+  const action = texts.find(text => /กดปุ่ม Splice/.test(text));
+  assert.match(action ?? '', /Splicing Tool/);
+  assert.doesNotMatch(action ?? '', /[①②③④⑤⑥]/);
+});
+
 function checkScreenshotContent(keyed: Partial<Record<FigureId, { x: number; y: number }[]>>, pngExists = existsSync): void {
   const figures = new Map(WI_FIGURES.map(item => [item.id, item]));
   const procedures = WI_CHAPTERS.flatMap(chapter => chapter.procedures);

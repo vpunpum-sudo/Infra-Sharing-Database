@@ -51,6 +51,13 @@ test('signing capture leaves identity fields empty and masks prior signers', () 
   assert.ok(WI_MASK_SPECS['approval-request'].regions.some(item => item.name === 'previous-signer'));
 });
 
+test('approval request masks both the preview editor and the unsent form', () => {
+  const names = WI_MASK_SPECS['approval-request'].regions.map(region => region.name);
+  for (const name of ['approval-company', 'approval-supervisor', 'approval-phone', 'approval-contract', 'approval-request-company', 'approval-request-notes']) {
+    assert.ok(names.includes(name), name);
+  }
+});
+
 test('post-capture snapshot rejects restored names, inputs and images', () => {
   const spec = { regions: [
     { name: 'previous-signer', selector: '[data-wi-pii="previous-signer"]', kind: 'text', placeholder: 'ผู้ใช้ตัวอย่าง 1', required: false },
@@ -80,4 +87,19 @@ test('every specified PII selector is annotated in its named component', () => {
     const source = readFileSync(resolve('src', region.source === 'App.tsx' ? region.source : `components/${region.source}`), 'utf8');
     assert.ok(source.includes(`data-wi-pii="${region.name}"`), `${id}: ${region.name} in ${region.source}`);
   }
+});
+
+test('splice diagram hides enclosure coordinates tagged in SpliceManager', () => {
+  const coords = WI_MASK_SPECS.splice.regions.find(region => region.name === 'enclosure-coords');
+  assert.equal(coords?.kind, 'hide');
+  assert.ok(readFileSync(resolve('src/components/SpliceManager.tsx'), 'utf8').includes('data-wi-pii="enclosure-coords"'));
+});
+
+test('PII is detected within each field, not across adjacent date and progress inputs', () => {
+  const base: PageSnapshot = { bodyText: 'แผนงาน', inputs: ['2026-10-21', '', '2026-11-30', '', '100', ''], attrs: ['', ''], regions: {} };
+  assert.deepEqual(checkMaskResult(base, { regions: [] }, {}), []);
+  assert.deepEqual(checkMaskResult({ ...base, inputs: [...base.inputs, '081-234-5678'] }, { regions: [] }, {}), ['pii:phone']);
+  assert.deepEqual(checkMaskResult({ ...base, attrs: ['โทร 02 123 4567'] }, { regions: [] }, {}), ['pii:phone']);
+  assert.deepEqual(checkMaskResult({ ...base, bodyText: 'ติดต่อ\n081 234 5678' }, { regions: [] }, {}), ['pii:phone']);
+  assert.deepEqual(checkMaskResult({ ...base, inputs: ['someone@example.com'] }, { regions: [] }, {}), ['pii:email']);
 });

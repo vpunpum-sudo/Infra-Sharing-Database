@@ -3,8 +3,11 @@ export const WI_ALLOWED_ACTIONS = [
   'leftClickPoint', 'rightClickPoint', 'pressEscape', 'closePopup',
   'openProjectForm', 'fillProjectDraft', 'openProfile', 'openSampleCard',
   'openEnclosureForm', 'openRouteDraft', 'finishRouteDraft', 'cancelDraft',
-  'openCoreManager', 'selectCore', 'openSpliceManager', 'selectFiberSide',
-  'openFiles', 'openSchedule', 'selectTask', 'openApprovalDocument', 'openSignForm', 'closeSignForm',
+  'openCoreManager', 'expandTube', 'selectCore', 'openSpliceManager', 'selectFiberSide',
+  'openCoreEdit',
+  'openSpliceDiagram', 'collapseDiagramInfo',
+  'openFiles', 'openSchedule', 'selectTask', 'openApprovalDocument', 'openContractorDraft', 'closeContractorDraft',
+  'openApprovalRequestForm', 'openSignForm', 'closeSignForm',
   'openUserPage', 'openPermissionsPage', 'openSettingsPage', 'openLogsPage', 'openSettingsTab', 'openSettingsForm', 'pickOnMap', 'openSignSlide', 'exitDrawMode'
 ] as const;
 
@@ -17,12 +20,17 @@ const EXACT_SAFE_LABELS = new Set(['Cancel', 'Finish Drawing', 'Back to Projects
 const DENIED_LABEL = /บันทึก|save|ยืนยัน|confirm|ลบ|delete|ส่งคำขออนุมัติ|ลงนาม|ไม่อนุมัติ|upload|export|splice|unsplice|ออกจากระบบ|logout|อนุมัติ|ขอแก้ไข|ส่ง|submit|approve|reject|sign/i;
 export const ACTION_EXACT_LABELS: Partial<Record<WiAllowedAction, readonly RegExp[]>> = {
   openApprovalDocument: [/^ลงนาม 2 ระดับ$/, /^เอกสารอนุมัติ$/],
+  openContractorDraft: [/^กรอก\/แก้ไขข้อมูลผู้รับจ้าง$/],
+  closeContractorDraft: [/^ยกเลิกการแก้ไข$/],
+  openApprovalRequestForm: [/^ยื่นขออนุมัติใหม่$/],
   openSignForm: [/^ลงนาม Planning \([^()]+\)$/, /^ลงนาม O&M \([^()]+\)$/],
   openSettingsTab: [/^Enclosure Types$/],
   openSettingsForm: [/^Add Type$/],
   pickOnMap: [/^Pick on Map$/],
   openSignSlide: [/^6$/],
-  exitDrawMode: [/^Select$/]
+  exitDrawMode: [/^Select$/],
+  collapseDiagramInfo: [/^Click to collapse info$/],
+  expandTube: [/^Expand tube \d+$/]
 };
 export const normalizeLabel = (label: string): string => label.trim().replace(/\s+/g, ' ');
 export function matchesActionExactLabel(label: string, action: WiAllowedAction): boolean {
@@ -31,7 +39,10 @@ export function matchesActionExactLabel(label: string, action: WiAllowedAction):
 export function assertSafeClickLabel(label: string, action?: WiAllowedAction): void {
   const value = normalizeLabel(label);
   if (!value) throw new Error('Click target has no readable label');
-  if (action && matchesActionExactLabel(value, action)) return;
+  if (action && ACTION_EXACT_LABELS[action]) {
+    if (matchesActionExactLabel(value, action)) return;
+    throw new Error(`Unexpected click label for ${action}`);
+  }
   if (EXACT_SAFE_LABELS.has(value)) return;
   if (DENIED_LABEL.test(value)) throw new Error(`Unsafe click label: ${value}`);
 }
