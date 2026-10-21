@@ -15,6 +15,9 @@ import { captureWithTimeout } from '../src/utils/wiScreenshotTimeout';
 import { evaluateFigureGate, hasUnpublishableSelection, isRemainingFigure, observedSpliceEnclosure, type FigureGate, type GateResult } from '../src/utils/wiScreenshotPrerequisites';
 import { compareCaptureState, type CaptureState } from '../src/utils/wiScreenshotState';
 
+const READY_TIMEOUT_MS = 20_000;
+const PAGE_BUDGET_MS = 45_000;
+
 const ROOT = resolve(import.meta.dirname, '..');
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 
@@ -39,7 +42,7 @@ async function counts(page: import('playwright').Page): Promise<CountSnapshot> {
 async function stableCounts(page: import('playwright').Page): Promise<CountSnapshot> {
   let last: CountSnapshot | undefined;
   let steady = 0;
-  for (const deadline = Date.now() + 20_000; Date.now() < deadline; await wait(300)) {
+  for (const deadline = Date.now() + READY_TIMEOUT_MS; Date.now() < deadline; await wait(300)) {
     const current = await counts(page).catch(() => undefined);
     steady = current && last && compareCounts(last, current) ? steady + 1 : 0;
     last = current;
@@ -51,7 +54,7 @@ async function stableCounts(page: import('playwright').Page): Promise<CountSnaps
 async function stableCaptureState(page: import('playwright').Page): Promise<CaptureState> {
   let last: CaptureState | undefined;
   let steady = 0;
-  for (const deadline = Date.now() + 20_000; Date.now() < deadline; await wait(300)) {
+  for (const deadline = Date.now() + READY_TIMEOUT_MS; Date.now() < deadline; await wait(300)) {
     const current = await page.locator('[data-wi-project-fresh="true"]').first().evaluate(element => {
       const approval = element.getAttribute('data-wi-approval-state');
       const splices = element.getAttribute('data-wi-splice-state');
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
     if (figures.some(item => item.id === 'login')) {
       const attempt = await captureWithTimeout(
         () => captureFigure({ ...captureContext, page }, 'login'),
-        () => page.close(), 45_000);
+        () => page.close(), PAGE_BUDGET_MS);
       if (attempt.timedOut === true) {
         page = await context.newPage();
         await preparePage(page);
@@ -154,11 +157,11 @@ async function main(): Promise<void> {
     await page.goto(new URL('/', baseUrl).toString(), { waitUntil: 'domcontentloaded' });
     if (new URL(page.url()).pathname !== '/') throw new SafetyViolation('sign-in failed or account gating redirect');
     if (dialogSeen) throw new SafetyViolation('native dialog appeared');
-    await page.locator('header').waitFor({ state: 'visible', timeout: 20_000 });
+    await page.locator('header').waitFor({ state: 'visible', timeout: READY_TIMEOUT_MS });
     await wait(800);
     captureContext.known.displayName = await page.locator('[data-wi-pii="account-name"]').first().textContent().then(value => value?.trim() || '', () => '');
     await page.goto(new URL(`/project/${encodeURIComponent(config.projectId)}`, baseUrl).toString(), { waitUntil: 'domcontentloaded' });
-    try { await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: 20_000 }); }
+    try { await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: READY_TIMEOUT_MS }); }
     catch { throw new SafetyViolation('sample project could not be opened'); }
     if (guard.tripped || dialogSeen) throw new SafetyViolation('safety guard tripped opening project');
     const before = await stableCounts(page);
@@ -176,7 +179,7 @@ async function main(): Promise<void> {
           const capturePage = page;
           const attempt = await captureWithTimeout(
             () => captureFigure({ ...captureContext, page: capturePage }, id as FigureId),
-            () => capturePage.close(), 45_000);
+            () => capturePage.close(), PAGE_BUDGET_MS);
           if (attempt.timedOut === true) {
             page = await context.newPage();
             await preparePage(page);
@@ -190,7 +193,7 @@ async function main(): Promise<void> {
       beforeCommit: async () => {
         if (dialogSeen) throw new SafetyViolation('native dialog appeared');
         await page.goto(new URL(`/project/${encodeURIComponent(config.projectId)}`, baseUrl).toString(), { waitUntil: 'domcontentloaded' });
-        await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: 20_000 });
+        await page.locator('.leaflet-container').waitFor({ state: 'visible', timeout: READY_TIMEOUT_MS });
         // Project data streams in after the map appears: compare only once the counts have settled again.
         const after = await stableCounts(page).catch(() => undefined);
         const afterState = await stableCaptureState(page).catch(() => undefined);
