@@ -5,7 +5,7 @@ import type { ApprovalSnapshotCollections, DesignApproval, Project } from '../ty
 import { buildProjectKml, exportFileName } from './kml';
 import { ApprovalStateChangedError, backfillCommitMessage, backfillFailureMessage, backfillLockedAt, buildApprovalSnapshot, chooseApprovalSource, chunkSnapshotWrites, classifyBackfillFailure, firestoreErrorCode, formatBackfillNotice, getParticipatingOwners, isBackfilledApproval, nextSnapshotId, planSnapshotBackfill, remapApprovalDraftSelections, resolveBackfillLocker, sourceReadiness,
   IncompleteApprovalSnapshotError, nextApprovalId, planApprovalAttach, planIdIndex, projectForDocument,
-  resolveApprovalFormValues, resolveApprovalSnapshot } from './approvalSnapshot';
+  rejectionReasonPatch, resolveApprovalFormValues, resolveApprovalSnapshot } from './approvalSnapshot';
 
 test('backfill plans exactly five dotted fields for every approval status and rejects stale state', () => {
   const record = { snapshotId: 'snap_new', createdAt: '2026-10-22T12:00:00Z', uid: 'auth-u', email: 'u@example.com' };
@@ -211,6 +211,48 @@ test('attach decisions preserve Draft and Rejected state on failure and reject s
     [{ kind: 'rejected' as const, id: 'old' }, { ...rejected, status: 'Draft' as const }]
   ] as const) assert.throws(() => planApprovalAttach(expected, actual, pending), ApprovalStateChangedError);
   assert.deepEqual(rejected, originalRejected);
+});
+
+test('legacy approval attach accepts every project status without changing the source', () => {
+  const pending = approval('new');
+  for (const status of ['Approved', 'Pending Approval', 'Rejected', 'Draft', undefined] as const) {
+    const current = { ...project, status, designApproval: undefined };
+    const before = structuredClone(current);
+    assert.deepEqual(planApprovalAttach({ kind: 'none' }, current, pending), {
+      status: 'Pending Approval', designApproval: pending, approvalDraft: undefined
+    });
+    assert.deepEqual(current, before);
+  }
+});
+
+test('attach rejects an existing approval and keeps rejected resubmission guards', () => {
+  const pending = approval('new');
+  for (const status of ['Draft', 'Approved'] as const)
+    for (const approvalStatus of ['Pending Approval', 'Approved', 'Rejected'] as const)
+      assert.throws(() => planApprovalAttach({ kind: 'none' },
+        { ...project, status, designApproval: approval('old', approvalStatus) }, pending), ApprovalStateChangedError);
+
+  const rejected = { ...project, status: 'Rejected' as const, designApproval: approval('old', 'Rejected') };
+  assert.deepEqual(planApprovalAttach({ kind: 'rejected', id: 'old' }, rejected, pending), {
+    status: 'Pending Approval', designApproval: pending, approvalDraft: undefined
+  });
+  assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'other' }, rejected, pending), ApprovalStateChangedError);
+  assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'old' },
+    { ...rejected, designApproval: approval('old', 'Approved') }, pending), ApprovalStateChangedError);
+  for (const status of ['Draft', 'Approved', 'Pending Approval'] as const)
+    assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'old' },
+      { ...rejected, status }, pending), ApprovalStateChangedError);
+});
+
+test('rejection reason patch writes only a new rejection or a cleared old reason', () => {
+  assert.deepEqual(rejectionReasonPatch(undefined, true, '  ระยะผิด  '), { rejectionReason: 'ระยะผิด' });
+  assert.deepEqual(rejectionReasonPatch(undefined, true, ''), { rejectionReason: '' });
+  assert.deepEqual(rejectionReasonPatch('Earlier', true, '  อีกครั้ง  '), { rejectionReason: 'อีกครั้ง' });
+  assert.deepEqual(rejectionReasonPatch('Revise', false, ''), { rejectionReason: '' });
+  assert.deepEqual(rejectionReasonPatch('', false, 'ignored'), {});
+  assert.deepEqual(rejectionReasonPatch(undefined, false, 'ignored'), {});
+  assert.deepEqual({ rejectionReason: '', ...rejectionReasonPatch('', false, '') }, { rejectionReason: '' });
+  assert.deepEqual({ ...rejectionReasonPatch(undefined, false, '') }, {});
 });
 
 test('route cut and split remap only the editable draft, never a submitted approval', () => {

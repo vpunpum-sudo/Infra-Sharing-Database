@@ -425,6 +425,7 @@ service cloud.firestore {
         allow create: if isAuthenticated() &&
           canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
           request.resource.data.projectId == projectId && request.resource.data.id == snapshotId &&
+          request.resource.data.createdByUid is string && request.resource.data.createdByUid == request.auth.uid &&
           ((request.resource.data.approvalId == snapshotId && !('backfill' in request.resource.data)) ||
            (request.resource.data.get('backfill', false) == true &&
             request.resource.data.approvalId != snapshotId &&

@@ -27,6 +27,7 @@ import { canChangeTubeOwner, getTubeOwner, tubeIdForCore, validateTubeOwnerUpdat
 import { getRouteEnclosureSpans } from './utils/routeSegments';
 import { getConnectedEnclosureRoutes } from './utils/enclosureRoutes';
 import { remapApprovalDraftSelections } from './utils/approvalSnapshot';
+import { appUserFromDoc } from './utils/appUser';
 import { db, auth, logout, handleFirestoreError, OperationType, onQuotaExceeded } from './firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, deleteField, query, where, getDoc, getDocs, limit, writeBatch, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -2780,7 +2781,7 @@ export default function App() {
         const userDocRef = doc(db, 'users', currentUser.uid);
         unsubscribeUserDoc = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
-            setAppUser({ id: docSnap.id, ...docSnap.data() });
+            setAppUser(appUserFromDoc(docSnap.id, docSnap.data()));
           } else if (currentUser.email) {
             // Search by email if UID doc doesn't exist (one-time check)
             const usersRef = collection(db, 'users');

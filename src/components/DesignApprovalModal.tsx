@@ -40,7 +40,7 @@ import { useRolePermissions } from '../services/rolePermissionsStore';
 import type { ApprovalSnapshotCollections } from '../types';
 import { backfillCommitMessage, backfillFailureMessage, backfillLockedAt, buildApprovalSnapshot, chooseApprovalSource,
   classifyBackfillFailure, firestoreErrorCode, formatBackfillNotice, getParticipatingOwners, isBackfilledApproval,
-  nextApprovalId, nextSnapshotId, projectForDocument, resolveApprovalFormValues, resolveBackfillLocker,
+  nextApprovalId, nextSnapshotId, projectForDocument, rejectionReasonPatch, resolveApprovalFormValues, resolveBackfillLocker,
   sourceReadiness, ApprovalStateChangedError, type ApprovalSnapshot, type BackfillExpected, type ExpectedApprovalState,
   type SnapshotSourceStatus } from '../utils/approvalSnapshot';
 import { attachApprovalSnapshot, backfillApprovalSnapshot, readApprovalSnapshot, readBackfillLockerProfile,
@@ -1381,6 +1381,11 @@ export function DesignApprovalModal({
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
     if (!appUser || !permissions?.requestApproval) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setActionError('ไม่พบบัญชีที่ยืนยันตัวตน กรุณาเข้าสู่ระบบใหม่');
+      return;
+    }
     if (isLoadingData || sourceError) {
       setActionError(sourceError ? `โหลด ${sourceError[0]} ไม่สำเร็จ: ${sourceError[1].error}` : 'กำลังโหลดข้อมูลโครงการ');
       return;
@@ -1421,7 +1426,7 @@ export function DesignApprovalModal({
         approvalStage: 'Planning',
         requestedBy: appUser.displayName || appUser.email || 'Planning Engineer',
         requestedByEmail: appUser.email,
-        requestedByUid: appUser.id,
+        requestedByUid: uid,
         requestedAt: new Date().toISOString(),
         designNotes: requestNotes.trim() || 'ขออนุมัติแบบโครงการ Fiber Infra Sharing ตามสัดส่วน Core และ Enclosure',
         contractorName: contractorInput.trim(),
@@ -1438,7 +1443,7 @@ export function DesignApprovalModal({
         ownerSignOffs: initialPlanningSignOffs
       };
 
-      const snapshot = buildApprovalSnapshot(project, newApproval.id, newApproval.requestedAt, appUser.id, liveOwners, liveSource);
+      const snapshot = buildApprovalSnapshot(project, newApproval.id, newApproval.requestedAt, uid, liveOwners, liveSource);
       newApproval.snapshotId = newApproval.id;
       newApproval.snapshotCreatedAt = snapshot.metadata.createdAt;
       const expected: ExpectedApprovalState = project.designApproval?.status === 'Rejected'
@@ -1542,6 +1547,11 @@ export function DesignApprovalModal({
       setActionError('กรุณาวาดหรือแทรกรูปลายเซ็นก่อนลงนาม');
       return;
     }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setActionError('ไม่พบบัญชีที่ยืนยันตัวตน กรุณาเข้าสู่ระบบใหม่');
+      return;
+    }
     setIsSubmitting(true);
     setActionError(null);
 
@@ -1556,7 +1566,7 @@ export function DesignApprovalModal({
         status: isApproved ? 'Approved' : 'Rejected',
         signedBy: fullName,
         signedByEmail: appUser.email,
-        signedByUid: appUser.id,
+        signedByUid: uid,
         position,
         role: appUser.role,
         signedAt: new Date().toISOString(),
@@ -1604,7 +1614,7 @@ export function DesignApprovalModal({
         ...existingApproval,
         status: nextProjectStatus,
         approvalStage: nextStage,
-        rejectionReason: isAnyRejected ? signerComment.trim() : '',
+        ...rejectionReasonPatch(existingApproval.rejectionReason, isAnyRejected, signerComment),
         planningSignOffs: nextPlanningSignOffs,
         omSignOffs: nextOMSignOffs,
         ...(allOMApproved ? {

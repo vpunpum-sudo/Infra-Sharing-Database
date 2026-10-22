@@ -70,6 +70,7 @@ After that point, nothing can turn the outcome into a failure.
   - `planApprovalAttach` blocks legacy projects whose status is inconsistent;
   - signing writes `rejectionReason: ''`.
 - The general `appUser.id` vs auth uid issue (`src/App.tsx:2783`). The only exception: backfill code uses `auth.currentUser.uid` and `auth.currentUser.email`.
+- These follow-ups are addressed in [approval identity and legacy attach fixes](approval-identity-and-legacy-attach-fixes.md); they remain outside this archived backfill feature's scope.
 - Deployment of any kind.
 
 ### Acceptance criteria

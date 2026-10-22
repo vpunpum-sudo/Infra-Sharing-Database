@@ -259,9 +259,14 @@ export function assertApprovalAttachState(expected: ExpectedApprovalState, actua
 export function planApprovalAttach(expected: ExpectedApprovalState, project: Project, newApproval: DesignApproval):
   Pick<Project, 'status' | 'designApproval' | 'approvalDraft'> {
   assertApprovalAttachState(expected, project.designApproval);
-  if ((expected.kind === 'none' && project.status !== 'Draft' && project.status !== undefined) ||
-    (expected.kind === 'rejected' && project.status !== 'Rejected')) throw new ApprovalStateChangedError();
+  if (expected.kind === 'rejected' && project.status !== 'Rejected') throw new ApprovalStateChangedError();
   return { status: 'Pending Approval', designApproval: newApproval, approvalDraft: undefined };
+}
+
+export function rejectionReasonPatch(existing: string | undefined, isAnyRejected: boolean, comment: string):
+  { rejectionReason?: string } {
+  if (isAnyRejected) return { rejectionReason: comment.trim() };
+  return existing ? { rejectionReason: '' } : {};
 }
 
 export function remapApprovalDraftSelections(project: Project | undefined, routeId: string, secondRouteId: string,
