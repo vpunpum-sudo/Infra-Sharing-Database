@@ -1,14 +1,15 @@
-import { collection, doc, getDoc, getDocs, runTransaction, setDoc, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocFromServer, getDocs, runTransaction, setDoc, writeBatch, deleteField, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { ApprovalSnapshotCollections, ApprovalSnapshotMetadata, DesignApproval, Project } from '../types';
+import type { ApprovalSnapshotCollections, ApprovalSnapshotMetadata, DesignApproval, Project, User } from '../types';
 import { ApprovalStateChangedError, chunkSnapshotWrites, IncompleteApprovalSnapshotError, planApprovalAttach,
-  resolveApprovalSnapshot, snapshotCollections, type ApprovalSnapshot, type ExpectedApprovalState, type SnapshotIndexChunk } from '../utils/approvalSnapshot';
+  planSnapshotBackfill, resolveApprovalSnapshot, snapshotCollections, type ApprovalSnapshot, type BackfillExpected,
+  type BackfillRecord, type BackfillReread, type ExpectedApprovalState, type SnapshotIndexChunk } from '../utils/approvalSnapshot';
 
 const snapshotPath = (projectId: string, approvalId: string) => `projects/${projectId}/approvalSnapshots/${approvalId}`;
 
 export async function writeApprovalSnapshot(snapshot: ApprovalSnapshot): Promise<void> {
   const { metadata, collections, indexChunks } = snapshot;
-  const base = snapshotPath(metadata.projectId, metadata.approvalId);
+  const base = snapshotPath(metadata.projectId, metadata.id);
   await setDoc(doc(db, base), metadata);
   for (const [i, chunk] of indexChunks.entries()) {
     await setDoc(doc(db, `${base}/index/${i}`), { ...chunk, projectId: metadata.projectId, approvalId: metadata.approvalId });
@@ -26,12 +27,12 @@ export async function writeApprovalSnapshot(snapshot: ApprovalSnapshot): Promise
   }
 }
 
-export async function readApprovalSnapshot(projectId: string, approvalId: string): Promise<ApprovalSnapshot> {
-  const base = snapshotPath(projectId, approvalId);
+export async function readApprovalSnapshot(projectId: string, snapshotId: string, approvalId: string): Promise<ApprovalSnapshot> {
+  const base = snapshotPath(projectId, snapshotId);
   const metadataDoc = await getDoc(doc(db, base));
   if (!metadataDoc.exists()) throw new IncompleteApprovalSnapshotError('missing metadata');
   const metadata = metadataDoc.data() as ApprovalSnapshotMetadata;
-  if (metadata.projectId !== projectId || metadata.approvalId !== approvalId || metadataDoc.id !== approvalId)
+  if (metadata.projectId !== projectId || metadata.approvalId !== approvalId || metadataDoc.id !== snapshotId || metadata.id !== snapshotId)
     throw new IncompleteApprovalSnapshotError('metadata identity');
   const [indexSnap, ...childSnaps] = await Promise.all([
     getDocs(collection(db, `${base}/index`)),
@@ -53,7 +54,32 @@ export async function readApprovalSnapshot(projectId: string, approvalId: string
     // Each collection is loaded independently; the resolver compares document IDs exactly.
     (children as unknown as Record<string, unknown>)[name] = values;
   }
-  return resolveApprovalSnapshot(metadata, children, indexChunks);
+  return resolveApprovalSnapshot(metadata, children, indexChunks, { snapshotId, approvalId });
+}
+
+export async function backfillApprovalSnapshot(projectId: string, expected: BackfillExpected,
+  record: BackfillRecord): Promise<void> {
+  await runTransaction(db, async transaction => {
+    const projectRef = doc(db, `projects/${projectId}`);
+    const current = await transaction.get(projectRef);
+    if (!current.exists()) throw new ApprovalStateChangedError();
+    const patch = planSnapshotBackfill(expected, current.data() as Project, record, serverTimestamp());
+    transaction.update(projectRef, patch);
+  });
+}
+
+export async function rereadProjectForBackfill(projectId: string): Promise<BackfillReread> {
+  try {
+    const fresh = await getDocFromServer(doc(db, `projects/${projectId}`));
+    return { ok: true, project: fresh.exists() ? { ...fresh.data(), id: fresh.id } as Project : null };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function readBackfillLockerProfile(uid: string): Promise<Pick<User, 'id' | 'displayName'> | null> {
+  const profile = await getDoc(doc(db, `users/${uid}`));
+  return profile.exists() ? { ...profile.data(), id: profile.id } as User : null;
 }
 
 export async function attachApprovalSnapshot(projectId: string, expected: ExpectedApprovalState,
