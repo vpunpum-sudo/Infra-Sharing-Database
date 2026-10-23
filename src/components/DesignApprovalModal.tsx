@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useConfirm } from './ConfirmModal';
+import { canSignAsOwner } from '../utils/approvalQueue';
 import { 
   Project, User as AppUser, CoreOwner, DesignApproval, 
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
@@ -1258,10 +1259,7 @@ export function DesignApprovalModal({
   // an extra master switch; with it off, roles allowed to sign a level could not.
   const canUserSign = (owner: CoreOwner, level: 'Planning' | 'OM') => {
     if (!appUser || snapshotUnavailable || usingLivePreview) return false;
-    if (!(level === 'Planning' ? permissions?.approvePlanning : permissions?.approveOM)) return false;
-    if (appUser.role === 'Admin') return true;
-
-    return !(appUser.owner && appUser.owner !== 'None' && appUser.owner !== owner);
+    return canSignAsOwner(appUser, permissions, owner, level);
   };
 
   const canCorrectSignOff = () => appUser?.role === 'Admin' && !snapshotUnavailable && !usingLivePreview;
