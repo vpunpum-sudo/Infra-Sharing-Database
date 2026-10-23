@@ -1,0 +1,26 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { claimDelivery } = require('./deliveryClaims');
+const { makeStore } = require('./fixtures/reminderStore');
+test('S35 claim extraction preserves original unlimited behavior, email detail and injected clock/timestamp', async () => {
+  const db = makeStore(); const options = { now: () => 1000, serverTimestamp: () => 'timestamp' };
+  const claim = () => claimDelivery(db, 'id', { email: 'existing@example.test' }, options);
+  assert.equal((await claim()).result, 'claimed');
+  assert.deepEqual(db.data('approvalEmailDeliveries/id'), { email: 'existing@example.test', status: 'sending', attempts: 1, leaseUntil: 601000, updatedAt: 'timestamp' });
+  assert.equal((await claim()).result, 'busy');
+  db.put('approvalEmailDeliveries/id', { status: 'failed', attempts: 8 });
+  assert.equal((await claim()).result, 'claimed');
+  assert.equal(db.data('approvalEmailDeliveries/id').attempts, 9);
+  db.put('approvalEmailDeliveries/id', { status: 'sending', attempts: 3, leaseUntil: 999 });
+  assert.equal((await claimDelivery(db, 'id', {}, { ...options, maxAttempts: 3 })).result, 'exhausted');
+  assert.equal((await claim()).result, 'claimed');
+  db.put('approvalEmailDeliveries/id', { status: 'sent', attempts: 99 });
+  assert.equal((await claimDelivery(db, 'id', {}, { ...options, maxAttempts: 3 })).result, 'sent');
+  const source = fs.readFileSync(__dirname + '/index.js', 'utf8');
+  const trigger = source.slice(source.indexOf('exports.sendApprovalNotifications'), source.indexOf('exports.sendApprovalStageReminders'));
+  assert.match(trigger, /retry: true/);
+  assert.match(trigger, /result === 'busy'\) throw/);
+  assert.match(trigger, /kind: notification.kind, email/);
+  assert.match(trigger, /lastError: String\(error\?\.message \|\| error\)\.slice\(0, 300\)/);
+});

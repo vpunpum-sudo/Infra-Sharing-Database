@@ -2,8 +2,12 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 const { getStorage } = require('firebase-admin/storage');
-const { defineSecret, defineString } = require('firebase-functions/params');
+const { defineSecret, defineString, defineInt } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { claimDelivery } = require('./deliveryClaims');
+const { STAGE_REMINDER_OPTIONS, REMINDER_DEFAULTS } = require('./approvalReminderConfig');
+const { createStageReminderHandler } = require('./approvalReminders');
 const nodemailer = require('nodemailer');
 const {
   notificationForTransition, notificationRecipients, deliveryId, emailContent
@@ -14,6 +18,8 @@ const DATABASE_ID = 'ai-studio-0f13f204-a764-4677-a292-7476ef7d2ece';
 const gmailAppPassword = defineSecret('fiberinfrasharing');
 const emailFrom = defineString('APPROVAL_EMAIL_FROM');
 const appUrl = defineString('APPROVAL_APP_URL');
+const reminderMode = defineString('APPROVAL_REMINDER_MODE', { default: REMINDER_DEFAULTS.mode });
+const reminderMaxEmails = defineInt('APPROVAL_REMINDER_MAX_EMAILS', { default: REMINDER_DEFAULTS.maxEmails });
 
 initializeApp();
 
@@ -73,26 +79,6 @@ async function finalDocumentAttachments(db, projectId, approvalId) {
     attachments: attached.map(({ filename, content, contentType }) => ({ filename, content, contentType })),
     note: attachmentNote(attached.map(file => file.name), skipped)
   };
-}
-
-async function claimDelivery(db, id, details) {
-  const ref = db.collection('approvalEmailDeliveries').doc(id);
-  const now = Date.now();
-  const result = await db.runTransaction(async transaction => {
-    const snapshot = await transaction.get(ref);
-    const current = snapshot.data();
-    if (current?.status === 'sent') return 'sent';
-    if (current?.status === 'sending' && current.leaseUntil > now) return 'busy';
-    transaction.set(ref, {
-      ...details,
-      status: 'sending',
-      attempts: (current?.attempts || 0) + 1,
-      leaseUntil: now + 10 * 60 * 1000,
-      updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
-    return 'claimed';
-  });
-  return { ref, result };
 }
 
 exports.sendApprovalNotifications = onDocumentUpdated({
@@ -166,3 +152,16 @@ exports.sendApprovalNotifications = onDocumentUpdated({
     projectId, kind: notification.kind, recipientCount: recipients.length
   });
 });
+
+exports.sendApprovalStageReminders = onSchedule({
+  ...STAGE_REMINDER_OPTIONS, secrets: [gmailAppPassword]
+}, createStageReminderHandler({
+  getDb: () => getFirestore(DATABASE_ID),
+  // Firebase param defaults are deployment metadata; .value() alone returns ''/0
+  // when an env variable is absent in a local runtime.
+  mode: () => process.env.APPROVAL_REMINDER_MODE === undefined ? undefined : reminderMode.value(),
+  maxEmails: () => process.env.APPROVAL_REMINDER_MAX_EMAILS === undefined ? undefined : reminderMaxEmails.value(),
+  from: () => emailFrom.value(), appUrl: () => appUrl.value(),
+  password: () => gmailAppPassword.value(),
+  createTransport: options => nodemailer.createTransport(options), logger
+}));
