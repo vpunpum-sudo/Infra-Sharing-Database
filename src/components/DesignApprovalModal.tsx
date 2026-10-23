@@ -5,8 +5,8 @@ import {
   OwnerSignOff, ProjectStatus, Route, FiberEnclosure, 
   FiberLoop, EnclosureType, FiberType, ApprovalStage, FiberColorConfig 
 } from '../types';
-import { doc, setDoc, updateDoc, deleteField, collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { doc, setDoc, updateDoc, deleteField, collection, onSnapshot, getDocFromServer } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 import { logActivity } from '../services/logService';
 import { 
   CheckCircle2, XCircle, Clock, FileText,
@@ -38,9 +38,13 @@ import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, Tooltip
 import L from 'leaflet';
 import { useRolePermissions } from '../services/rolePermissionsStore';
 import type { ApprovalSnapshotCollections } from '../types';
-import { buildApprovalSnapshot, chooseApprovalSource, getParticipatingOwners, nextApprovalId, projectForDocument, resolveApprovalFormValues,
-  sourceReadiness, ApprovalStateChangedError, type ApprovalSnapshot, type ExpectedApprovalState, type SnapshotSourceStatus } from '../utils/approvalSnapshot';
-import { attachApprovalSnapshot, readApprovalSnapshot, writeApprovalSnapshot } from '../services/approvalSnapshotService';
+import { backfillCommitMessage, backfillFailureMessage, backfillLockedAt, buildApprovalSnapshot, chooseApprovalSource,
+  classifyBackfillFailure, firestoreErrorCode, formatBackfillNotice, getParticipatingOwners, isBackfilledApproval,
+  nextApprovalId, nextSnapshotId, projectForDocument, rejectionReasonPatch, resolveApprovalFormValues, resolveBackfillLocker,
+  sourceReadiness, ApprovalStateChangedError, type ApprovalSnapshot, type BackfillExpected, type ExpectedApprovalState,
+  type SnapshotSourceStatus } from '../utils/approvalSnapshot';
+import { attachApprovalSnapshot, backfillApprovalSnapshot, readApprovalSnapshot, readBackfillLockerProfile,
+  rereadProjectForBackfill, writeApprovalSnapshot } from '../services/approvalSnapshotService';
 
 interface DesignApprovalModalProps {
   isOpen: boolean;
@@ -156,6 +160,13 @@ export function DesignApprovalModal({
   const [signerComment, setSignerComment] = useState('Approved design layout according to fiber infra sharing specifications.');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [committedLock, setCommittedLock] = useState<{ approvalId: string; snapshotId: string } | null>(null);
+  const [lockerProfile, setLockerProfile] = useState<{ id?: string; displayName?: string } | null>(null);
+  useEffect(() => {
+    setCommittedLock(null);
+    setActionNotice(null);
+  }, [project.id, project.designApproval?.id]);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   // Signed PDF + KMZ for the completion email, made once the last sign-off lands.
@@ -367,23 +378,37 @@ export function DesignApprovalModal({
 
   useEffect(() => {
     const id = project.designApproval?.snapshotId;
-    if (!isOpen || !id) { setSnapshotState({}); return; }
+    const approvalId = project.designApproval?.id;
+    if (!isOpen || !id || !approvalId) { setSnapshotState({}); return; }
     let cancelled = false;
     setSnapshotState({ id });
-    readApprovalSnapshot(project.id, id).then(data => {
+    readApprovalSnapshot(project.id, id, approvalId).then(data => {
       if (!cancelled) setSnapshotState({ id, data });
     }).catch(error => {
       if (!cancelled) setSnapshotState({ id, error: error instanceof Error ? error.message : String(error) });
     });
     return () => { cancelled = true; };
-  }, [isOpen, project.id, project.designApproval?.snapshotId]);
+  }, [isOpen, project.id, project.designApproval?.snapshotId, project.designApproval?.id]);
+
+  useEffect(() => {
+    const approval = project.designApproval;
+    const uid = approval?.snapshotBackfilledByUid;
+    setLockerProfile(null);
+    if (!isOpen || !isBackfilledApproval(approval) || !uid) return;
+    let cancelled = false;
+    readBackfillLockerProfile(uid).then(profile => {
+      if (!cancelled) setLockerProfile(profile);
+    }).catch(() => { if (!cancelled) setLockerProfile(null); });
+    return () => { cancelled = true; };
+  }, [isOpen, project.designApproval?.id, project.designApproval?.snapshotId, project.designApproval?.snapshotBackfilledByUid]);
 
   const liveSource: ApprovalSnapshotCollections = {
     routes: loadedRoutes, enclosures: loadedEnclosures, loops: loadedLoops,
     enclosureTypes, fiberTypes, fiberColorConfigs
   };
   const viewedSnapshot = snapshotState.id === project.designApproval?.snapshotId ? snapshotState.data : undefined;
-  const snapshotUnavailable = Boolean(project.designApproval?.snapshotId && !viewedSnapshot);
+  const snapshotUnavailable = Boolean(project.designApproval?.snapshotId &&
+    (!viewedSnapshot || (isBackfilledApproval(project.designApproval) && !backfillLockedAt(project.designApproval))));
   const documentSource = project.designApproval?.snapshotId
     ? viewedSnapshot?.collections : liveSource;
   const usingLivePreview = (previewLive || viewMode === 'request') && project.designApproval?.status === 'Rejected';
@@ -1242,8 +1267,66 @@ export function DesignApprovalModal({
   const canCorrectSignOff = () => appUser?.role === 'Admin' && !snapshotUnavailable && !usingLivePreview;
 
   const confirm = useConfirm();
+  const handleLockLegacyApproval = async () => {
+    const approval = project.designApproval;
+    if (appUser?.role !== 'Admin' || !approval || approval.snapshotId ||
+      committedLock?.approvalId === approval.id || !readiness.ready || isSubmitting) return;
+    if (!(await confirm({ title: 'ล็อกเอกสารคำขอย้อนหลัง?',
+      message: `เอกสารจะล็อกเนื้อหาจากข้อมูลโครงการปัจจุบัน ณ เวลาที่ล็อก ไม่ใช่ข้อมูลตอนยื่นคำขอ (${approval.requestedAt})\nลายเซ็น สถานะ และเลขที่เอกสารจะคงเดิม หน้าจออนุมัติจะแสดงเวลาจากเซิร์ฟเวอร์และบัญชีผู้ล็อกย้อนหลังอย่างถาวร แต่ไฟล์ PDF ที่ส่งออกจะไม่แสดงข้อความนี้\nการล็อกนี้ยกเลิกไม่ได้`,
+      confirmText: 'ล็อกเอกสารนี้', danger: false }))) return;
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      setActionError('ไม่พบบัญชีหรืออีเมลที่ยืนยันตัวตน กรุณาเข้าสู่ระบบใหม่');
+      return;
+    }
+    const expected: BackfillExpected = { approvalId: approval.id };
+    const snapshotId = nextSnapshotId();
+    const record = { snapshotId, createdAt: new Date().toISOString(), uid: user.uid, email: user.email };
+    let committed = false;
+    let stage: 'snapshot' | 'attach' = 'snapshot';
+    setIsSubmitting(true);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      const snapshot = buildApprovalSnapshot(project, approval.id, record.createdAt, user.uid,
+        getParticipatingOwners(project, liveSource.routes), liveSource, snapshotId);
+      await writeApprovalSnapshot(snapshot);
+      stage = 'attach';
+      await backfillApprovalSnapshot(project.id, expected, record);
+      committed = true;
+    } catch (error) {
+      if (!committed) {
+        const code = firestoreErrorCode(error);
+        const reread = error instanceof ApprovalStateChangedError ? undefined
+          : code === 'permission-denied' ? await rereadProjectForBackfill(project.id) : undefined;
+        const classification = error instanceof ApprovalStateChangedError ? 'state-changed'
+          : classifyBackfillFailure(code, expected, reread);
+        console.error('Backfill approval snapshot failed', { error, code, snapshotId, stage, classification });
+        setActionError(backfillFailureMessage(classification, code, reread?.ok === false));
+        try { await logActivity('backfill_approval_snapshot_failed', `Approval lock failed for ${project.name}`, {
+          projectId: project.id, approvalId: approval.id, snapshotId, stage, errorCode: code || 'unknown', classification
+        }); } catch (logError) { console.warn('Backfill failure log unavailable', logError); }
+      }
+      setIsSubmitting(false);
+      return;
+    }
+    try { setCommittedLock({ approvalId: approval.id, snapshotId }); }
+    catch (error) { console.warn('Backfill committed state unavailable', error); }
+    let refreshFailed = false;
+    try {
+      const fresh = await getDocFromServer(doc(db, `projects/${project.id}`));
+      if (!fresh.exists()) throw new Error('Locked project not found during refresh');
+      onProjectUpdated?.({ ...fresh.data(), id: fresh.id } as Project);
+    } catch (error) { refreshFailed = true; console.warn('Backfill refresh unavailable', error); }
+    try { await logActivity('backfill_approval_snapshot', `Approval locked for ${project.name}`, {
+      projectId: project.id, approvalId: approval.id, snapshotId
+    }); } catch (error) { console.warn('Backfill success log unavailable', error); }
+    try { setActionError(null); setActionNotice(backfillCommitMessage(refreshFailed)); }
+    catch (error) { console.warn('Backfill result display unavailable', error); }
+    try { setIsSubmitting(false); } catch (error) { console.warn('Backfill busy state unavailable', error); }
+  };
   const handleRewindApproval = async () => {
-    if (appUser?.role !== 'Admin' || !project.designApproval) return;
+    if (appUser?.role !== 'Admin' || !project.designApproval || snapshotUnavailable) return;
     const allowedTargets = currentStage === 'Completed' ? ['Draft', 'Planning', 'OM']
       : currentStage === 'OM' ? ['Draft', 'Planning']
       : currentStage === 'Rejected' ? ['Draft', 'Planning']
@@ -1298,6 +1381,11 @@ export function DesignApprovalModal({
   // Submit new request for design approval
   const handleSubmitApprovalRequest = async () => {
     if (!appUser || !permissions?.requestApproval) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setActionError('ไม่พบบัญชีที่ยืนยันตัวตน กรุณาเข้าสู่ระบบใหม่');
+      return;
+    }
     if (isLoadingData || sourceError) {
       setActionError(sourceError ? `โหลด ${sourceError[0]} ไม่สำเร็จ: ${sourceError[1].error}` : 'กำลังโหลดข้อมูลโครงการ');
       return;
@@ -1338,7 +1426,7 @@ export function DesignApprovalModal({
         approvalStage: 'Planning',
         requestedBy: appUser.displayName || appUser.email || 'Planning Engineer',
         requestedByEmail: appUser.email,
-        requestedByUid: appUser.id,
+        requestedByUid: uid,
         requestedAt: new Date().toISOString(),
         designNotes: requestNotes.trim() || 'ขออนุมัติแบบโครงการ Fiber Infra Sharing ตามสัดส่วน Core และ Enclosure',
         contractorName: contractorInput.trim(),
@@ -1355,7 +1443,7 @@ export function DesignApprovalModal({
         ownerSignOffs: initialPlanningSignOffs
       };
 
-      const snapshot = buildApprovalSnapshot(project, newApproval.id, newApproval.requestedAt, appUser.id, liveOwners, liveSource);
+      const snapshot = buildApprovalSnapshot(project, newApproval.id, newApproval.requestedAt, uid, liveOwners, liveSource);
       newApproval.snapshotId = newApproval.id;
       newApproval.snapshotCreatedAt = snapshot.metadata.createdAt;
       const expected: ExpectedApprovalState = project.designApproval?.status === 'Rejected'
@@ -1459,6 +1547,11 @@ export function DesignApprovalModal({
       setActionError('กรุณาวาดหรือแทรกรูปลายเซ็นก่อนลงนาม');
       return;
     }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setActionError('ไม่พบบัญชีที่ยืนยันตัวตน กรุณาเข้าสู่ระบบใหม่');
+      return;
+    }
     setIsSubmitting(true);
     setActionError(null);
 
@@ -1473,7 +1566,7 @@ export function DesignApprovalModal({
         status: isApproved ? 'Approved' : 'Rejected',
         signedBy: fullName,
         signedByEmail: appUser.email,
-        signedByUid: appUser.id,
+        signedByUid: uid,
         position,
         role: appUser.role,
         signedAt: new Date().toISOString(),
@@ -1521,7 +1614,7 @@ export function DesignApprovalModal({
         ...existingApproval,
         status: nextProjectStatus,
         approvalStage: nextStage,
-        rejectionReason: isAnyRejected ? signerComment.trim() : '',
+        ...rejectionReasonPatch(existingApproval.rejectionReason, isAnyRejected, signerComment),
         planningSignOffs: nextPlanningSignOffs,
         omSignOffs: nextOMSignOffs,
         ...(allOMApproved ? {
@@ -2523,7 +2616,7 @@ export function DesignApprovalModal({
                   {(currentStage === 'OM' || currentStage === 'Completed' || currentStage === 'Rejected') && <option value="Planning">Planning</option>}
                   {currentStage === 'Completed' && <option value="OM">O&amp;M</option>}
                 </select>
-                <button type="button" onClick={handleRewindApproval} disabled={isSubmitting}
+                <button type="button" onClick={handleRewindApproval} disabled={isSubmitting || snapshotUnavailable}
                   className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
                   ถอยขั้นตอนอนุมัติ
                 </button>
@@ -2535,12 +2628,31 @@ export function DesignApprovalModal({
 
         {/* Modal Main Content Body */}
         <div className="flex-1 overflow-y-auto bg-slate-950 p-4 sm:p-6 custom-scrollbar">
-          {project.designApproval && !project.designApproval.snapshotId && (
+          {project.designApproval && !project.designApproval.snapshotId && committedLock?.approvalId !== project.designApproval.id && (
             <div role="status" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-              เอกสารคำขอเก่านี้ยังไม่ล็อกข้อมูล และอาจเปลี่ยนตามข้อมูลโครงการปัจจุบัน
+              <div>เอกสารคำขอเก่านี้ยังไม่ล็อกข้อมูล และอาจเปลี่ยนตามข้อมูลโครงการปัจจุบัน</div>
+              {appUser?.role === 'Admin' && <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={handleLockLegacyApproval} disabled={!readiness.ready || isSubmitting}
+                  className="rounded-lg border border-amber-400/50 px-3 py-1.5 font-bold text-amber-100 hover:bg-amber-500/20 disabled:opacity-50">
+                  {isSubmitting ? 'กำลังล็อกเอกสาร…' : 'ล็อกเอกสารนี้'}
+                </button>
+                {!readiness.ready && <span>{readiness.errorSource
+                  ? `โหลด ${readiness.errorSource} ไม่สำเร็จ ล็อกเอกสารไม่ได้`
+                  : 'กำลังโหลดข้อมูลโครงการ… ยังล็อกเอกสารไม่ได้'}</span>}
+              </div>}
             </div>
           )}
-          {snapshotUnavailable && (
+          {project.designApproval && isBackfilledApproval(project.designApproval) && (
+            <div role="status" className="mb-3 rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-xs text-sky-100">
+              {formatBackfillNotice(project.designApproval, resolveBackfillLocker(
+                project.designApproval.snapshotBackfilledByUid, project.designApproval.snapshotBackfilledByEmail, lockerProfile))}
+            </div>
+          )}
+          {actionNotice && <div role="status" className="mb-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200">{actionNotice}</div>}
+          {/* The request form and the signing modal show actionError themselves. */}
+          {actionError && viewMode === 'slides' && !signingModalOpen &&
+            <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">{actionError}</div>}
+          {snapshotUnavailable && !viewedSnapshot && (
             <div role="alert" className="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
               {snapshotState.error ? `โหลดเอกสารคำขอเดิมไม่สำเร็จ: ${snapshotState.error}` : 'กำลังโหลดเอกสารคำขอเดิม…'}
             </div>

@@ -1,4 +1,5 @@
 import type { ApprovalSnapshotCollections, ApprovalSnapshotMetadata, ApprovalSnapshotProject, CoreOwner, DesignApproval, Project, Route } from '../types';
+import { Timestamp, type FieldValue } from 'firebase/firestore';
 
 export const snapshotCollections = ['routes', 'enclosures', 'loops', 'enclosureTypes', 'fiberTypes', 'fiberColorConfigs'] as const;
 export type SnapshotCollection = typeof snapshotCollections[number];
@@ -19,6 +20,71 @@ const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)
 const emptyIds = (): NonNullable<ApprovalSnapshotMetadata['ids']> => ({ routes: [], enclosures: [], loops: [], enclosureTypes: [], fiberTypes: [], fiberColorConfigs: [] });
 
 export function nextApprovalId(): string { return `appr_${crypto.randomUUID()}`; }
+export function nextSnapshotId(): string { return `snap_${crypto.randomUUID()}`; }
+
+export type BackfillExpected = { approvalId: string };
+export type BackfillRecord = { snapshotId: string; createdAt: string; uid: string; email: string };
+export type BackfillReread = { ok: true; project: Project | null } | { ok: false };
+export type BackfillFailure = 'state-changed' | 'permission-error' | 'failed';
+
+export function backfillStateMatches(expected: BackfillExpected, project: Project | null | undefined): boolean {
+  return project?.designApproval?.id === expected.approvalId && !project.designApproval.snapshotId;
+}
+
+export function planSnapshotBackfill(expected: BackfillExpected, project: Project, record: BackfillRecord,
+  serverTime: Timestamp | FieldValue): Record<string, string | Timestamp | FieldValue> {
+  if (!backfillStateMatches(expected, project) || record.snapshotId === expected.approvalId)
+    throw new ApprovalStateChangedError();
+  return {
+    'designApproval.snapshotId': record.snapshotId,
+    'designApproval.snapshotCreatedAt': record.createdAt,
+    'designApproval.snapshotBackfilledAt': serverTime,
+    'designApproval.snapshotBackfilledByUid': record.uid,
+    'designApproval.snapshotBackfilledByEmail': record.email
+  };
+}
+
+export function classifyBackfillFailure(code: string | undefined, expected: BackfillExpected,
+  reread?: BackfillReread): BackfillFailure {
+  if (code !== 'permission-denied' || !reread?.ok) return 'failed';
+  return backfillStateMatches(expected, reread.project) ? 'permission-error' : 'state-changed';
+}
+
+export function firestoreErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error)) return undefined;
+  return typeof error.code === 'string' ? error.code : undefined;
+}
+
+export function backfillFailureMessage(classification: BackfillFailure, code?: string, rereadFailed = false): string {
+  if (classification === 'state-changed') return 'คำขอเปลี่ยนไปแล้ว (อาจมีผู้ล็อกก่อน หรือคำขอถูกยื่นใหม่/ถอยกลับ) กรุณาโหลดหน้าใหม่';
+  if (classification === 'permission-error') return 'ไม่มีสิทธิ์ล็อกเอกสารนี้ (permission-denied) กรุณาติดต่อผู้ดูแลระบบ';
+  return rereadFailed ? 'ล็อกเอกสารไม่สำเร็จ และตรวจสอบสาเหตุไม่ได้ กรุณากดล็อกอีกครั้ง'
+    : `ล็อกเอกสารไม่สำเร็จ (${code || 'unknown'}) กรุณากดล็อกอีกครั้ง`;
+}
+
+export function backfillCommitMessage(refreshFailed: boolean): string {
+  return refreshFailed ? 'ล็อกเอกสารสำเร็จแล้ว แต่รีเฟรชหน้าจอไม่สำเร็จ โปรดโหลดหน้าใหม่' : 'ล็อกเอกสารสำเร็จ';
+}
+
+export function isBackfilledApproval(approval?: DesignApproval): boolean {
+  return Boolean(approval?.snapshotId && approval.snapshotId !== approval.id);
+}
+
+export function backfillLockedAt(approval?: DesignApproval): Timestamp | null {
+  return approval?.snapshotBackfilledAt instanceof Timestamp ? approval.snapshotBackfilledAt : null;
+}
+
+export function resolveBackfillLocker(uid: string | undefined, email: string | undefined,
+  profile?: { id?: string; displayName?: string } | null): string {
+  return uid && profile?.id === uid && profile.displayName?.trim() ? profile.displayName.trim() : email || '';
+}
+
+export function formatBackfillNotice(approval: DesignApproval, locker: string): string {
+  const at = backfillLockedAt(approval);
+  if (!at) return 'กำลังยืนยันเวลาล็อกจากเซิร์ฟเวอร์…';
+  const formatted = new Intl.DateTimeFormat('th-TH', { dateStyle: 'long', timeStyle: 'short' }).format(at.toDate());
+  return `เอกสารนี้ถูกล็อกย้อนหลังเมื่อ ${formatted} โดย ${locker} — เนื้อหาเป็นข้อมูลโครงการ ณ เวลาที่ล็อก ไม่ใช่ข้อมูลตอนที่ยื่นขออนุมัติ`;
+}
 
 export function sourceReadiness(status: SnapshotSourceStatus): { ready: boolean; loading: boolean; errorSource?: SnapshotCollection } {
   const errorSource = snapshotCollections.find(name => Boolean(status[name].error));
@@ -81,7 +147,8 @@ export function resolveApprovalFormValues(project: Project): ApprovalFormValues 
 
 export function chooseApprovalSource(live: ApprovalSnapshotCollections, approval?: DesignApproval, snapshot?: ApprovalSnapshot | null, forForm = false): ApprovalSnapshotCollections {
   if (forForm || !approval?.snapshotId) return live;
-  if (!snapshot || snapshot.metadata.approvalId !== approval.snapshotId) throw new IncompleteApprovalSnapshotError('metadata');
+  if (!snapshot || snapshot.metadata.id !== approval.snapshotId || snapshot.metadata.approvalId !== approval.id)
+    throw new IncompleteApprovalSnapshotError('metadata');
   return snapshot.collections;
 }
 
@@ -115,7 +182,7 @@ export function planIdIndex(ids: NonNullable<ApprovalSnapshotMetadata['ids']>): 
 }
 
 export function buildApprovalSnapshot(project: Project, approvalId: string, createdAt: string, createdByUid: string,
-  participatingOwners: CoreOwner[], source: ApprovalSnapshotCollections): ApprovalSnapshot {
+  participatingOwners: CoreOwner[], source: ApprovalSnapshotCollections, snapshotId = approvalId): ApprovalSnapshot {
   const collections = structuredClone(source);
   const ids = emptyIds();
   for (const collection of snapshotCollections) {
@@ -129,7 +196,8 @@ export function buildApprovalSnapshot(project: Project, approvalId: string, crea
   if (project.owners !== undefined) snapshotProject.owners = structuredClone(project.owners);
   return {
     metadata: {
-      id: approvalId, approvalId, projectId: project.id, createdAt, createdByUid, schemaVersion: 1,
+      id: snapshotId, approvalId, projectId: project.id, createdAt, createdByUid, schemaVersion: 1,
+      ...(snapshotId !== approvalId ? { backfill: true as const } : {}),
       project: snapshotProject, participatingOwners: [...participatingOwners],
       ...(index.ids ? { ids: index.ids } : { idIndex: index.idIndex })
     }, collections, indexChunks: index.chunks
@@ -137,8 +205,11 @@ export function buildApprovalSnapshot(project: Project, approvalId: string, crea
 }
 
 export function resolveApprovalSnapshot(metadata: ApprovalSnapshotMetadata | null,
-  children: ApprovalSnapshotCollections, indexChunks: Array<{ id: string; data: SnapshotIndexChunk }> = []): ApprovalSnapshot {
-  if (!metadata || metadata.schemaVersion !== 1 || !metadata.id || metadata.id !== metadata.approvalId)
+  children: ApprovalSnapshotCollections, indexChunks: Array<{ id: string; data: SnapshotIndexChunk }> = [],
+  expectedIdentity?: { snapshotId: string; approvalId: string }): ApprovalSnapshot {
+  if (!metadata || metadata.schemaVersion !== 1 || !metadata.id || !metadata.approvalId ||
+    (expectedIdentity && (metadata.id !== expectedIdentity.snapshotId || metadata.approvalId !== expectedIdentity.approvalId)) ||
+    (metadata.id !== metadata.approvalId && metadata.backfill !== true))
     throw new IncompleteApprovalSnapshotError('metadata');
   let expected: NonNullable<ApprovalSnapshotMetadata['ids']>;
   if (metadata.idIndex) {
@@ -188,9 +259,14 @@ export function assertApprovalAttachState(expected: ExpectedApprovalState, actua
 export function planApprovalAttach(expected: ExpectedApprovalState, project: Project, newApproval: DesignApproval):
   Pick<Project, 'status' | 'designApproval' | 'approvalDraft'> {
   assertApprovalAttachState(expected, project.designApproval);
-  if ((expected.kind === 'none' && project.status !== 'Draft' && project.status !== undefined) ||
-    (expected.kind === 'rejected' && project.status !== 'Rejected')) throw new ApprovalStateChangedError();
+  if (expected.kind === 'rejected' && project.status !== 'Rejected') throw new ApprovalStateChangedError();
   return { status: 'Pending Approval', designApproval: newApproval, approvalDraft: undefined };
+}
+
+export function rejectionReasonPatch(existing: string | undefined, isAnyRejected: boolean, comment: string):
+  { rejectionReason?: string } {
+  if (isAnyRejected) return { rejectionReason: comment.trim() };
+  return existing ? { rejectionReason: '' } : {};
 }
 
 export function remapApprovalDraftSelections(project: Project | undefined, routeId: string, secondRouteId: string,

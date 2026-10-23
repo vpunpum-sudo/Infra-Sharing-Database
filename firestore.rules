@@ -168,14 +168,35 @@ service cloud.firestore {
          approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'UIH'));
     }
 
-    function approvalContentUnchanged() {
+    function approvalContentUnchanged(projectId) {
       return !('designApproval' in resource.data) ||
         !('designApproval' in request.resource.data) ||
         resource.data.designApproval.get('id', '') != request.resource.data.designApproval.get('id', '') ||
         request.resource.data.designApproval.diff(resource.data.designApproval).affectedKeys().hasOnly([
           'status', 'approvalStage', 'planningSignOffs', 'omSignOffs', 'ownerSignOffs',
           'rejectionReason', 'finalApprovedAt', 'finalApprovedBy', 'finalDocuments'
-        ]);
+        ]) || isSnapshotBackfill(projectId);
+    }
+
+    function isSnapshotBackfill(projectId) {
+      let before = resource.data.designApproval;
+      let after = request.resource.data.designApproval;
+      let changed = after.diff(before).affectedKeys();
+      let keys = ['snapshotId', 'snapshotCreatedAt', 'snapshotBackfilledAt',
+        'snapshotBackfilledByUid', 'snapshotBackfilledByEmail'];
+      let snapshot = /databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(after.snapshotId);
+      return canEditProject(resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['designApproval']) &&
+        !before.keys().hasAny(keys) && changed.hasOnly(keys) && changed.hasAll(keys) &&
+        after.snapshotId is string && after.snapshotId != before.id &&
+        after.snapshotCreatedAt is string &&
+        after.snapshotBackfilledAt == request.time &&
+        after.snapshotBackfilledByUid == request.auth.uid &&
+        request.auth.token.get('email', null) is string &&
+        after.snapshotBackfilledByEmail == request.auth.token.email &&
+        exists(snapshot) && get(snapshot).data.id == after.snapshotId &&
+        get(snapshot).data.approvalId == before.id && get(snapshot).data.projectId == projectId &&
+        get(snapshot).data.get('backfill', false) == true;
     }
 
     function isOwner(userId) {
@@ -395,16 +416,22 @@ service cloud.firestore {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
       allow create: if isAuthenticated() && canCreateProject() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
       allow update: if isAuthenticated() && (canEditProject(resource.data) || canSignApproval(resource.data)) && uidNotModified() &&
-        (!isApprovalRewind() || hasAdminRole()) && approvalContentUnchanged();
+        (!isApprovalRewind() || hasAdminRole()) && approvalContentUnchanged(projectId);
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
 
-      match /approvalSnapshots/{approvalId} {
+      match /approvalSnapshots/{snapshotId} {
         allow get, list: if isAuthenticated() &&
           canAccessProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
         allow create: if isAuthenticated() &&
           canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
-          request.resource.data.projectId == projectId && request.resource.data.approvalId == approvalId &&
-          request.resource.data.id == approvalId;
+          request.resource.data.projectId == projectId && request.resource.data.id == snapshotId &&
+          request.resource.data.createdByUid is string && request.resource.data.createdByUid == request.auth.uid &&
+          ((request.resource.data.approvalId == snapshotId && !('backfill' in request.resource.data)) ||
+           (request.resource.data.get('backfill', false) == true &&
+            request.resource.data.approvalId != snapshotId &&
+            'designApproval' in get(/databases/$(database)/documents/projects/$(projectId)).data &&
+            get(/databases/$(database)/documents/projects/$(projectId)).data.designApproval.id == request.resource.data.approvalId &&
+            !('snapshotId' in get(/databases/$(database)/documents/projects/$(projectId)).data.designApproval)));
         allow update, delete: if false;
 
         match /{collectionName}/{childId} {
@@ -413,10 +440,11 @@ service cloud.firestore {
           allow create: if isAuthenticated() &&
             collectionName in ['routes', 'enclosures', 'loops', 'enclosureTypes', 'fiberTypes', 'fiberColorConfigs', 'index'] &&
             canEditProject(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
-            exists(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(approvalId)) &&
-            get(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(approvalId)).data.projectId == projectId &&
-            get(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(approvalId)).data.approvalId == approvalId &&
-            request.resource.data.projectId == projectId && request.resource.data.approvalId == approvalId &&
+            exists(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(snapshotId)) &&
+            get(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(snapshotId)).data.id == snapshotId &&
+            get(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(snapshotId)).data.projectId == projectId &&
+            request.resource.data.projectId == projectId &&
+            request.resource.data.approvalId == get(/databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(snapshotId)).data.approvalId &&
             (collectionName == 'index' || request.resource.data.data.id == childId);
           allow update, delete: if false;
         }

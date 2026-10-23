@@ -115,3 +115,169 @@ test('signed documents saved after the completion email trigger a follow-up emai
   assert.equal(notificationForTransition(after, after, '2026-10-17T13:40:00.000Z'), null);
 });
 
+const rejectedProject = (planning = signOffs('Pending'), om = signOffs('Pending'), reason = '') => {
+  const after = project('Rejected', planning, om);
+  after.status = 'Rejected';
+  after.designApproval.rejectionReason = reason;
+  return after;
+};
+
+test('Planning rejection sends the reason and signer to all participating approval roles', () => {
+  const signedAt = '2026-10-20T01:00:00.000Z';
+  const after = rejectedProject({
+    ITEL: { status: 'Rejected', signedBy: 'Somchai', signedAt },
+    UIH: { status: 'Pending' }
+  }, signOffs('Pending'), ' ระยะไม่ถูกต้อง ');
+  const notice = notificationForTransition(project('Planning'), after);
+  assert.equal(notice.kind, 'approval-rejected');
+  assert.deepEqual(notice.roles, ['Design', 'Planning', 'Management']);
+  assert.deepEqual(notice.owners, ['ITEL', 'UIH']);
+  assert.deepEqual(notice.details.rejection, {
+    reason: 'ระยะไม่ถูกต้อง', owner: 'ITEL', signedBy: 'Somchai', level: 'Planning', signedAt
+  });
+});
+
+test('O&M rejection identifies Management and preserves the sign-off table', () => {
+  const after = rejectedProject(signOffs('Approved'), {
+    ITEL: { status: 'Approved' },
+    UIH: { status: 'Rejected', signedBy: 'Suda', signedAt: '2026-10-21T01:00:00.000Z' }
+  }, 'ต้องแก้ไข');
+  const notice = notificationForTransition(project('OM', signOffs('Approved')), after);
+  assert.equal(notice.details.rejection.level, 'OM');
+  assert.equal(notice.details.rejection.owner, 'UIH');
+  const { subject, text, html } = emailContent(notice, 'https://app.example.com', 'p1');
+  assert.equal(subject, '[Fiber Sharing] เอกสารไม่ได้รับอนุมัติ: ทดสอบ <Project> (APP-1)');
+  assert.match(text, /ระดับที่ไม่อนุมัติ: Management \(O&M\)/);
+  assert.match(text, /ผู้ไม่อนุมัติ: UIH — Suda/);
+  assert.match(text, /วันที่ไม่อนุมัติ: 21 ต\.ค\. 2569 08:00 น\./);
+  assert.match(text, /สถานะการลงนาม/);
+  assert.match(text, /ไม่อนุมัติ/);
+  assert.match(text, /เปิดดูโครงการ: https:\/\/app\.example\.com\/project\/p1/);
+  assert.match(html, /Management \(O&amp;M\)/);
+  assert.match(html, /สถานะการลงนาม/);
+});
+
+test('rejection sends only for a matching approval crossing to Rejected stage and status', () => {
+  const after = rejectedProject();
+  assert.equal(notificationForTransition(after, { ...after, approvalDraft: { changed: true } }), null);
+  const newId = rejectedProject();
+  newId.designApproval.id = 'approval-2';
+  assert.equal(notificationForTransition(project('Planning'), newId), null);
+  assert.equal(notificationForTransition({ status: 'Draft' }, after), null);
+  assert.equal(notificationForTransition(project('Planning'), { ...after, status: 'Pending Approval' }), null);
+  const wrongStage = project('Planning');
+  wrongStage.status = 'Rejected';
+  assert.equal(notificationForTransition(project('Planning'), wrongStage), null);
+  const noNumber = rejectedProject();
+  delete noNumber.designApproval.documentNumber;
+  assert.equal(notificationForTransition(project('Planning'), noNumber), null);
+  const noOwners = rejectedProject();
+  delete noOwners.owners;
+  assert.equal(notificationForTransition(project('Planning'), noOwners), null);
+});
+
+test('latest valid rejected sign-off wins across Planning and O&M', () => {
+  const planning = { ITEL: { status: 'Rejected', signedAt: '2026-10-20T01:00:00Z' }, UIH: { status: 'Approved' } };
+  const om = { ITEL: { status: 'Pending' }, UIH: { status: 'Rejected', signedAt: '2026-10-21T01:00:00Z' } };
+  const latestOm = notificationForTransition(project('OM'), rejectedProject(planning, om)).details.rejection;
+  assert.equal(latestOm.owner, 'UIH');
+  assert.equal(latestOm.level, 'OM');
+  planning.ITEL.signedAt = '2026-10-22T01:00:00Z';
+  const latestPlanning = notificationForTransition(project('OM'), rejectedProject(planning, om)).details.rejection;
+  assert.equal(latestPlanning.owner, 'ITEL');
+  assert.equal(latestPlanning.level, 'Planning');
+});
+
+test('rejector ties prefer O&M, then participating owner order; valid times beat missing times', () => {
+  const before = project('OM');
+  const planning = { ITEL: { status: 'Rejected' }, UIH: { status: 'Rejected' } };
+  const om = { ITEL: { status: 'Pending' }, UIH: { status: 'Rejected' } };
+  const rejector = (p, o) => notificationForTransition(before, rejectedProject(p, o)).details.rejection;
+  assert.equal(rejector(planning, om).level, 'OM');
+  planning.ITEL.signedAt = '2026-10-20T01:00:00Z';
+  om.UIH.signedAt = '2026-10-20T01:00:00Z';
+  assert.equal(rejector(planning, om).level, 'OM');
+  delete om.UIH.signedAt;
+  assert.equal(rejector(planning, om).owner, 'ITEL');
+  delete planning.ITEL.signedAt;
+  assert.equal(rejector(planning, signOffs('Pending')).owner, 'ITEL');
+  planning.ITEL.signedAt = 'invalid';
+  planning.UIH.signedAt = '2026-10-20T01:00:00Z';
+  assert.equal(rejector(planning, signOffs('Pending')).owner, 'UIH');
+});
+
+test('non-participating rejected sign-offs are ignored', () => {
+  const planning = {
+    ITEL: { status: 'Rejected', signedAt: '2026-10-20T01:00:00Z' },
+    UIH: { status: 'Pending' },
+    SYMC: { status: 'Rejected', signedAt: '2026-10-21T01:00:00Z' }
+  };
+  assert.equal(notificationForTransition(project('Planning'), rejectedProject(planning)).details.rejection.owner, 'ITEL');
+});
+
+test('rejection without a rejected sign-off still includes the reason and omits rejector rows', () => {
+  const notice = notificationForTransition(project('Planning'), rejectedProject(signOffs('Pending'), signOffs('Pending'), 'แก้ไขระยะ'));
+  assert.deepEqual(notice.details.rejection, { reason: 'แก้ไขระยะ', owner: '', signedBy: '', level: '', signedAt: '' });
+  const { text, html } = emailContent(notice, 'https://app.example.com', 'p1');
+  assert.match(text, /เหตุผลที่ไม่อนุมัติ\nแก้ไขระยะ/);
+  assert.doesNotMatch(text, /ระดับที่ไม่อนุมัติ:|ผู้ไม่อนุมัติ:|วันที่ไม่อนุมัติ:/);
+  assert.doesNotMatch(html, /ระดับที่ไม่อนุมัติ|ผู้ไม่อนุมัติ|วันที่ไม่อนุมัติ/);
+});
+
+test('missing reason has a visible fallback in text and HTML', () => {
+  const notice = notificationForTransition(project('Planning'), rejectedProject());
+  const { text, html } = emailContent(notice, 'https://app.example.com', 'p1');
+  assert.match(text, /เหตุผลที่ไม่อนุมัติ\nไม่ระบุเหตุผล/);
+  assert.match(html, /เหตุผลที่ไม่อนุมัติ/);
+  assert.match(html, /ไม่ระบุเหตุผล/);
+  assert.match(html, /white-space:pre-wrap/);
+  assert.match(html, /color:#b91c1c;background:#fee2e2/);
+});
+
+test('rejection HTML escapes free text and keeps the reason out of subject and preheader', () => {
+  const reason = '<script>alert(1)</script> & "unique-reason-marker"';
+  const after = rejectedProject({
+    ITEL: { status: 'Rejected', signedBy: '<b>Evil</b>' }, UIH: { status: 'Pending' }
+  }, signOffs('Pending'), reason);
+  after.name = '<Project & Co>';
+  const notice = notificationForTransition(project('Planning'), after);
+  const { subject, text, html } = emailContent(notice, 'https://app.example.com', 'p1');
+  assert.match(text, /<script>alert\(1\)<\/script> & "unique-reason-marker"/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;unique-reason-marker&quot;/);
+  assert.match(html, /&lt;b&gt;Evil&lt;\/b&gt;/);
+  assert.match(html, /&lt;Project &amp; Co&gt;/);
+  assert.doesNotMatch(html, /<script>|<b>Evil/);
+  assert.doesNotMatch(subject, /unique-reason-marker/);
+  assert.doesNotMatch(html.match(/<div style="display:none[^>]*>[^<]*<\/div>/)[0], /unique-reason-marker/);
+});
+
+test('rejection recipients are approved participating Design, Planning and Management users only', () => {
+  const notice = notificationForTransition(project('Planning'), rejectedProject());
+  const users = [
+    { email: ' A@EXAMPLE.COM ', role: 'Design', owner: 'ITEL', isApproved: true },
+    { email: 'a@example.com', role: 'Planning', owner: 'UIH', isApproved: true },
+    { email: 'b@example.com', role: 'Planning', owner: 'UIH', isApproved: true },
+    { email: 'c@example.com', role: 'Management', owner: 'ITEL', isApproved: true },
+    { email: 'd@example.com', role: 'Design', owner: 'UIH', isApproved: false },
+    { email: 'e@example.com', role: 'Sub-contract', owner: 'ITEL', isApproved: true },
+    { email: 'f@example.com', role: 'Admin', owner: 'UIH', isApproved: true },
+    { email: 'g@example.com', role: 'Management', owner: 'SYMC', isApproved: true },
+    { email: 'invalid-email', role: 'Design', owner: 'ITEL', isApproved: true }
+  ];
+  assert.deepEqual(notificationRecipients(users, notice), ['a@example.com', 'b@example.com', 'c@example.com']);
+});
+
+test('rejection delivery keys separate kinds and distinct rewind events', () => {
+  const before = project('Planning');
+  const after = rejectedProject();
+  const first = notificationForTransition(before, after);
+  const again = notificationForTransition(before, after);
+  assert.equal(again.kind, 'approval-rejected');
+  assert.notEqual(deliveryId('p1', first, 'a@example.com', 'event-1'),
+    deliveryId('p1', { ...first, kind: 'approval-completed' }, 'a@example.com', 'event-1'));
+  assert.equal(deliveryId('p1', first, 'a@example.com', 'event-1'),
+    deliveryId('p1', first, 'a@example.com', 'event-1'));
+  assert.notEqual(deliveryId('p1', first, 'a@example.com', 'event-1'),
+    deliveryId('p1', again, 'a@example.com', 'event-2'));
+});
+

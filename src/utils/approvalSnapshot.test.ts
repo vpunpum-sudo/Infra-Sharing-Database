@@ -1,10 +1,101 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Timestamp } from 'firebase/firestore';
 import type { ApprovalSnapshotCollections, DesignApproval, Project } from '../types';
 import { buildProjectKml, exportFileName } from './kml';
-import { ApprovalStateChangedError, buildApprovalSnapshot, chooseApprovalSource, chunkSnapshotWrites, getParticipatingOwners, remapApprovalDraftSelections, sourceReadiness,
+import { ApprovalStateChangedError, backfillCommitMessage, backfillFailureMessage, backfillLockedAt, buildApprovalSnapshot, chooseApprovalSource, chunkSnapshotWrites, classifyBackfillFailure, firestoreErrorCode, formatBackfillNotice, getParticipatingOwners, isBackfilledApproval, nextSnapshotId, planSnapshotBackfill, remapApprovalDraftSelections, resolveBackfillLocker, sourceReadiness,
   IncompleteApprovalSnapshotError, nextApprovalId, planApprovalAttach, planIdIndex, projectForDocument,
-  resolveApprovalFormValues, resolveApprovalSnapshot } from './approvalSnapshot';
+  rejectionReasonPatch, resolveApprovalFormValues, resolveApprovalSnapshot } from './approvalSnapshot';
+
+test('backfill plans exactly five dotted fields for every approval status and rejects stale state', () => {
+  const record = { snapshotId: 'snap_new', createdAt: '2026-10-22T12:00:00Z', uid: 'auth-u', email: 'u@example.com' };
+  const at = Timestamp.fromMillis(1000);
+  for (const status of ['Pending Approval', 'Approved', 'Rejected', 'Draft'] as const) {
+    const current = { ...project, status, approvalDraft: { contractorName: 'Keep draft' },
+      designApproval: { ...approval('a1', status), snapshotId: undefined, approvalStage: status === 'Approved' ? 'Completed' as const : 'Planning' as const,
+        planningSignOffs: { UIH: { owner: 'UIH' as const, status: 'Approved' as const } },
+        finalDocuments: { pdfFileId: 'pdf-1', pdfName: 'signed.pdf', createdAt: '2026-10-21', createdBy: 'u' } } };
+    const before = structuredClone(current);
+    assert.deepEqual(planSnapshotBackfill({ approvalId: 'a1' }, current, record, at), {
+      'designApproval.snapshotId': 'snap_new', 'designApproval.snapshotCreatedAt': record.createdAt,
+      'designApproval.snapshotBackfilledAt': at, 'designApproval.snapshotBackfilledByUid': 'auth-u',
+      'designApproval.snapshotBackfilledByEmail': 'u@example.com'
+    });
+    assert.deepEqual(current, before);
+  }
+  for (const current of [
+    { ...project, designApproval: undefined },
+    { ...project, designApproval: approval('other') },
+    { ...project, designApproval: approval('a1') },
+    { ...project, designApproval: { ...approval('a1'), snapshotId: 'snap_other' } }
+  ]) assert.throws(() => planSnapshotBackfill({ approvalId: 'a1' }, current, record, at), ApprovalStateChangedError);
+  assert.throws(() => planSnapshotBackfill({ approvalId: 'a1' }, { ...project, designApproval: { ...approval('a1'), snapshotId: undefined } },
+    { ...record, snapshotId: 'a1' }, at), ApprovalStateChangedError);
+});
+
+test('permission denial is state changed only after a successful server read proves it', () => {
+  const expected = { approvalId: 'a1' };
+  const matching = { ...project, designApproval: { ...approval('a1'), snapshotId: undefined } };
+  for (const changed of [null, project, { ...matching, designApproval: approval('other') },
+    { ...matching, designApproval: approval('a1') }])
+    assert.equal(classifyBackfillFailure('permission-denied', expected, { ok: true, project: changed }), 'state-changed');
+  for (const status of ['Pending Approval', 'Approved', 'Rejected', 'Draft'] as const)
+    for (const draft of [undefined, { contractorName: 'Saved' }])
+      assert.equal(classifyBackfillFailure('permission-denied', expected, { ok: true, project: {
+        ...matching, approvalDraft: draft, designApproval: { ...matching.designApproval, status }
+      } }), 'permission-error');
+  for (const reread of [undefined, { ok: false } as const, { ok: true, project: matching } as const,
+    { ok: true, project: null } as const])
+    for (const code of ['unavailable', 'deadline-exceeded', 'aborted', undefined, ''])
+      assert.equal(classifyBackfillFailure(code, expected, reread), 'failed');
+  assert.equal(classifyBackfillFailure('permission-denied', expected, undefined), 'failed');
+  assert.equal(classifyBackfillFailure('permission-denied', expected, { ok: false }), 'failed');
+});
+
+test('error codes and backfill result messages do not infer state from text', () => {
+  assert.equal(firestoreErrorCode({ code: 'permission-denied' }), 'permission-denied');
+  for (const error of [new Error('permission denied'), { code: 4 }, null]) assert.equal(firestoreErrorCode(error), undefined);
+  assert.equal(backfillFailureMessage('state-changed', 'permission-denied', false), 'คำขอเปลี่ยนไปแล้ว (อาจมีผู้ล็อกก่อน หรือคำขอถูกยื่นใหม่/ถอยกลับ) กรุณาโหลดหน้าใหม่');
+  assert.equal(backfillFailureMessage('permission-error', 'permission-denied', false), 'ไม่มีสิทธิ์ล็อกเอกสารนี้ (permission-denied) กรุณาติดต่อผู้ดูแลระบบ');
+  assert.equal(backfillFailureMessage('failed', 'unavailable', false), 'ล็อกเอกสารไม่สำเร็จ (unavailable) กรุณากดล็อกอีกครั้ง');
+  assert.equal(backfillFailureMessage('failed', undefined, true), 'ล็อกเอกสารไม่สำเร็จ และตรวจสอบสาเหตุไม่ได้ กรุณากดล็อกอีกครั้ง');
+  assert.equal(backfillCommitMessage(false), 'ล็อกเอกสารสำเร็จ');
+  assert.equal(backfillCommitMessage(true), 'ล็อกเอกสารสำเร็จแล้ว แต่รีเฟรชหน้าจอไม่สำเร็จ โปรดโหลดหน้าใหม่');
+});
+
+test('backfill snapshot keeps path identity separate from approval identity', () => {
+  const id = nextSnapshotId();
+  assert.match(id, /^snap_[0-9a-f-]{36}$/);
+  assert.notEqual(id, nextSnapshotId());
+  const snapshot = buildApprovalSnapshot(project, 'a1', '2026-10-22', 'u', ['UIH'], source(), id);
+  assert.equal(snapshot.metadata.id, id);
+  assert.equal(snapshot.metadata.approvalId, 'a1');
+  assert.equal(snapshot.metadata.backfill, true);
+  assert.equal(resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, [], { snapshotId: id, approvalId: 'a1' }).metadata.id, id);
+  const changedLive = source();
+  changedLive.routes[0].name = 'Changed route';
+  assert.equal(chooseApprovalSource(changedLive, { ...approval('a1'), snapshotId: id }, snapshot).routes[0].name, 'Route one');
+  assert.throws(() => chooseApprovalSource(source(), approval('a1'), snapshot), IncompleteApprovalSnapshotError);
+  assert.throws(() => resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, [], { snapshotId: 'wrong', approvalId: 'a1' }), IncompleteApprovalSnapshotError);
+  assert.throws(() => resolveApprovalSnapshot(snapshot.metadata, snapshot.collections, [], { snapshotId: id, approvalId: 'wrong' }), IncompleteApprovalSnapshotError);
+  const normal = make();
+  assert.equal(normal.metadata.backfill, undefined);
+  assert.equal(resolveApprovalSnapshot(normal.metadata, normal.collections, [], { snapshotId: 'a1', approvalId: 'a1' }).metadata.id, 'a1');
+});
+
+test('backfill notice requires a server Timestamp and a verified locker profile identity', () => {
+  const locked = { ...approval('a1'), snapshotId: 'snap_1', snapshotBackfilledAt: Timestamp.fromMillis(0),
+    snapshotBackfilledByUid: 'auth-u', snapshotBackfilledByEmail: 'u@example.com' };
+  assert.equal(isBackfilledApproval(locked), true);
+  assert.equal(isBackfilledApproval(approval('a1')), false);
+  assert.equal(backfillLockedAt(locked)?.toMillis(), 0);
+  assert.equal(backfillLockedAt({ ...locked, snapshotBackfilledAt: { seconds: 0 } as never }), null);
+  assert.equal(resolveBackfillLocker('auth-u', 'u@example.com', { id: 'auth-u', displayName: 'Admin Name' }), 'Admin Name');
+  assert.equal(resolveBackfillLocker('auth-u', 'u@example.com', { id: 'other', displayName: 'Wrong' }), 'u@example.com');
+  assert.equal(resolveBackfillLocker('auth-u', 'u@example.com', null), 'u@example.com');
+  assert.match(formatBackfillNotice(locked, 'Admin Name'), /Admin Name.*เนื้อหาเป็นข้อมูลโครงการ ณ เวลาที่ล็อก/);
+  assert.equal(formatBackfillNotice({ ...locked, snapshotBackfilledAt: undefined }, 'Admin Name'), 'กำลังยืนยันเวลาล็อกจากเซิร์ฟเวอร์…');
+});
 
 const project: Project = { id: 'p', name: 'Submitted name', routeCode: 'OLD', uid: 'u', owner: 'UIH', status: 'Draft',
   approvalDraft: { contractorName: 'Edited contractor' } };
@@ -120,6 +211,48 @@ test('attach decisions preserve Draft and Rejected state on failure and reject s
     [{ kind: 'rejected' as const, id: 'old' }, { ...rejected, status: 'Draft' as const }]
   ] as const) assert.throws(() => planApprovalAttach(expected, actual, pending), ApprovalStateChangedError);
   assert.deepEqual(rejected, originalRejected);
+});
+
+test('legacy approval attach accepts every project status without changing the source', () => {
+  const pending = approval('new');
+  for (const status of ['Approved', 'Pending Approval', 'Rejected', 'Draft', undefined] as const) {
+    const current = { ...project, status, designApproval: undefined };
+    const before = structuredClone(current);
+    assert.deepEqual(planApprovalAttach({ kind: 'none' }, current, pending), {
+      status: 'Pending Approval', designApproval: pending, approvalDraft: undefined
+    });
+    assert.deepEqual(current, before);
+  }
+});
+
+test('attach rejects an existing approval and keeps rejected resubmission guards', () => {
+  const pending = approval('new');
+  for (const status of ['Draft', 'Approved'] as const)
+    for (const approvalStatus of ['Pending Approval', 'Approved', 'Rejected'] as const)
+      assert.throws(() => planApprovalAttach({ kind: 'none' },
+        { ...project, status, designApproval: approval('old', approvalStatus) }, pending), ApprovalStateChangedError);
+
+  const rejected = { ...project, status: 'Rejected' as const, designApproval: approval('old', 'Rejected') };
+  assert.deepEqual(planApprovalAttach({ kind: 'rejected', id: 'old' }, rejected, pending), {
+    status: 'Pending Approval', designApproval: pending, approvalDraft: undefined
+  });
+  assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'other' }, rejected, pending), ApprovalStateChangedError);
+  assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'old' },
+    { ...rejected, designApproval: approval('old', 'Approved') }, pending), ApprovalStateChangedError);
+  for (const status of ['Draft', 'Approved', 'Pending Approval'] as const)
+    assert.throws(() => planApprovalAttach({ kind: 'rejected', id: 'old' },
+      { ...rejected, status }, pending), ApprovalStateChangedError);
+});
+
+test('rejection reason patch writes only a new rejection or a cleared old reason', () => {
+  assert.deepEqual(rejectionReasonPatch(undefined, true, '  ระยะผิด  '), { rejectionReason: 'ระยะผิด' });
+  assert.deepEqual(rejectionReasonPatch(undefined, true, ''), { rejectionReason: '' });
+  assert.deepEqual(rejectionReasonPatch('Earlier', true, '  อีกครั้ง  '), { rejectionReason: 'อีกครั้ง' });
+  assert.deepEqual(rejectionReasonPatch('Revise', false, ''), { rejectionReason: '' });
+  assert.deepEqual(rejectionReasonPatch('', false, 'ignored'), {});
+  assert.deepEqual(rejectionReasonPatch(undefined, false, 'ignored'), {});
+  assert.deepEqual({ rejectionReason: '', ...rejectionReasonPatch('', false, '') }, { rejectionReason: '' });
+  assert.deepEqual({ ...rejectionReasonPatch(undefined, false, '') }, {});
 });
 
 test('route cut and split remap only the editable draft, never a submitted approval', () => {

@@ -20,6 +20,33 @@ function allApproved(signOffs, owners) {
   return owners.length > 0 && owners.every(owner => signOffs?.[owner]?.status === 'Approved');
 }
 
+function rejectingSignOff(approval, owners) {
+  const candidates = [
+    { level: 'Planning', signOffs: approval.planningSignOffs },
+    { level: 'OM', signOffs: approval.omSignOffs }
+  ].flatMap(({ level, signOffs }) => owners.flatMap((owner, ownerIndex) => {
+    const entry = signOffs?.[owner];
+    if (entry?.status !== 'Rejected') return [];
+    const signedAt = entry.signedAt || '';
+    const timestamp = Date.parse(signedAt);
+    return [{ owner, signedBy: entry.signedBy || '', signedAt, level, ownerIndex,
+      timestamp: Number.isNaN(timestamp) ? null : timestamp }];
+  }));
+
+  candidates.sort((a, b) => {
+    if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
+      return b.timestamp - a.timestamp;
+    }
+    if (a.timestamp === null && b.timestamp !== null) return 1;
+    if (a.timestamp !== null && b.timestamp === null) return -1;
+    if (a.level !== b.level) return a.level === 'OM' ? -1 : 1;
+    return a.ownerIndex - b.ownerIndex;
+  });
+  if (!candidates.length) return null;
+  const { owner, signedBy, signedAt, level } = candidates[0];
+  return { owner, signedBy, signedAt, level };
+}
+
 // The completion email waits this long for the signed documents (see index.js).
 const FINAL_DOCUMENTS_WAIT_MS = 170 * 1000;
 
@@ -57,6 +84,10 @@ function notificationForTransition(before, after, changedAt) {
     // Saved after the completion email went out without them: send them now.
     kind = 'final-documents';
     roles = ['Design', 'Planning', 'Management'];
+  } else if (stage === 'Rejected' && after.status === 'Rejected' &&
+      previous?.id === approval.id && previous.approvalStage !== 'Rejected') {
+    kind = 'approval-rejected';
+    roles = ['Design', 'Planning', 'Management'];
   } else {
     return null;
   }
@@ -78,6 +109,10 @@ function notificationForTransition(before, after, changedAt) {
       estimatedInstallationDate: approval.estimatedInstallationDate || '',
       contractorName: approval.contractorName || '',
       contractorPoNumber: approval.contractorPoNumber || '',
+      ...(kind === 'approval-rejected' ? { rejection: {
+        reason: String(approval.rejectionReason || '').trim(),
+        ...(rejectingSignOff(approval, owners) || { owner: '', signedBy: '', signedAt: '', level: '' })
+      } } : {}),
       signOffs: owners.map(owner => ({
         owner,
         planning: signOff(approval.planningSignOffs, owner),
@@ -145,6 +180,13 @@ const KIND_COPY = {
     intro: 'เอกสารได้รับการอนุมัติครบทั้งขั้น Planning และ Management แล้ว',
     action: 'เปิดดูโครงการ',
     accent: '#059669'
+  },
+  'approval-rejected': {
+    description: 'เอกสารไม่ได้รับอนุมัติ',
+    stage: 'ไม่อนุมัติ',
+    intro: 'คำขออนุมัติการออกแบบนี้ไม่ได้รับอนุมัติ คำขอทั้งหมดถูกยกเลิก ผู้ขออนุมัติต้องแก้ไขและยื่นคำขอใหม่',
+    action: 'เปิดดูโครงการ',
+    accent: '#b91c1c'
   }
 };
 
@@ -176,6 +218,7 @@ function projectLink(appUrl, projectId) {
 /** Rows shown in both the HTML and plain-text bodies; empty values are left out. */
 function summaryRows(notification, copy) {
   const details = notification.details || {};
+  const rejection = details.rejection;
   const requester = [details.requestedBy, details.requestedByEmail && `(${details.requestedByEmail})`]
     .filter(Boolean).join(' ');
   const contractor = [details.contractorName,
@@ -191,7 +234,13 @@ function summaryRows(notification, copy) {
     ['ระยะ Project Corridor', formatKm(details.projectCorridorDistanceKm)],
     ['ระยะดำเนินการรวม', formatKm(details.totalOperationDistanceKm)],
     ['ผู้รับเหมา', contractor],
-    ['วันติดตั้งโดยประมาณ', formatDate(details.estimatedInstallationDate, false)]
+    ['วันติดตั้งโดยประมาณ', formatDate(details.estimatedInstallationDate, false)],
+    ...(rejection ? [
+      ['ระดับที่ไม่อนุมัติ', rejection.level === 'OM' ? 'Management (O&M)' : rejection.level],
+      ['ผู้ไม่อนุมัติ', rejection.owner &&
+        [rejection.owner, rejection.signedBy].filter(Boolean).join(' — ')],
+      ['วันที่ไม่อนุมัติ', formatDate(rejection.signedAt, true)]
+    ] : [])
   ].filter(([, value]) => value);
 }
 
@@ -217,11 +266,14 @@ function emailContent(notification, appUrl, projectId, attachmentNote) {
   const link = projectLink(appUrl, projectId);
   const rows = summaryRows(notification, copy);
   const signOffs = notification.details?.signOffs || [];
+  const rejection = notification.details?.rejection;
+  const reason = rejection?.reason || 'ไม่ระบุเหตุผล';
   const subject = `[Fiber Sharing] ${copy.description}: ${notification.projectName} (${notification.documentNumber})`;
 
   const text = [
     copy.description, '', copy.intro, '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
+    ...(rejection ? ['', 'เหตุผลที่ไม่อนุมัติ', reason] : []),
     ...(signOffs.length ? ['', 'สถานะการลงนาม',
       ...signOffs.map(s => `- ${s.owner}: Planning ${signOffText(s.planning)} | Management ${signOffText(s.management)}`)] : []),
     ...(attachmentNote ? ['', attachmentNote] : []),
@@ -234,6 +286,10 @@ function emailContent(notification, appUrl, projectId, attachmentNote) {
     `<tr><td style="padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;">${escapeHtml(label)}</td>` +
     `<td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;">${escapeHtml(value)}</td></tr>`
   ).join('');
+  const rejectionHtml = rejection ?
+    `<div style="margin:24px 0 0;padding:14px;border-radius:8px;color:${STATUS_LABELS.Rejected.color};background:${STATUS_LABELS.Rejected.background};">` +
+    `<p style="margin:0 0 8px;font-size:14px;font-weight:bold;">เหตุผลที่ไม่อนุมัติ</p>` +
+    `<div style="white-space:pre-wrap;font-size:14px;line-height:1.6;">${escapeHtml(reason)}</div></div>` : '';
   const signOffHtml = signOffs.length ? (
     `<p style="margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;">สถานะการลงนาม</p>` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;">` +
@@ -259,6 +315,7 @@ function emailContent(notification, appUrl, projectId, attachmentNote) {
     `<h1 style="margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;">${escapeHtml(copy.description)}</h1>` +
     `<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(copy.intro)}</p>` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">${summaryHtml}</table>` +
+    rejectionHtml +
     signOffHtml +
     (attachmentNote ? `<p style="margin:24px 0 0;padding:10px 14px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:14px;color:#166534;">📎 ${escapeHtml(attachmentNote)}</p>` : '') +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px;"><tr>` +

@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export type UserRole = 'Admin' | 'Management' | 'Planning' | 'Design' | 'Viewer' | 'Sub-contract';
 
 export type Feature = 
@@ -67,6 +69,10 @@ export type DesignApproval = {
   id: string;
   snapshotId?: string;
   snapshotCreatedAt?: string;
+  /** Set by the Firestore server when a legacy approval is locked. Never an ISO string. */
+  snapshotBackfilledAt?: Timestamp;
+  snapshotBackfilledByUid?: string;
+  snapshotBackfilledByEmail?: string;
   documentNumber: string;
   status: ProjectStatus;
   approvalStage?: ApprovalStage;
@@ -304,6 +310,7 @@ export type ApprovalSnapshotProject = Pick<Project, 'name' | 'routeCode' | 'owne
 export type ApprovalSnapshotMetadata = {
   id: string;
   approvalId: string;
+  backfill?: true;
   projectId: string;
   createdAt: string;
   createdByUid: string;
