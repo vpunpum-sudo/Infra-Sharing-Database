@@ -1,0 +1,223 @@
+{
+  "sourceRevision": "72446be2df3f364634649503339d8c9ff6d4cbe8",
+  "cases": [
+    {
+      "notification": {
+        "projectName": "โครงการ <Golden> & Fiber",
+        "documentNumber": "DOC-2026-001",
+        "owners": [
+          "ITEL",
+          "UIH"
+        ],
+        "details": {
+          "routeCode": "RT-01",
+          "requestedBy": "Requester",
+          "requestedByEmail": "requester@example.test",
+          "requestedAt": "2026-01-01T00:00:00Z",
+          "projectCorridorDistanceKm": 12.345,
+          "totalOperationDistanceKm": 24.69,
+          "contractorName": "Contractor",
+          "contractorPoNumber": "PO-01",
+          "estimatedInstallationDate": "2026-02-01",
+          "signOffs": [
+            {
+              "owner": "ITEL",
+              "planning": {
+                "status": "Approved",
+                "signedBy": "Planner",
+                "signedAt": "2026-01-02T00:00:00Z"
+              },
+              "management": {
+                "status": "Pending"
+              }
+            }
+          ]
+        },
+        "kind": "planning-requested"
+      },
+      "appUrl": "https://app.example.test/",
+      "projectId": "project golden",
+      "expected": {
+        "subject": "[Fiber Sharing] มีเอกสารรออนุมัติขั้น Planning: โครงการ <Golden> & Fiber (DOC-2026-001)",
+        "text": "มีเอกสารรออนุมัติขั้น Planning\n\nมีคำขออนุมัติการออกแบบโครงการใหม่ รอการพิจารณาลงนามจาก Planning ของแต่ละ Operator\n\nโครงการ: โครงการ <Golden> & Fiber\nรหัสเส้นทาง: RT-01\nเลขที่เอกสาร: DOC-2026-001\nขั้นการอนุมัติ: Planning\nOperator: ITEL, UIH\nผู้ขออนุมัติ: Requester (requester@example.test)\nวันที่ขออนุมัติ: 1 ม.ค. 2569 07:00 น.\nระยะ Project Corridor: 12.345 กม.\nระยะดำเนินการรวม: 24.69 กม.\nผู้รับเหมา: Contractor / PO PO-01\nวันติดตั้งโดยประมาณ: 1 ก.พ. 2569\n\nสถานะการลงนาม\n- ITEL: Planning อนุมัติแล้ว (Planner, 2 ม.ค. 2569 07:00 น.) | Management รออนุมัติ\n\nตรวจสอบและอนุมัติเอกสาร: https://app.example.test/project/project%20golden\n\nอีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ",
+        "html": "<!doctype html><html lang=\"th\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>[Fiber Sharing] มีเอกสารรออนุมัติขั้น Planning: โครงการ &lt;Golden&gt; &amp; Fiber (DOC-2026-001)</title></head><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;\"><div style=\"display:none;max-height:0;overflow:hidden;\">โครงการ &lt;Golden&gt; &amp; Fiber · DOC-2026-001</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:24px 12px;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;\"><tr><td style=\"background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;\">Fiber Sharing</td></tr><tr><td style=\"height:4px;background:#d97706;font-size:0;line-height:0;\">&nbsp;</td></tr><tr><td style=\"padding:28px;\"><p style=\"margin:0 0 4px;font-size:12px;font-weight:bold;color:#d97706;text-transform:uppercase;letter-spacing:1px;\">Planning</p><h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;\">มีเอกสารรออนุมัติขั้น Planning</h1><p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;\">มีคำขออนุมัติการออกแบบโครงการใหม่ รอการพิจารณาลงนามจาก Planning ของแต่ละ Operator</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;\"><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">โครงการ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">โครงการ &lt;Golden&gt; &amp; Fiber</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">รหัสเส้นทาง</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">RT-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">เลขที่เอกสาร</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">DOC-2026-001</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ขั้นการอนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Planning</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">Operator</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ITEL, UIH</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Requester (requester@example.test)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ม.ค. 2569 07:00 น.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะ Project Corridor</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">12.345 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะดำเนินการรวม</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">24.69 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้รับเหมา</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Contractor / PO PO-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันติดตั้งโดยประมาณ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ก.พ. 2569</td></tr></table><p style=\"margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;\">สถานะการลงนาม</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;\"><tr style=\"background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;\"><th align=\"left\" style=\"padding:10px 12px;\">Operator</th><th align=\"left\" style=\"padding:10px 12px;\">Planning</th><th align=\"left\" style=\"padding:10px 12px;\">Management</th></tr><tr><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;\">ITEL</td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#047857;background:#d1fae5;\">อนุมัติแล้ว</span><div style=\"margin-top:4px;font-size:12px;color:#64748b;\">Planner<br>2 ม.ค. 2569 07:00 น.</div></td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#b45309;background:#fef3c7;\">รออนุมัติ</span></td></tr></table><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:28px 0 8px;\"><tr><td style=\"border-radius:8px;background:#d97706;\"><a href=\"https://app.example.test/project/project%20golden\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;\">ตรวจสอบและอนุมัติเอกสาร</a></td></tr></table><p style=\"margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;\">หรือเปิดลิงก์: <a href=\"https://app.example.test/project/project%20golden\" style=\"color:#2563eb;\">https://app.example.test/project/project%20golden</a></p></td></tr><tr><td style=\"padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;\">อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr></table></td></tr></table></body></html>"
+      }
+    },
+    {
+      "notification": {
+        "projectName": "โครงการ <Golden> & Fiber",
+        "documentNumber": "DOC-2026-001",
+        "owners": [
+          "ITEL",
+          "UIH"
+        ],
+        "details": {
+          "routeCode": "RT-01",
+          "requestedBy": "Requester",
+          "requestedByEmail": "requester@example.test",
+          "requestedAt": "2026-01-01T00:00:00Z",
+          "projectCorridorDistanceKm": 12.345,
+          "totalOperationDistanceKm": 24.69,
+          "contractorName": "Contractor",
+          "contractorPoNumber": "PO-01",
+          "estimatedInstallationDate": "2026-02-01",
+          "signOffs": [
+            {
+              "owner": "ITEL",
+              "planning": {
+                "status": "Approved",
+                "signedBy": "Planner",
+                "signedAt": "2026-01-02T00:00:00Z"
+              },
+              "management": {
+                "status": "Pending"
+              }
+            }
+          ]
+        },
+        "kind": "management-requested"
+      },
+      "appUrl": "https://app.example.test/",
+      "projectId": "project golden",
+      "expected": {
+        "subject": "[Fiber Sharing] Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management: โครงการ <Golden> & Fiber (DOC-2026-001)",
+        "text": "Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management\n\nPlanning ของทุก Operator อนุมัติครบแล้ว เอกสารรอการพิจารณาลงนามจาก Management\n\nโครงการ: โครงการ <Golden> & Fiber\nรหัสเส้นทาง: RT-01\nเลขที่เอกสาร: DOC-2026-001\nขั้นการอนุมัติ: Management (O&M)\nOperator: ITEL, UIH\nผู้ขออนุมัติ: Requester (requester@example.test)\nวันที่ขออนุมัติ: 1 ม.ค. 2569 07:00 น.\nระยะ Project Corridor: 12.345 กม.\nระยะดำเนินการรวม: 24.69 กม.\nผู้รับเหมา: Contractor / PO PO-01\nวันติดตั้งโดยประมาณ: 1 ก.พ. 2569\n\nสถานะการลงนาม\n- ITEL: Planning อนุมัติแล้ว (Planner, 2 ม.ค. 2569 07:00 น.) | Management รออนุมัติ\n\nตรวจสอบและอนุมัติเอกสาร: https://app.example.test/project/project%20golden\n\nอีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ",
+        "html": "<!doctype html><html lang=\"th\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>[Fiber Sharing] Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management: โครงการ &lt;Golden&gt; &amp; Fiber (DOC-2026-001)</title></head><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;\"><div style=\"display:none;max-height:0;overflow:hidden;\">โครงการ &lt;Golden&gt; &amp; Fiber · DOC-2026-001</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:24px 12px;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;\"><tr><td style=\"background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;\">Fiber Sharing</td></tr><tr><td style=\"height:4px;background:#2563eb;font-size:0;line-height:0;\">&nbsp;</td></tr><tr><td style=\"padding:28px;\"><p style=\"margin:0 0 4px;font-size:12px;font-weight:bold;color:#2563eb;text-transform:uppercase;letter-spacing:1px;\">Management (O&amp;M)</p><h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;\">Planning อนุมัติครบแล้ว มีเอกสารรออนุมัติขั้น Management</h1><p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;\">Planning ของทุก Operator อนุมัติครบแล้ว เอกสารรอการพิจารณาลงนามจาก Management</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;\"><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">โครงการ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">โครงการ &lt;Golden&gt; &amp; Fiber</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">รหัสเส้นทาง</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">RT-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">เลขที่เอกสาร</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">DOC-2026-001</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ขั้นการอนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Management (O&amp;M)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">Operator</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ITEL, UIH</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Requester (requester@example.test)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ม.ค. 2569 07:00 น.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะ Project Corridor</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">12.345 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะดำเนินการรวม</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">24.69 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้รับเหมา</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Contractor / PO PO-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันติดตั้งโดยประมาณ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ก.พ. 2569</td></tr></table><p style=\"margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;\">สถานะการลงนาม</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;\"><tr style=\"background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;\"><th align=\"left\" style=\"padding:10px 12px;\">Operator</th><th align=\"left\" style=\"padding:10px 12px;\">Planning</th><th align=\"left\" style=\"padding:10px 12px;\">Management</th></tr><tr><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;\">ITEL</td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#047857;background:#d1fae5;\">อนุมัติแล้ว</span><div style=\"margin-top:4px;font-size:12px;color:#64748b;\">Planner<br>2 ม.ค. 2569 07:00 น.</div></td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#b45309;background:#fef3c7;\">รออนุมัติ</span></td></tr></table><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:28px 0 8px;\"><tr><td style=\"border-radius:8px;background:#2563eb;\"><a href=\"https://app.example.test/project/project%20golden\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;\">ตรวจสอบและอนุมัติเอกสาร</a></td></tr></table><p style=\"margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;\">หรือเปิดลิงก์: <a href=\"https://app.example.test/project/project%20golden\" style=\"color:#2563eb;\">https://app.example.test/project/project%20golden</a></p></td></tr><tr><td style=\"padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;\">อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr></table></td></tr></table></body></html>"
+      }
+    },
+    {
+      "notification": {
+        "projectName": "โครงการ <Golden> & Fiber",
+        "documentNumber": "DOC-2026-001",
+        "owners": [
+          "ITEL",
+          "UIH"
+        ],
+        "details": {
+          "routeCode": "RT-01",
+          "requestedBy": "Requester",
+          "requestedByEmail": "requester@example.test",
+          "requestedAt": "2026-01-01T00:00:00Z",
+          "projectCorridorDistanceKm": 12.345,
+          "totalOperationDistanceKm": 24.69,
+          "contractorName": "Contractor",
+          "contractorPoNumber": "PO-01",
+          "estimatedInstallationDate": "2026-02-01",
+          "signOffs": [
+            {
+              "owner": "ITEL",
+              "planning": {
+                "status": "Approved",
+                "signedBy": "Planner",
+                "signedAt": "2026-01-02T00:00:00Z"
+              },
+              "management": {
+                "status": "Pending"
+              }
+            }
+          ]
+        },
+        "kind": "approval-completed"
+      },
+      "appUrl": "https://app.example.test/",
+      "projectId": "project golden",
+      "expected": {
+        "subject": "[Fiber Sharing] Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย: โครงการ <Golden> & Fiber (DOC-2026-001)",
+        "text": "Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย\n\nเอกสารได้รับการอนุมัติครบทั้งขั้น Planning และ Management แล้ว\n\nโครงการ: โครงการ <Golden> & Fiber\nรหัสเส้นทาง: RT-01\nเลขที่เอกสาร: DOC-2026-001\nขั้นการอนุมัติ: อนุมัติครบทุกขั้น\nOperator: ITEL, UIH\nผู้ขออนุมัติ: Requester (requester@example.test)\nวันที่ขออนุมัติ: 1 ม.ค. 2569 07:00 น.\nระยะ Project Corridor: 12.345 กม.\nระยะดำเนินการรวม: 24.69 กม.\nผู้รับเหมา: Contractor / PO PO-01\nวันติดตั้งโดยประมาณ: 1 ก.พ. 2569\n\nสถานะการลงนาม\n- ITEL: Planning อนุมัติแล้ว (Planner, 2 ม.ค. 2569 07:00 น.) | Management รออนุมัติ\n\nเปิดดูโครงการ: https://app.example.test/project/project%20golden\n\nอีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ",
+        "html": "<!doctype html><html lang=\"th\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>[Fiber Sharing] Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย: โครงการ &lt;Golden&gt; &amp; Fiber (DOC-2026-001)</title></head><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;\"><div style=\"display:none;max-height:0;overflow:hidden;\">โครงการ &lt;Golden&gt; &amp; Fiber · DOC-2026-001</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:24px 12px;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;\"><tr><td style=\"background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;\">Fiber Sharing</td></tr><tr><td style=\"height:4px;background:#059669;font-size:0;line-height:0;\">&nbsp;</td></tr><tr><td style=\"padding:28px;\"><p style=\"margin:0 0 4px;font-size:12px;font-weight:bold;color:#059669;text-transform:uppercase;letter-spacing:1px;\">อนุมัติครบทุกขั้น</p><h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;\">Management อนุมัติครบแล้ว เอกสารได้รับอนุมัติเรียบร้อย</h1><p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;\">เอกสารได้รับการอนุมัติครบทั้งขั้น Planning และ Management แล้ว</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;\"><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">โครงการ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">โครงการ &lt;Golden&gt; &amp; Fiber</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">รหัสเส้นทาง</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">RT-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">เลขที่เอกสาร</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">DOC-2026-001</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ขั้นการอนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">อนุมัติครบทุกขั้น</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">Operator</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ITEL, UIH</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Requester (requester@example.test)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ม.ค. 2569 07:00 น.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะ Project Corridor</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">12.345 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะดำเนินการรวม</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">24.69 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้รับเหมา</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Contractor / PO PO-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันติดตั้งโดยประมาณ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ก.พ. 2569</td></tr></table><p style=\"margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;\">สถานะการลงนาม</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;\"><tr style=\"background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;\"><th align=\"left\" style=\"padding:10px 12px;\">Operator</th><th align=\"left\" style=\"padding:10px 12px;\">Planning</th><th align=\"left\" style=\"padding:10px 12px;\">Management</th></tr><tr><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;\">ITEL</td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#047857;background:#d1fae5;\">อนุมัติแล้ว</span><div style=\"margin-top:4px;font-size:12px;color:#64748b;\">Planner<br>2 ม.ค. 2569 07:00 น.</div></td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#b45309;background:#fef3c7;\">รออนุมัติ</span></td></tr></table><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:28px 0 8px;\"><tr><td style=\"border-radius:8px;background:#059669;\"><a href=\"https://app.example.test/project/project%20golden\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;\">เปิดดูโครงการ</a></td></tr></table><p style=\"margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;\">หรือเปิดลิงก์: <a href=\"https://app.example.test/project/project%20golden\" style=\"color:#2563eb;\">https://app.example.test/project/project%20golden</a></p></td></tr><tr><td style=\"padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;\">อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr></table></td></tr></table></body></html>"
+      }
+    },
+    {
+      "notification": {
+        "projectName": "โครงการ <Golden> & Fiber",
+        "documentNumber": "DOC-2026-001",
+        "owners": [
+          "ITEL",
+          "UIH"
+        ],
+        "details": {
+          "routeCode": "RT-01",
+          "requestedBy": "Requester",
+          "requestedByEmail": "requester@example.test",
+          "requestedAt": "2026-01-01T00:00:00Z",
+          "projectCorridorDistanceKm": 12.345,
+          "totalOperationDistanceKm": 24.69,
+          "contractorName": "Contractor",
+          "contractorPoNumber": "PO-01",
+          "estimatedInstallationDate": "2026-02-01",
+          "signOffs": [
+            {
+              "owner": "ITEL",
+              "planning": {
+                "status": "Approved",
+                "signedBy": "Planner",
+                "signedAt": "2026-01-02T00:00:00Z"
+              },
+              "management": {
+                "status": "Pending"
+              }
+            }
+          ]
+        },
+        "kind": "final-documents"
+      },
+      "appUrl": "https://app.example.test/",
+      "projectId": "project golden",
+      "attachmentNote": "แนบ PDF และ KMZ แล้ว",
+      "expected": {
+        "subject": "[Fiber Sharing] เอกสารอนุมัติฉบับลงนามครบ: โครงการ <Golden> & Fiber (DOC-2026-001)",
+        "text": "เอกสารอนุมัติฉบับลงนามครบ\n\nส่งเอกสารขออนุมัติฉบับลงนามครบ (PDF) และไฟล์แผนที่ (KMZ) ของโครงการที่ได้รับอนุมัติแล้ว\n\nโครงการ: โครงการ <Golden> & Fiber\nรหัสเส้นทาง: RT-01\nเลขที่เอกสาร: DOC-2026-001\nขั้นการอนุมัติ: อนุมัติครบทุกขั้น\nOperator: ITEL, UIH\nผู้ขออนุมัติ: Requester (requester@example.test)\nวันที่ขออนุมัติ: 1 ม.ค. 2569 07:00 น.\nระยะ Project Corridor: 12.345 กม.\nระยะดำเนินการรวม: 24.69 กม.\nผู้รับเหมา: Contractor / PO PO-01\nวันติดตั้งโดยประมาณ: 1 ก.พ. 2569\n\nสถานะการลงนาม\n- ITEL: Planning อนุมัติแล้ว (Planner, 2 ม.ค. 2569 07:00 น.) | Management รออนุมัติ\n\nแนบ PDF และ KMZ แล้ว\n\nเปิดดูโครงการ: https://app.example.test/project/project%20golden\n\nอีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ",
+        "html": "<!doctype html><html lang=\"th\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>[Fiber Sharing] เอกสารอนุมัติฉบับลงนามครบ: โครงการ &lt;Golden&gt; &amp; Fiber (DOC-2026-001)</title></head><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;\"><div style=\"display:none;max-height:0;overflow:hidden;\">โครงการ &lt;Golden&gt; &amp; Fiber · DOC-2026-001</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:24px 12px;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;\"><tr><td style=\"background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;\">Fiber Sharing</td></tr><tr><td style=\"height:4px;background:#059669;font-size:0;line-height:0;\">&nbsp;</td></tr><tr><td style=\"padding:28px;\"><p style=\"margin:0 0 4px;font-size:12px;font-weight:bold;color:#059669;text-transform:uppercase;letter-spacing:1px;\">อนุมัติครบทุกขั้น</p><h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;\">เอกสารอนุมัติฉบับลงนามครบ</h1><p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;\">ส่งเอกสารขออนุมัติฉบับลงนามครบ (PDF) และไฟล์แผนที่ (KMZ) ของโครงการที่ได้รับอนุมัติแล้ว</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;\"><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">โครงการ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">โครงการ &lt;Golden&gt; &amp; Fiber</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">รหัสเส้นทาง</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">RT-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">เลขที่เอกสาร</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">DOC-2026-001</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ขั้นการอนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">อนุมัติครบทุกขั้น</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">Operator</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ITEL, UIH</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Requester (requester@example.test)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ม.ค. 2569 07:00 น.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะ Project Corridor</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">12.345 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะดำเนินการรวม</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">24.69 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้รับเหมา</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Contractor / PO PO-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันติดตั้งโดยประมาณ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ก.พ. 2569</td></tr></table><p style=\"margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;\">สถานะการลงนาม</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;\"><tr style=\"background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;\"><th align=\"left\" style=\"padding:10px 12px;\">Operator</th><th align=\"left\" style=\"padding:10px 12px;\">Planning</th><th align=\"left\" style=\"padding:10px 12px;\">Management</th></tr><tr><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;\">ITEL</td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#047857;background:#d1fae5;\">อนุมัติแล้ว</span><div style=\"margin-top:4px;font-size:12px;color:#64748b;\">Planner<br>2 ม.ค. 2569 07:00 น.</div></td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#b45309;background:#fef3c7;\">รออนุมัติ</span></td></tr></table><p style=\"margin:24px 0 0;padding:10px 14px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:14px;color:#166534;\">📎 แนบ PDF และ KMZ แล้ว</p><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:28px 0 8px;\"><tr><td style=\"border-radius:8px;background:#059669;\"><a href=\"https://app.example.test/project/project%20golden\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;\">เปิดดูโครงการ</a></td></tr></table><p style=\"margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;\">หรือเปิดลิงก์: <a href=\"https://app.example.test/project/project%20golden\" style=\"color:#2563eb;\">https://app.example.test/project/project%20golden</a></p></td></tr><tr><td style=\"padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;\">อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr></table></td></tr></table></body></html>"
+      }
+    },
+    {
+      "notification": {
+        "projectName": "โครงการ <Golden> & Fiber",
+        "documentNumber": "DOC-2026-001",
+        "owners": [
+          "ITEL",
+          "UIH"
+        ],
+        "details": {
+          "routeCode": "RT-01",
+          "requestedBy": "Requester",
+          "requestedByEmail": "requester@example.test",
+          "requestedAt": "2026-01-01T00:00:00Z",
+          "projectCorridorDistanceKm": 12.345,
+          "totalOperationDistanceKm": 24.69,
+          "contractorName": "Contractor",
+          "contractorPoNumber": "PO-01",
+          "estimatedInstallationDate": "2026-02-01",
+          "signOffs": [
+            {
+              "owner": "ITEL",
+              "planning": {
+                "status": "Approved",
+                "signedBy": "Planner",
+                "signedAt": "2026-01-02T00:00:00Z"
+              },
+              "management": {
+                "status": "Pending"
+              }
+            }
+          ],
+          "rejection": {
+            "reason": "เหตุผล <แก้ไข>\nรายละเอียด",
+            "owner": "UIH",
+            "signedBy": "Reviewer",
+            "signedAt": "2026-01-03T00:00:00Z",
+            "level": "OM"
+          }
+        },
+        "kind": "approval-rejected"
+      },
+      "appUrl": "https://app.example.test/",
+      "projectId": "project golden",
+      "expected": {
+        "subject": "[Fiber Sharing] เอกสารไม่ได้รับอนุมัติ: โครงการ <Golden> & Fiber (DOC-2026-001)",
+        "text": "เอกสารไม่ได้รับอนุมัติ\n\nคำขออนุมัติการออกแบบนี้ไม่ได้รับอนุมัติ คำขอทั้งหมดถูกยกเลิก ผู้ขออนุมัติต้องแก้ไขและยื่นคำขอใหม่\n\nโครงการ: โครงการ <Golden> & Fiber\nรหัสเส้นทาง: RT-01\nเลขที่เอกสาร: DOC-2026-001\nขั้นการอนุมัติ: ไม่อนุมัติ\nOperator: ITEL, UIH\nผู้ขออนุมัติ: Requester (requester@example.test)\nวันที่ขออนุมัติ: 1 ม.ค. 2569 07:00 น.\nระยะ Project Corridor: 12.345 กม.\nระยะดำเนินการรวม: 24.69 กม.\nผู้รับเหมา: Contractor / PO PO-01\nวันติดตั้งโดยประมาณ: 1 ก.พ. 2569\nระดับที่ไม่อนุมัติ: Management (O&M)\nผู้ไม่อนุมัติ: UIH — Reviewer\nวันที่ไม่อนุมัติ: 3 ม.ค. 2569 07:00 น.\n\nเหตุผลที่ไม่อนุมัติ\nเหตุผล <แก้ไข>\nรายละเอียด\n\nสถานะการลงนาม\n- ITEL: Planning อนุมัติแล้ว (Planner, 2 ม.ค. 2569 07:00 น.) | Management รออนุมัติ\n\nเปิดดูโครงการ: https://app.example.test/project/project%20golden\n\nอีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ",
+        "html": "<!doctype html><html lang=\"th\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>[Fiber Sharing] เอกสารไม่ได้รับอนุมัติ: โครงการ &lt;Golden&gt; &amp; Fiber (DOC-2026-001)</title></head><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:'Sarabun','Leelawadee UI',Tahoma,Arial,sans-serif;\"><div style=\"display:none;max-height:0;overflow:hidden;\">โครงการ &lt;Golden&gt; &amp; Fiber · DOC-2026-001</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f5f9;padding:24px 12px;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;\"><tr><td style=\"background:#0f172a;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:0.5px;\">Fiber Sharing</td></tr><tr><td style=\"height:4px;background:#b91c1c;font-size:0;line-height:0;\">&nbsp;</td></tr><tr><td style=\"padding:28px;\"><p style=\"margin:0 0 4px;font-size:12px;font-weight:bold;color:#b91c1c;text-transform:uppercase;letter-spacing:1px;\">ไม่อนุมัติ</p><h1 style=\"margin:0 0 12px;font-size:22px;line-height:1.4;color:#0f172a;\">เอกสารไม่ได้รับอนุมัติ</h1><p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;\">คำขออนุมัติการออกแบบนี้ไม่ได้รับอนุมัติ คำขอทั้งหมดถูกยกเลิก ผู้ขออนุมัติต้องแก้ไขและยื่นคำขอใหม่</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;\"><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">โครงการ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">โครงการ &lt;Golden&gt; &amp; Fiber</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">รหัสเส้นทาง</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">RT-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">เลขที่เอกสาร</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">DOC-2026-001</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ขั้นการอนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ไม่อนุมัติ</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">Operator</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">ITEL, UIH</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Requester (requester@example.test)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ขออนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ม.ค. 2569 07:00 น.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะ Project Corridor</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">12.345 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระยะดำเนินการรวม</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">24.69 กม.</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้รับเหมา</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Contractor / PO PO-01</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันติดตั้งโดยประมาณ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">1 ก.พ. 2569</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ระดับที่ไม่อนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">Management (O&amp;M)</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">ผู้ไม่อนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">UIH — Reviewer</td></tr><tr><td style=\"padding:8px 0;width:40%;color:#64748b;font-size:14px;vertical-align:top;\">วันที่ไม่อนุมัติ</td><td style=\"padding:8px 0;color:#0f172a;font-size:14px;font-weight:bold;vertical-align:top;\">3 ม.ค. 2569 07:00 น.</td></tr></table><div style=\"margin:24px 0 0;padding:14px;border-radius:8px;color:#b91c1c;background:#fee2e2;\"><p style=\"margin:0 0 8px;font-size:14px;font-weight:bold;\">เหตุผลที่ไม่อนุมัติ</p><div style=\"white-space:pre-wrap;font-size:14px;line-height:1.6;\">เหตุผล &lt;แก้ไข&gt;\nรายละเอียด</div></div><p style=\"margin:28px 0 8px;font-size:15px;font-weight:bold;color:#0f172a;\">สถานะการลงนาม</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:14px;\"><tr style=\"background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;\"><th align=\"left\" style=\"padding:10px 12px;\">Operator</th><th align=\"left\" style=\"padding:10px 12px;\">Planning</th><th align=\"left\" style=\"padding:10px 12px;\">Management</th></tr><tr><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;font-weight:bold;color:#0f172a;vertical-align:top;\">ITEL</td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#047857;background:#d1fae5;\">อนุมัติแล้ว</span><div style=\"margin-top:4px;font-size:12px;color:#64748b;\">Planner<br>2 ม.ค. 2569 07:00 น.</div></td><td style=\"padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:bold;color:#b45309;background:#fef3c7;\">รออนุมัติ</span></td></tr></table><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:28px 0 8px;\"><tr><td style=\"border-radius:8px;background:#b91c1c;\"><a href=\"https://app.example.test/project/project%20golden\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;\">เปิดดูโครงการ</a></td></tr></table><p style=\"margin:8px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;\">หรือเปิดลิงก์: <a href=\"https://app.example.test/project/project%20golden\" style=\"color:#2563eb;\">https://app.example.test/project/project%20golden</a></p></td></tr><tr><td style=\"padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;\">อีเมลนี้ส่งอัตโนมัติจากระบบ Fiber Sharing กรุณาอย่าตอบกลับ</td></tr></table></td></tr></table></body></html>"
+      }
+    }
+  ]
+}

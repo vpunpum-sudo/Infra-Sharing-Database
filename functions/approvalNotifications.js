@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto');
+const { REMINDER_DEFAULTS } = require('./approvalReminderConfig');
 
 const OWNER_CODES = new Set(['ITEL', 'SYMC', 'UIH']);
 
@@ -262,9 +263,37 @@ function signOffCell(signOff) {
 
 /** `attachmentNote` (optional) is one line about the attached documents. */
 function emailContent(notification, appUrl, projectId, attachmentNote) {
-  const copy = KIND_COPY[notification.kind];
+  const isReminder = ['stage-reminder', 'stage-escalation'].includes(notification.kind);
+  if (isReminder) {
+    // Strict allow-list: never carry requester/signature/reason/contact data into reminders.
+    notification = {
+      kind: notification.kind, projectName: notification.projectName,
+      documentNumber: notification.documentNumber, owners: notification.owners,
+      stage: notification.stage, daysWaiting: notification.daysWaiting,
+      reminderNumber: notification.reminderNumber,
+      details: { routeCode: notification.details?.routeCode }
+    };
+    attachmentNote = undefined;
+  }
+  const stage = notification.stage === 'OM' ? 'Management (O&M)' : 'Planning';
+  const copy = isReminder ? {
+    description: notification.kind === 'stage-reminder'
+      ? `เตือน: เอกสารรออนุมัติขั้น ${stage} ค้างอยู่ ${notification.daysWaiting} วัน`
+      : `เอกสารรออนุมัติค้างเกิน ${REMINDER_DEFAULTS.escalationDays} วัน`,
+    stage,
+    intro: notification.kind === 'stage-reminder'
+      ? `เอกสารขออนุมัติการออกแบบโครงการนี้รอการลงนามของคุณมาแล้ว ${notification.daysWaiting} วัน กรุณาตรวจสอบและลงนามเพื่อให้โครงการดำเนินต่อได้`
+      : `เอกสารขออนุมัติรายการนี้ค้างอยู่ในขั้น ${stage} เกิน ${REMINDER_DEFAULTS.escalationDays} วัน ยังไม่ลงนาม: ${notification.owners.join(', ')}`,
+    action: 'ตรวจสอบและอนุมัติเอกสาร', accent: '#d97706'
+  } : KIND_COPY[notification.kind];
   const link = projectLink(appUrl, projectId);
   const rows = summaryRows(notification, copy);
+  if (isReminder) {
+    rows.push(['รอการลงนาม', `${notification.daysWaiting} วัน`]);
+    if (notification.kind === 'stage-reminder') {
+      rows.push(['การแจ้งเตือน', `เตือนครั้งที่ ${notification.reminderNumber} จาก ${REMINDER_DEFAULTS.maxReminders}`]);
+    }
+  }
   const signOffs = notification.details?.signOffs || [];
   const rejection = notification.details?.rejection;
   const reason = rejection?.reason || 'ไม่ระบุเหตุผล';
