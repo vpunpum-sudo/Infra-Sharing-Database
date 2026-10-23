@@ -18,6 +18,8 @@ import { logActivity } from '../services/logService';
 import { ThemeToggle } from './ThemeToggle';
 import { DesignApprovalModal } from './DesignApprovalModal';
 import { ProjectFilesModal } from './ProjectFilesModal';
+import { SigningQueuePanel } from './SigningQueuePanel';
+import { canSeeSigningQueue } from '../utils/approvalQueue';
 
 const formatProjectDate = (value?: string) => {
   if (!value) return 'ไม่ระบุ';
@@ -465,6 +467,10 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 )}
               </div>
             </div>
+
+            {canSeeSigningQueue(userPermissions) && (
+              <SigningQueuePanel projects={projects} appUser={appUser} permissions={userPermissions} onOpenApproval={setApprovalModalProject} />
+            )}
 
             {/* Filter & Search Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-700/80 backdrop-blur-xl shadow-lg">
