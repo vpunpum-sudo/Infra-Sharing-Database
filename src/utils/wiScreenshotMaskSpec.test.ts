@@ -103,3 +103,11 @@ test('PII is detected within each field, not across adjacent date and progress i
   assert.deepEqual(checkMaskResult({ ...base, bodyText: 'ติดต่อ\n081 234 5678' }, { regions: [] }, {}), ['pii:phone']);
   assert.deepEqual(checkMaskResult({ ...base, inputs: ['someone@example.com'] }, { regions: [] }, {}), ['pii:email']);
 });
+
+test('approval history overlay is optional and hidden in both approval figures', () => {
+  for (const figure of ['approval-request', 'approval-sign'] as const) {
+    const region = WI_MASK_SPECS[figure].regions.find(r => r.name === 'approval-history');
+    assert.ok(region); assert.equal(region.kind, 'hide'); assert.equal(region.required, false);
+    assert.equal(region.selector, '[data-wi-pii="approval-history"]');
+  }
+});

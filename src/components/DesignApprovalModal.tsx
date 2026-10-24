@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useConfirm } from './ConfirmModal';
+import { ApprovalHistoryEntry } from './ApprovalHistoryEntry';
 import { canSignAsOwner } from '../utils/approvalQueue';
 import { 
   Project, User as AppUser, CoreOwner, DesignApproval, 
@@ -2512,6 +2513,7 @@ export function DesignApprovalModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {permissions?.viewApprovalDocs && <ApprovalHistoryEntry project={project} uid={appUser?.id} />}
             <button
               onClick={() => setViewMode('slides')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
