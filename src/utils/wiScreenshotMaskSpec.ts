@@ -52,6 +52,7 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
   files: { regions: header() },
   schedule: { regions: [...header(), region('task-owner', 'text', WI_MASK_PLACEHOLDERS.supervisor, true, 'ProjectScheduleModal.tsx'), region('schedule-history-name', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'ProjectScheduleModal.tsx')] },
   'approval-request': { regions: [
+    region('approval-history', 'hide', undefined, false, 'ApprovalHistoryView.tsx'),
     ...header(), region('approval-supervisor', 'input', WI_MASK_PLACEHOLDERS.supervisor, true, 'DesignApprovalModal.tsx'),
     region('approval-phone', 'input', WI_MASK_PLACEHOLDERS.phone, true, 'DesignApprovalModal.tsx'),
     region('approval-company', 'input', WI_MASK_PLACEHOLDERS.company, false, 'DesignApprovalModal.tsx'),
@@ -63,6 +64,7 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
     region('previous-signer', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'DesignApprovalModal.tsx')
   ] },
   'approval-sign': { regions: [
+    region('approval-history', 'hide', undefined, false, 'ApprovalHistoryView.tsx'),
     ...header(), region('signer-name', 'input', '', true, 'DesignApprovalModal.tsx'),
     region('signer-position', 'input', '', true, 'DesignApprovalModal.tsx'),
     region('signature-pad', 'image', undefined, true, 'DesignApprovalModal.tsx'),
