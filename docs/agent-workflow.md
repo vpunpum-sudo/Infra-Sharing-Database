@@ -69,6 +69,21 @@ Deployment is deliberately not part of `npm run verify`.
 
 For approval-email functions, also follow `APPROVAL_EMAIL_SETUP.md`.
 
+### Firestore rules changes
+
+`npm run verify` cannot exercise `firestore.rules`. Any change to that file also needs:
+
+- `npm run test:rules` green. It runs `tests/rules/` on the Firestore emulator in Enterprise edition against the
+  named database, replays the real client writes against the previous rules (`tests/rules/fixtures/firestore.rules.before`)
+  and the current ones, and fails on any outcome that differs from the declared table in `tests/rules/expectations.mjs`.
+  It needs a JRE (Java 21 works) and the `firebase` CLI, and it is not part of `npm run verify`. A sandbox that forbids
+  opening local sockets (such as the Codex stage sandbox) cannot run it: run it from a normal shell.
+- A PR description that says plainly: which rule gates changed, that the rules were NOT deployed (rules deploy is a
+  production change to a shared database and needs authorization naming "Firestore rules" and the project), the
+  rollback (redeploy the previous `firestore.rules` from git), and the post-deploy checklist from the spec.
+- Rules have a hard budget of 1,000 evaluated expressions and 10 distinct document reads per request. The suite's
+  budget test (`limits.rules.test.mjs`) keeps a margin; when a change eats it, restructure instead of lowering the margin.
+
 ## Conductor merge-gate todos
 
 Create these todos for each feature and treat open items as blockers:

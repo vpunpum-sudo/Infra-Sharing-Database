@@ -132,51 +132,14 @@ service cloud.firestore {
              request.auth.uid == projectData.uid;
     }
 
-    // Management (O&M) and Planning sign approvals but do not edit the design:
-    // they may only change the approval fields of projects their company is in.
-    function canSignApproval(projectData) {
-      return userExists() && getUserData().get('isApproved', false) == true &&
-             getUserData().role in ['Management', 'Planning'] &&
-             canAccessProject(projectData) &&
-             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'designApproval']);
-    }
-
     function canDeleteProject(projectData) {
       return isAdmin() || 
              request.auth.uid == projectData.uid;
     }
 
-    function approvedSignOffRewound(before, after, owner) {
-      return before.get(owner, {}).get('status', '') == 'Approved' &&
-        after.get(owner, {}).get('status', '') != 'Approved';
-    }
-
-    function isApprovalRewind() {
-      return 'designApproval' in resource.data &&
-        (!('designApproval' in request.resource.data) ||
-        (resource.data.designApproval.get('status', '') == 'Approved' &&
-          request.resource.data.designApproval.get('status', '') != 'Approved') ||
-         (resource.data.designApproval.get('approvalStage', '') == 'Completed' &&
-          request.resource.data.designApproval.get('approvalStage', '') != 'Completed') ||
-         (resource.data.designApproval.get('approvalStage', '') == 'OM' &&
-          request.resource.data.designApproval.get('approvalStage', '') == 'Planning') ||
-         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'ITEL') ||
-         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'SYMC') ||
-         approvedSignOffRewound(resource.data.designApproval.get('planningSignOffs', {}), request.resource.data.designApproval.get('planningSignOffs', {}), 'UIH') ||
-         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'ITEL') ||
-         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'SYMC') ||
-         approvedSignOffRewound(resource.data.designApproval.get('omSignOffs', {}), request.resource.data.designApproval.get('omSignOffs', {}), 'UIH'));
-    }
-
-    function approvalContentUnchanged(projectId) {
-      return !('designApproval' in resource.data) ||
-        !('designApproval' in request.resource.data) ||
-        resource.data.designApproval.get('id', '') != request.resource.data.designApproval.get('id', '') ||
-        request.resource.data.designApproval.diff(resource.data.designApproval).affectedKeys().hasOnly([
-          'status', 'approvalStage', 'planningSignOffs', 'omSignOffs', 'ownerSignOffs',
-          'rejectionReason', 'finalApprovedAt', 'finalApprovedBy', 'finalDocuments'
-        ]) || isSnapshotBackfill(projectId);
-    }
+    // canSignApproval, isApprovalRewind and approvalContentUnchanged were replaced by
+    // projectUpdateGate and approvalWriteAllowed (below); see
+    // docs/specs/signing-authority-firestore-rules.md for why and for the proof.
 
     function isSnapshotBackfill(projectId) {
       let before = resource.data.designApproval;
@@ -197,6 +160,387 @@ service cloud.firestore {
         exists(snapshot) && get(snapshot).data.id == after.snapshotId &&
         get(snapshot).data.approvalId == before.id && get(snapshot).data.projectId == projectId &&
         get(snapshot).data.get('backfill', false) == true;
+    }
+
+    // The outer gate for updating a project: exactly the older (canEditProject || canSignApproval)
+    // (Design/Sub-contract editors of a member company, the creator, an Admin, and approved
+    // Management/Planning members who change only status/designApproval), written to read the users document once (the older pair calls
+    // isAdmin() and getUserData() several times, which spends the evaluation budget the
+    // approval classifier below needs). Equivalent by construction; the fixtures and the
+    // mutation sweep in tests/rules compare it with the older gate.
+    // A user with no owner field never matches (the previous gate read the field directly and an absent
+    // field made the clause fail), even if a project lists an empty owner.
+    function isProjectMember(p, u) {
+      return 'owner' in u && (('owners' in p && u.owner in p.owners) || ('owner' in p && u.owner == p.owner));
+    }
+
+    function projectUpdateGate(p, u) {
+      return u.get('role', '') == 'Admin' || request.auth.token.email in ['vpunpum@gmail.com', 'verayut_p@uih.co.th'] ||
+        request.auth.uid == p.uid ||
+        ('role' in u && isProjectMember(p, u) &&
+          (u.role in ['Design', 'Sub-contract'] ||
+            (u.get('isApproved', false) == true && u.role in ['Management', 'Planning'] &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'designApproval']))));
+    }
+
+    // The users document is read once and shared by the gate and the approval classifier.
+    function projectUpdateAllowed(p, projectId) {
+      let u = userExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : {};
+      return projectUpdateGate(p, u) && approvalWriteAllowed(projectId, u);
+    }
+
+    // ===============================================================
+    // Approval signing authority
+    // ===============================================================
+    // Every update that changes designApproval or the top-level status must be
+    // exactly one of: a new approval, a snapshot backfill, an Admin rewind, a
+    // single sign-off, the final-documents record, or an Admin status-only
+    // change. These checks only narrow what the older gates (canEditProject /
+    // canSignApproval, isApprovalRewind, approvalContentUnchanged) admitted and replace
+    // them: each class below re-implements the older clauses more strictly (the fixture
+    // table and the mutation sweep in tests/rules show that no write the older gates
+    // denied is allowed here). The client predicate canSignAsOwner
+    // (src/utils/approvalQueue.ts) is mirrored. Route-derived owners cannot be evaluated
+    // in rules, so the owner guarantee covers the recorded, rules-visible owner set only
+    // (docs/specs/signing-authority-firestore-rules.md). Firestore allows 1,000
+    // expression evaluations per request and this path spends most of them, so keep the
+    // shapes below flat: no loops, shared values bound once, cheap discriminators first,
+    // and re-run `npm run test:rules` (its budget test fails when the margin is gone).
+
+    function ownerListOk(list) {
+      return list is list && list.size() > 0 && list.hasOnly(['ITEL', 'SYMC', 'UIH']);
+    }
+
+    function ownersWith(signOffs, status) {
+      return (signOffs.get('ITEL', {}).get('status', '') == status ? ['ITEL'] : [])
+        .concat(signOffs.get('SYMC', {}).get('status', '') == status ? ['SYMC'] : [])
+        .concat(signOffs.get('UIH', {}).get('status', '') == status ? ['UIH'] : []);
+    }
+
+    // The project's own owners: owners array when non-empty, else owner. A value
+    // of the wrong type is passed through so that ownerListOk fails closed.
+    // null means the project lists no owners at all.
+    function projectOwnersRaw() {
+      let owners = resource.data.get('owners', null);
+      let single = resource.data.get('owner', null);
+      return (owners is list && owners.size() > 0) ? owners
+        : (owners != null && !(owners is list)) ? owners
+        : (single is string && single != '' && single != 'None') ? [single]
+        : (single != null && !(single is string)) ? single
+        : null;
+    }
+
+    function snapshotDoc(projectId, approval) {
+      return /databases/$(database)/documents/projects/$(projectId)/approvalSnapshots/$(approval.snapshotId);
+    }
+
+    function effectiveStage(approval) {
+      return approval.get('approvalStage', resource.data.get('status', '') == 'Approved' ? 'Completed' : 'Planning');
+    }
+
+    // A map of Pending entries for the supported owners only, at one level. Each entry
+    // must equal exactly {owner, level, status: 'Pending'} (a map-literal comparison is
+    // far cheaper than checking the keys one by one).
+    function pendingMapOk(signOffs, level) {
+      return signOffs is map && signOffs.size() > 0 && signOffs.keys().hasOnly(['ITEL', 'SYMC', 'UIH']) &&
+        (!('ITEL' in signOffs) || signOffs['ITEL'] == {'owner': 'ITEL', 'level': level, 'status': 'Pending'}) &&
+        (!('SYMC' in signOffs) || signOffs['SYMC'] == {'owner': 'SYMC', 'level': level, 'status': 'Pending'}) &&
+        (!('UIH' in signOffs) || signOffs['UIH'] == {'owner': 'UIH', 'level': level, 'status': 'Pending'});
+    }
+
+    // ---- new approval (submit, resubmit, legacy attach) ----
+    // Replacing an approval that is Approved, past Planning, or that carries any
+    // Approved entry is a rewind in effect and stays Admin-only (as before).
+    function replaceableByNonAdmin(before) {
+      return before.get('status', '') != 'Approved' && effectiveStage(before) in ['Planning', 'Rejected'] &&
+        ownersWith(before.get('planningSignOffs', {}), 'Approved').size() == 0 &&
+        ownersWith(before.get('omSignOffs', {}), 'Approved').size() == 0;
+    }
+
+    function newApprovalAllowed() {
+      let r = resource.data;
+      let a = request.resource.data.designApproval;
+      return 'designApproval' in request.resource.data &&
+        (!('designApproval' in r) || r.designApproval.get('id', null) != a.get('id', null)) &&
+        a.get('status', null) == 'Pending Approval' && a.get('approvalStage', null) == 'Planning' &&
+        request.resource.data.get('status', null) == 'Pending Approval' && a.get('requestedByUid', null) == request.auth.uid &&
+        request.resource.data.diff(r).affectedKeys().hasOnly(['status', 'designApproval', 'approvalDraft']) &&
+        (!('designApproval' in r) ||
+          (hasAdminRole() && (!('snapshotId' in r.designApproval) ||
+            (r.designApproval.get('status', '') == 'Rejected' && r.get('status', '') == 'Rejected'))) ||
+          (!('snapshotId' in r.designApproval) && replaceableByNonAdmin(r.designApproval)) ||
+          (r.designApproval.get('status', '') == 'Rejected' && r.get('status', '') == 'Rejected' && replaceableByNonAdmin(r.designApproval))) &&
+        pendingMapOk(a.get('planningSignOffs', null), 'Planning') &&
+        pendingMapOk(a.get('omSignOffs', null), 'OM') &&
+        a.planningSignOffs.keys().toSet() == a.omSignOffs.keys().toSet() &&
+        a.get('ownerSignOffs', null) == a.planningSignOffs &&
+        !('finalApprovedAt' in a) && !('finalApprovedBy' in a) && !('finalDocuments' in a) &&
+        a.get('rejectionReason', '') == '' &&
+        (!('snapshotId' in a) || a.snapshotId == a.id);
+    }
+
+    // ---- final documents record ----
+    function finalDocumentsAllowed() {
+      let b = resource.data.designApproval;
+      let a = request.resource.data.designApproval;
+      let fd = a.get('finalDocuments', null);
+      return a.get('id', null) == b.get('id', null) &&
+        a.diff(b).affectedKeys().hasOnly(['finalDocuments']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['designApproval']) &&
+        effectiveStage(b) == 'Completed' && b.get('status', '') == 'Approved' &&
+        fd is map && fd.keys().hasOnly(['pdfFileId', 'pdfName', 'kmzFileId', 'kmzName', 'createdAt', 'createdBy']) &&
+        fd.keys().hasAll(['pdfFileId', 'pdfName', 'createdAt', 'createdBy']) &&
+        fd.get('createdBy', null) == request.auth.uid &&
+        (!('finalDocuments' in b) || hasAdminRole());
+    }
+
+    // ---- rewind (Admin only) ----
+    function rewindDraftAllowed() {
+      let r = resource.data;
+      let q = request.resource.data;
+      let b = r.designApproval;
+      let d = q.get('approvalDraft', null);
+      return !('designApproval' in q) && q.get('status', null) == 'Draft' &&
+        q.diff(r).affectedKeys().hasOnly(['status', 'designApproval', 'approvalDraft']) &&
+        d is map &&
+        d.keys().hasOnly(['designNotes', 'contractorName', 'contractorContact', 'contractorPhone',
+          'contractorPoNumber', 'contractorScope', 'estimatedInstallationDate',
+          'routeEnclosureSelections', 'totalOperationDistanceKm']) &&
+        d.keys().hasAll(['designNotes', 'contractorName', 'contractorContact', 'contractorPhone',
+          'contractorPoNumber', 'contractorScope', 'estimatedInstallationDate', 'routeEnclosureSelections']) &&
+        d.designNotes == b.get('designNotes', '') && d.contractorName == b.get('contractorName', '') &&
+        d.contractorContact == b.get('contractorContact', '') && d.contractorPhone == b.get('contractorPhone', '') &&
+        d.contractorPoNumber == b.get('contractorPoNumber', '') && d.contractorScope == b.get('contractorScope', '') &&
+        d.estimatedInstallationDate == b.get('estimatedInstallationDate', '') &&
+        d.routeEnclosureSelections == b.get('routeEnclosureSelections', {}) &&
+        (('totalOperationDistanceKm' in d) == (b.get('totalOperationDistanceKm', null) != null)) &&
+        (!('totalOperationDistanceKm' in d) || d.totalOperationDistanceKm == b.totalOperationDistanceKm);
+    }
+
+    // The reset maps' keys must cover the recorded owner set.
+    function resetKeysCover(projectId, approval, keys) {
+      let own = projectOwnersRaw();
+      let path = snapshotDoc(projectId, approval);
+      return approval.get('snapshotId', null) is string
+        ? (exists(path) && ownerListOk(snapshotOwners(get(path).data, approval, projectId)) &&
+            get(path).data.participatingOwners.toSet() == keys.toSet())
+        : (own == null || (ownerListOk(own) && own.hasOnly(keys)));
+    }
+
+    function rewindStageAllowed(projectId) {
+      let r = resource.data;
+      let q = request.resource.data;
+      let b = r.designApproval;
+      let a = q.get('designApproval', null);
+      let target = a.get('approvalStage', null);
+      let source = effectiveStage(b);
+      return 'designApproval' in q && a.get('id', null) == b.get('id', null) &&
+        ((target == 'Planning' && source in ['Completed', 'OM', 'Rejected']) ||
+          (target == 'OM' && source == 'Completed')) &&
+        q.get('status', null) == 'Pending Approval' && a.get('status', null) == 'Pending Approval' &&
+        !('approvalDraft' in q) &&
+        q.diff(r).affectedKeys().hasOnly(['status', 'designApproval', 'approvalDraft']) &&
+        a.diff(b).affectedKeys().hasOnly(['status', 'approvalStage', 'planningSignOffs', 'omSignOffs',
+          'ownerSignOffs', 'finalApprovedAt', 'finalApprovedBy']) &&
+        !('finalApprovedAt' in a) && !('finalApprovedBy' in a) &&
+        pendingMapOk(a.get('omSignOffs', null), 'OM') &&
+        (target == 'Planning'
+          ? (pendingMapOk(a.get('planningSignOffs', null), 'Planning') &&
+              a.get('ownerSignOffs', null) == a.planningSignOffs &&
+              a.planningSignOffs.keys().toSet() == a.omSignOffs.keys().toSet())
+          : (a.get('planningSignOffs', null) == b.get('planningSignOffs', null) &&
+              a.get('ownerSignOffs', null) == b.get('ownerSignOffs', null))) &&
+        resetKeysCover(projectId, b, a.omSignOffs.keys());
+    }
+
+    function rewindAllowed(projectId) {
+      return hasAdminRole() && 'designApproval' in resource.data &&
+        (rewindDraftAllowed() || rewindStageAllowed(projectId));
+    }
+
+    // ---- a single sign-off ----
+    // The stage a sign-off write claims must be the stage the sign-offs support. r is the
+    // required-owner list ([] when the owner set is malformed, so a malformed set can never
+    // advance). Every required owner's rejection takes precedence for every signer, including
+    // an entry that became required after a legacy project's owners changed.
+    function allApproved(r, signOffs) {
+      return r.size() > 0 && (!('ITEL' in r) || signOffs.get('ITEL', {}).get('status', '') == 'Approved') &&
+        (!('SYMC' in r) || signOffs.get('SYMC', {}).get('status', '') == 'Approved') &&
+        (!('UIH' in r) || signOffs.get('UIH', {}).get('status', '') == 'Approved');
+    }
+
+    function rejectedAny(r, signOffs) {
+      return ('ITEL' in r && signOffs.get('ITEL', {}).get('status', '') == 'Rejected') ||
+        ('SYMC' in r && signOffs.get('SYMC', {}).get('status', '') == 'Rejected') ||
+        ('UIH' in r && signOffs.get('UIH', {}).get('status', '') == 'Rejected');
+    }
+
+    function stageSupported(r, claimed, entryRejected, done, pl, om) {
+      // Complete maps cannot contain a required rejection. Prove completion first
+      // to avoid rescanning those maps on the heaviest legitimate completion writes.
+      return claimed == 'Rejected' ? (entryRejected || rejectedAny(r, pl) || rejectedAny(r, om))
+        : !entryRejected &&
+          (claimed == 'Completed' ? done && allApproved(r, om)
+            : (done || !rejectedAny(r, pl)) && !rejectedAny(r, om) &&
+              (claimed == 'Planning' ? !done : claimed == 'OM' && done && !allApproved(r, om)));
+    }
+
+    // The snapshot's participatingOwners, or false when the snapshot belongs to
+    // another project or approval (the client blocks signing then). Rewinds use the same check.
+    function snapshotOwners(s, approval, projectId) {
+      return s.get('approvalId', null) == approval.id && s.get('projectId', null) == projectId
+        ? s.get('participatingOwners', null) : false;
+    }
+
+    // Required signers: the list, null when the recorded owner set is malformed,
+    // false when the snapshot is unusable. Snapshot metadata wins; else the
+    // project's owners; else (legacy, no owners) the sign-off map keys plus the target.
+    function requiredFor(projectId, approval, target) {
+      return approval.get('snapshotId', null) is string
+        ? snapshotRequired(snapshotDoc(projectId, approval), approval, projectId)
+        : legacyRequired(approval, target);
+    }
+
+    function snapshotRequired(path, approval, projectId) {
+      let raw = exists(path) ? snapshotOwners(get(path).data, approval, projectId) : false;
+      return raw == false ? false : ownerListOk(raw) ? raw : null;
+    }
+
+    function legacyRequired(approval, target) {
+      let own = projectOwnersRaw();
+      let raw = own != null ? own
+        : approval.get('planningSignOffs', {}).keys().concat(approval.get('omSignOffs', {}).keys()).concat([target]);
+      return ownerListOk(raw) ? raw : null;
+    }
+
+    // Built-in defaults below: keep identical to DEFAULT_PERMISSIONS in src/constants.ts
+    // (pinned by src/utils/rulesPermissionDefaults.test.ts). A user with a users document
+    // gets the saved rolePermissions merged over these; an email-only Admin (no users
+    // document) is handled by isAdmin() and gets the Admin defaults.
+    // The signer may write this owner's entry at this level (u = users document).
+    // Admins are not owner-restricted; any other user with an empty or 'None' Owner is not
+    // restricted either (the known-permissive client behaviour, pinned).
+    function signerMayWrite(u, owner, level) {
+      let saved = /databases/$(database)/documents/rolePermissions/$(u.role);
+      let byDefault = level == 'Planning' ? u.role in ['Admin', 'Planning', 'Design'] : u.role in ['Admin', 'Management'];
+      return (exists(saved)
+          ? get(saved).data.permissions.get(level == 'Planning' ? 'approvePlanning' : 'approveOM', byDefault)
+          : byDefault) &&
+        (u.role == 'Admin' ||
+          (u.get('isApproved', true) != false && u.get('owner', '') in ['', 'None', owner]));
+    }
+
+    // What a signer other than a users-document Admin may still do: sign a Pending
+    // approval, at Planning or OM, over an entry that is not already Approved; an
+    // O&M entry also needs Planning complete. Nothing may lower the approval.
+    function nonAdminMaySign(mapKey, owner, level, stage, es, done) {
+      return resource.data.get('status', 'Pending Approval') == 'Pending Approval' &&
+        resource.data.designApproval.get('status', '') == 'Pending Approval' && es in ['Planning', 'OM'] &&
+        resource.data.designApproval.get(mapKey, {}).get(owner, {}).get('status', '') != 'Approved' &&
+        !(es == 'OM' && stage == 'Planning') && (level == 'Planning' || done);
+    }
+
+    // An email-only Admin keeps the older gate's limits: an Approved entry never goes back,
+    // nor the status or stage.
+    function emailAdminMaySign(mapKey, owner, entryStatus, stage, status) {
+      let b = resource.data.designApproval;
+      let es = b.get('approvalStage', resource.data.get('status', '') == 'Approved' ? 'Completed' : 'Planning');
+      return !(b.get(mapKey, {}).get(owner, {}).get('status', '') == 'Approved' && entryStatus != 'Approved') &&
+        !(b.get('status', '') == 'Approved' && status != 'Approved') &&
+        !(es == 'Completed' && stage != 'Completed') && !(es == 'OM' && stage == 'Planning');
+    }
+
+    function signOutcomeAllowed(projectId, owner, mapKey, level, entry, u) {
+      let b = resource.data.designApproval;
+      let a = request.resource.data.designApproval;
+      let required = requiredFor(projectId, b, owner);
+      // r is the required-owner list, [] when the owner set is malformed
+      let r = required is list ? required : [];
+      let stage = a.get('approvalStage', null);
+      let status = stage == 'Rejected' ? 'Rejected' : stage == 'Completed' ? 'Approved' : 'Pending Approval';
+      let es = b.get('approvalStage', resource.data.get('status', '') == 'Approved' ? 'Completed' : 'Planning');
+      let isAdminRole = u.get('role', '') == 'Admin';
+      let emailAdmin = request.auth.token.email in ['vpunpum@gmail.com', 'verayut_p@uih.co.th'];
+      // For an O&M signature the classifier guarantees Planning is unchanged, so this
+      // also proves completeness in the before state. Never trust the stored OM stage:
+      // a legacy project's required owners may have changed since it reached that stage.
+      let done = allApproved(r, a.get('planningSignOffs', {}));
+      // cheapest, most selective checks first so a refused write stops early
+      return required != false && (r.size() == 0 || owner in r) &&
+        (isAdminRole ||
+          (emailAdmin ? emailAdminMaySign(mapKey, owner, entry.get('status', null), stage, status)
+                      : nonAdminMaySign(mapKey, owner, level, stage, es, done))) &&
+        a.get('status', null) == status &&
+        request.resource.data.get('status', null) == status &&
+        stageSupported(r, stage, entry.get('status', null) == 'Rejected', done,
+          a.get('planningSignOffs', {}), a.get('omSignOffs', {})) &&
+        (stage == 'Rejected' ? a.get('rejectionReason', null) is string : a.get('rejectionReason', '') == '') &&
+        (stage == 'Completed'
+          ? (a.get('finalApprovedAt', null) is string && a.get('finalApprovedBy', null) is string &&
+              (!('finalApprovedAt' in b) || a.finalApprovedAt == b.finalApprovedAt))
+          : (!('finalApprovedAt' in a) && !('finalApprovedBy' in a)));
+    }
+
+    function signTargetAllowed(projectId, owner, mapKey, level, entry, u) {
+      return entry is map &&
+        entry.keys().hasOnly(['owner', 'level', 'status', 'signedBy', 'signedByEmail', 'signedByUid',
+          'signatureDataUrl', 'signedAt', 'comment', 'position', 'role']) &&
+        entry.get('owner', null) == owner && entry.get('level', null) == level &&
+        entry.get('signedByUid', null) == request.auth.uid &&
+        (!('role' in u) ? request.auth.token.email in ['vpunpum@gmail.com', 'verayut_p@uih.co.th'] : signerMayWrite(u, owner, level)) &&
+        signOutcomeAllowed(projectId, owner, mapKey, level, entry, u);
+    }
+
+    // A write whose only sign-off change is one entry that ends Approved or Rejected is a
+    // sign-off and nothing else can apply to it (a rewind writes Pending entries, a new
+    // approval has another id), so only this class decides: a refused forgery stops here
+    // and the other classes cost nothing. The other map is unchanged (an absent map
+    // becoming {} counts as unchanged) and only the sign-off fields move.
+    function signAllowed(projectId, owner, mapKey, entry, u) {
+      let b = resource.data.designApproval;
+      let a = request.resource.data.designApproval;
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'designApproval']) &&
+        a.diff(b).affectedKeys().hasOnly(['status', 'approvalStage', 'planningSignOffs', 'omSignOffs',
+          'rejectionReason', 'finalApprovedAt', 'finalApprovedBy']) &&
+        signTargetAllowed(projectId, owner, mapKey, mapKey == 'planningSignOffs' ? 'Planning' : 'OM', entry, u);
+    }
+
+    function backfillClassAllowed(projectId) {
+      return 'designApproval' in resource.data && 'designApproval' in request.resource.data &&
+        resource.data.designApproval.get('id', null) == request.resource.data.designApproval.get('id', null) &&
+        !('snapshotId' in resource.data.designApproval) && 'snapshotId' in request.resource.data.designApproval &&
+        isSnapshotBackfill(projectId);
+    }
+
+    // The classifier applied to every project update on top of the outer gate.
+    // Replaces the older isApprovalRewind() and approvalContentUnchanged().
+    function approvalWriteAllowed(projectId, u) {
+      let r = resource.data;
+      let q = request.resource.data;
+      let approvalChanged = r.get('designApproval', null) != q.get('designApproval', null);
+      return (!approvalChanged && r.get('status', null) == q.get('status', null)) ||
+        (!approvalChanged && isAdmin()) ||
+        (approvalChanged &&
+          (('designApproval' in r && 'designApproval' in q)
+            ? approvalClassAllowed(projectId, u)
+            // an approval appears (submit) or disappears (rewind to Draft)
+            : (newApprovalAllowed() || rewindAllowed(projectId))));
+    }
+
+    // Picks the one class that can decide this write (see signAllowed).
+    function approvalClassAllowed(projectId, u) {
+      let b = resource.data.designApproval;
+      let a = request.resource.data.designApproval;
+      let pd = a.get('planningSignOffs', {}).diff(b.get('planningSignOffs', {})).affectedKeys();
+      let od = a.get('omSignOffs', {}).diff(b.get('omSignOffs', {})).affectedKeys();
+      let d = pd.size() == 1 ? pd : od;
+      let owner = d.hasOnly(['ITEL']) ? 'ITEL' : d.hasOnly(['SYMC']) ? 'SYMC' : 'UIH';
+      let mapKey = pd.size() == 1 ? 'planningSignOffs' : 'omSignOffs';
+      let entry = a.get(mapKey, {}).get(owner, null);
+      return (pd.size() + od.size() == 1 && a.get('id', null) == b.get('id', null) &&
+          entry is map && entry.get('status', null) in ['Approved', 'Rejected'])
+        ? signAllowed(projectId, owner, mapKey, entry, u)
+        : (finalDocumentsAllowed() || backfillClassAllowed(projectId) || newApprovalAllowed() || rewindAllowed(projectId));
     }
 
     function isOwner(userId) {
@@ -414,9 +758,9 @@ service cloud.firestore {
 
     match /projects/{projectId} {
       allow read: if isAuthenticated() && canAccessProject(resource.data);
-      allow create: if isAuthenticated() && canCreateProject() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged();
-      allow update: if isAuthenticated() && (canEditProject(resource.data) || canSignApproval(resource.data)) && uidNotModified() &&
-        (!isApprovalRewind() || hasAdminRole()) && approvalContentUnchanged(projectId);
+      allow create: if isAuthenticated() && canCreateProject() && hasRequiredFields(['id', 'name', 'uid']) && uidUnchanged() &&
+        (!('designApproval' in request.resource.data) || hasAdminRole());
+      allow update: if isAuthenticated() && uidNotModified() && projectUpdateAllowed(resource.data, projectId);
       allow delete: if isAuthenticated() && canDeleteProject(resource.data);
 
       match /approvalSnapshots/{snapshotId} {
