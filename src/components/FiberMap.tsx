@@ -304,14 +304,14 @@ function EnclosureTooltipContent({
         </div>
 
         {/* Mini Visual Tray Slots */}
-        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1 pt-0.5">
+        <div className="flex flex-nowrap gap-1 pt-0.5 overflow-x-auto">
           {Array.from({ length: totalTrays }, (_, i) => i + 1).map(trayNum => {
             const owner = trayAssignments[trayNum] || 'None';
             const theme = ownerColorMap[owner] || ownerColorMap.None;
             return (
               <div 
                 key={trayNum}
-                className={`flex flex-col items-center justify-center p-1 rounded-lg border text-center ${theme.bg} ${theme.border}`}
+                className={`flex flex-col items-center justify-center flex-1 min-w-[2rem] p-1 rounded-lg border text-center ${theme.bg} ${theme.border}`}
                 title={`Tray ${trayNum}: ${owner}`}
               >
                 <span className="text-[7px] font-bold text-slate-500">T{trayNum}</span>
@@ -324,7 +324,7 @@ function EnclosureTooltipContent({
         </div>
 
         {/* Tray Summary by Owner */}
-        <div className="flex flex-wrap gap-1.5 pt-1">
+        <div className="flex flex-nowrap gap-x-2 pt-1 overflow-x-auto whitespace-nowrap">
           {trayOwnerGroups.map((g: any) => {
             const theme = ownerColorMap[g.owner] || ownerColorMap.None;
             return (

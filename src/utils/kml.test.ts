@@ -54,6 +54,17 @@ test('descriptions carry the popup details', () => {
   assert.match(kml, /<BalloonStyle><text>\$\[description\]<\/text><\/BalloonStyle>/);
 });
 
+test('splice trays share one row however many there are', () => {
+  const sevenTrays = [{ id: 'T7', name: 'Big', color: '#22c55e', spliceTrays: 7 }] as EnclosureType[];
+  const enclosure = { id: 'E7', name: 'Seven', position: { lat: 13.75, lng: 100.5 }, enclosureTypeId: 'T7',
+    trayAssignments: { 1: 'ITEL', 2: 'ITEL', 3: 'ITEL', 4: 'UIH', 5: 'UIH', 6: 'UIH' } } as FiberEnclosure;
+  const { kml } = buildProjectKml({ ...input, enclosures: [enclosure], enclosureTypes: sevenTrays });
+  const trays = kml.match(/Owner Splice Trays \(7 Trays\)[\s\S]*?<\/table>/)?.[0] ?? '';
+  assert.equal((trays.match(/<tr>/g) || []).length, 1);
+  assert.equal((trays.match(/<td /g) || []).length, 7);
+  assert.match(kml, /white-space:nowrap[^>]*>[\s\S]*ITEL:[\s\S]*UIH:[\s\S]*None:/);
+});
+
 test('builds a safe file name', () => {
   assert.equal(exportFileName({ name: 'ถนน A/B: "ช่วง 1"', routeCode: 'R-1' }, 'kmz'), 'R-1 ถนน A-B- -ช่วง 1-.kmz');
   assert.equal(exportFileName({ name: '' }, 'kmz'), 'project.kmz');
