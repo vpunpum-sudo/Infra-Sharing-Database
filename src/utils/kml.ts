@@ -124,8 +124,8 @@ function enclosureDescription(enclosure: FiberEnclosure, enclosureTypes: Enclosu
     return `<td style="border:1px solid ${color}55;background:${color}1f;border-radius:6px;text-align:center;padding:2px 4px;font-size:10px">
       <div style="color:#64748b">T${index + 1}</div><div style="color:${color};font-weight:800">${owner === 'None' ? '-' : html(owner)}</div></td>`;
   });
-  const trayRows: string[] = [];
-  for (let i = 0; i < trayCells.length; i += 6) trayRows.push(`<tr>${trayCells.slice(i, i + 6).join('')}</tr>`);
+  // All trays share one row, matching the map popup.
+  const trayRow = `<tr>${trayCells.join('')}</tr>`;
   const summary = (['ITEL', 'SYMC', 'UIH', 'None'] as CoreOwner[]).map(owner => {
     const ids = Array.from({ length: totalTrays }, (_, index) => index + 1).filter(id => (trays[id] || 'None') === owner);
     return ids.length ? `<span style="margin-right:8px;font-family:monospace;font-size:11px"><b style="color:${OWNER_COLORS[owner]}">● ${owner}:</b> ${html(tubeRanges(ids))} (${ids.length}T)</span>` : '';
@@ -152,8 +152,8 @@ function enclosureDescription(enclosure: FiberEnclosure, enclosureTypes: Enclosu
     ${twoCols(['Location Type', html(enclosure.locationType || 'Manhole / Pole')],
       ['Coordinates (พิกัด)', `<span style="font-family:monospace">${enclosure.position.lat.toFixed(6)}, ${enclosure.position.lng.toFixed(6)}</span>`])}
     <div style="${box}">${label(`Owner Splice Trays (${totalTrays} Trays)`)}
-      <table style="border-collapse:separate;border-spacing:3px;margin-top:2px">${trayRows.join('')}</table>
-      <div style="margin-top:4px">${summary}</div></div>
+      <table style="border-collapse:separate;border-spacing:3px;margin-top:2px">${trayRow}</table>
+      <div style="margin-top:4px;white-space:nowrap">${summary}</div></div>
     <div style="border:1px solid #1e293b;border-radius:10px;background:#0f172a;color:#f1f5f9;padding:8px 10px;margin-top:8px">
       <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8">Physical Hardware Layout · <span style="color:#38bdf8">${cables.length} Cables Connected</span></div>
       ${cables.length ? `<div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b;margin-top:6px">Connected Cables by Port</div>
