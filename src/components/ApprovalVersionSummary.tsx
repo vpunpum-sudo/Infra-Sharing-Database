@@ -70,7 +70,7 @@ export function ApprovalVersionSummary({ snapshot, entry, timeLabel, rows, onSho
       <Stat label="จุดพักสาย" value={summary.counts.enclosures} />
       <Stat label="Loop" value={summary.counts.loops} />
     </div>
-    <p className="text-sm text-slate-400 mt-4 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2">ระยะ (กม.) คำนวณแบบเดียวกับตารางในเอกสาร (ใช้ความยาวที่บันทึกไว้ก่อน ถ้าไม่มีจึงคำนวณจากแนวเส้นทาง) และปัดเศษ ส่วนความยาวที่บันทึกไว้คือค่าที่เก็บไว้ในข้อมูลโดยตรง</p>
+    <p className="text-sm text-slate-400 mt-4 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2">ระยะ (กม.) คือระยะตามแนวเส้นทางที่ออกแบบไว้ในแผนที่ (ไม่ใช้เลข ML) และปัดเศษ ส่วนความยาวที่บันทึกไว้คือค่าที่เก็บไว้ในข้อมูลโดยตรง จึงอาจต่างกันได้</p>
     {summary.skippedMalformed > 0 && <p role="status" className="text-amber-300 mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">ข้ามข้อมูลไม่ถูกต้อง {summary.skippedMalformed} รายการ</p>}
     {table('routes', 'เส้นทาง', [{ head: 'ชื่อ', kind: 'name' }, { head: 'เจ้าของ', kind: 'owners' }, { head: 'ความจุ', kind: 'count' }, { head: 'ระยะ (กม.)', kind: 'distance' }, { head: 'ความยาวที่บันทึกไว้ (ม.)', kind: 'stored' }], summary.routes)}
     {table('enclosures', 'จุดพักสาย', [{ head: 'ชื่อ', kind: 'name' }, { head: 'ชนิด', kind: 'text' }, { head: 'เจ้าของ', kind: 'owners' }], summary.enclosures)}
