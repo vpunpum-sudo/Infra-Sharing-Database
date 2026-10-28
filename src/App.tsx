@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { MapPin, Route as RouteIcon, User as UserIcon, Check, X as XIcon, Layers, Pencil, Scissors, LogOut, Loader2, ChevronDown, ChevronRight, ChevronLeft, GitMerge, Settings as SettingsIcon, AlertTriangle, AlertCircle, Network, ExternalLink, FileText, ShieldCheck, Clock, CheckCircle2, Search, ArrowUpDown } from 'lucide-react';
-import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from 'react-router-dom';
 import FiberMap from './components/FiberMap';
 import CoreManager from './components/CoreManager';
 import SpliceManager from './components/SpliceManager';
 import Login from './components/Login';
 import ProjectsDashboard from './components/ProjectsDashboard';
+import { DashboardHeader } from './components/DashboardHeader';
 import { DesignApprovalModal } from './components/DesignApprovalModal';
 import { SettingsManager } from './components/SettingsManager';
 import { UserManagement } from './components/UserManagement';
@@ -37,12 +38,40 @@ import { passwordChangeGate } from './utils/passwordChangeGate';
 import { ThemeToggle } from './components/ThemeToggle';
 import { captureState } from './utils/wiScreenshotState';
 import { useTheme } from './context/ThemeContext';
+import { useToast } from './components/Toast';
+import { ProjectContextBar, ProjectStatusBadge } from './components/ProjectContextBar';
+import { InlineError } from './components/StateViews';
+import { reconcileSelection } from './utils/selection';
+import { describeActionError } from './utils/asyncAction';
+import { APP_TITLE, resolvePageContext } from './utils/pageContext';
+
+const SELECTION_GONE_MESSAGE = 'รายการที่เลือกถูกลบหรือไม่มีอยู่แล้ว';
+
+// Keeps document.title in step with the current route.
+function RouteTitleEffect({ projectName, skipProjects = false }: { projectName?: string; skipProjects?: boolean }) {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (skipProjects && pathname.startsWith('/project/')) return;
+    const context = resolvePageContext(pathname, { projectName });
+    document.title = context.navId ? `${context.title} · ${APP_TITLE}` : APP_TITLE;
+  }, [pathname, projectName, skipProjects]);
+  return null;
+}
+
+function DestinationNavigation({ user, appUser }: { user: User; appUser: AppUser }) {
+  const { pathname } = useLocation();
+  const context = resolvePageContext(pathname);
+  return context.navId && context.navId !== 'projects'
+    ? <DashboardHeader user={user} appUser={appUser} />
+    : null;
+}
 
 function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User, appUser: AppUser | null, quotaExceeded?: boolean }) {
   const { projectId } = useParams<{ projectId: string }>();
   const activeProjectId = projectId;
   const navigate = useNavigate();
   useRolePermissions();
+  const notify = useToast();
 
   const [enclosures, setEnclosures] = useState<FiberEnclosure[]>([]);
   const [routes, setRoutes] = useState<RouteType[]>([]);
@@ -81,6 +110,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
   useEffect(() => {
     if (!activeProjectId) return;
     setProjectServerReady(false);
+    setCurrentProject(null);
     const unsubProject = onSnapshot(doc(db, 'projects', activeProjectId), { includeMetadataChanges: true }, (snapshot) => {
       if (snapshot.exists()) {
         setCurrentProject({ id: snapshot.id, ...snapshot.data() } as Project);
@@ -89,6 +119,37 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
     });
     return () => unsubProject();
   }, [activeProjectId]);
+
+  // Ids the user is deleting right now. Firestore removes them from the local snapshot before the
+  // server answers, so reconcile must not clear them early (a failed delete keeps the selection).
+  const selfDeletingIds = useRef<Set<string>>(new Set());
+
+  // A selection whose entity was deleted elsewhere is cleared once its list has loaded.
+  useEffect(() => {
+    if (selectedRouteId && selfDeletingIds.current.has(selectedRouteId)) return;
+    const result = reconcileSelection(selectedRouteId, routes.map(r => r.id), loadedLists.includes('routes'));
+    if (result.cleared) {
+      setSelectedRouteId(undefined);
+      setDetailPanel(prev => (prev?.type === 'route' ? null : prev));
+      notify(SELECTION_GONE_MESSAGE, 'info');
+    }
+  }, [routes, loadedLists, selectedRouteId, notify]);
+  useEffect(() => {
+    if (selectedEnclosureId && selfDeletingIds.current.has(selectedEnclosureId)) return;
+    const result = reconcileSelection(selectedEnclosureId, enclosures.map(e => e.id), loadedLists.includes('enclosures'));
+    if (result.cleared) {
+      setSelectedEnclosureId(undefined);
+      setDetailPanel(prev => (prev?.type === 'enclosure' ? null : prev));
+      notify(SELECTION_GONE_MESSAGE, 'info');
+    }
+  }, [enclosures, loadedLists, selectedEnclosureId, notify]);
+  useEffect(() => {
+    const result = reconcileSelection(selectedLoopId, loops.map(l => l.id), loadedLists.includes('loops'));
+    if (result.cleared) {
+      setSelectedLoopId(undefined);
+      notify(SELECTION_GONE_MESSAGE, 'info');
+    }
+  }, [loops, loadedLists, selectedLoopId, notify]);
 
   // Modal States
   const [enclosureModalOpen, setEnclosureModalOpen] = useState(false);
@@ -874,6 +935,14 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
 
   const [deleteRouteId, setDeleteRouteId] = useState<string | null>(null);
   const [deleteEnclosureId, setDeleteEnclosureId] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const closeDeleteDialog = () => {
+    if (deletePending) return;
+    setDeleteRouteId(null);
+    setDeleteEnclosureId(null);
+    setDeleteError(null);
+  };
   const [editingEnclosureId, setEditingEnclosureId] = useState<string | null>(null);
   const [originalEnclosurePosition, setOriginalEnclosurePosition] = useState<Point | null>(null);
 
@@ -883,22 +952,36 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       setErrorModalOpen('You do not have permission to delete routes.');
       return;
     }
+    setDeleteError(null);
     setDeleteRouteId(routeId);
   };
 
   const confirmDeleteRoute = async () => {
-    if (deleteRouteId && user) {
+    if (deleteRouteId && user && !deletePending) {
       const path = `projects/${activeProjectId}/routes/${deleteRouteId}`;
+      setDeletePending(true);
+      setDeleteError(null);
+      const deletingId = deleteRouteId;
+      selfDeletingIds.current.add(deletingId);
       try {
         await deleteDoc(doc(db, path));
         await logActivity('delete_route', `Deleted route`, { routeId: deleteRouteId, projectId: activeProjectId });
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
+        try { handleFirestoreError(error, OperationType.DELETE, path); } catch { /* logged */ }
+        const message = describeActionError(error, 'ลบเส้นทางไม่สำเร็จ กรุณาลองใหม่');
+        setDeleteError(message);
+        notify(message, 'error');
+        setDeletePending(false);
+        selfDeletingIds.current.delete(deletingId);
+        return;
       }
+      selfDeletingIds.current.delete(deletingId);
       if (selectedRouteId === deleteRouteId) {
         setSelectedRouteId(undefined);
       }
+      setDeletePending(false);
       setDeleteRouteId(null);
+      notify('ลบเส้นทางแล้ว');
     }
   };
 
@@ -926,22 +1009,36 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       setErrorModalOpen('You do not have permission to delete enclosures.');
       return;
     }
+    setDeleteError(null);
     setDeleteEnclosureId(enclosureId);
   };
 
   const confirmDeleteEnclosure = async () => {
-    if (deleteEnclosureId && user) {
+    if (deleteEnclosureId && user && !deletePending) {
       const path = `projects/${activeProjectId}/enclosures/${deleteEnclosureId}`;
+      setDeletePending(true);
+      setDeleteError(null);
+      const deletingId = deleteEnclosureId;
+      selfDeletingIds.current.add(deletingId);
       try {
         await deleteDoc(doc(db, path));
         await logActivity('delete_enclosure', `Deleted enclosure`, { enclosureId: deleteEnclosureId, projectId: activeProjectId });
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
+        try { handleFirestoreError(error, OperationType.DELETE, path); } catch { /* logged */ }
+        const message = describeActionError(error, 'ลบกล่องต่อสายไม่สำเร็จ กรุณาลองใหม่');
+        setDeleteError(message);
+        notify(message, 'error');
+        setDeletePending(false);
+        selfDeletingIds.current.delete(deletingId);
+        return;
       }
+      selfDeletingIds.current.delete(deletingId);
       if (selectedEnclosureId === deleteEnclosureId) {
         setSelectedEnclosureId(undefined);
       }
+      setDeletePending(false);
       setDeleteEnclosureId(null);
+      notify('ลบกล่องต่อสายแล้ว');
     }
   };
 
@@ -1516,6 +1613,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
           </motion.div>
         )}
       </AnimatePresence>
+      <h1 className="sr-only" data-wi-pii="project-context-heading">{currentProject?.name?.trim() || 'กำลังโหลดโครงการ…'}</h1>
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Area */}
       <div className="relative flex h-full shrink-0 z-[1002]">
@@ -1534,7 +1632,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                   <RouteIcon className="text-slate-100 w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-sm font-black text-slate-100 tracking-tight leading-tight font-display truncate">FIBER SHARING DATABASE</h1>
+                  <p className="text-sm font-black text-slate-100 tracking-tight leading-tight font-display truncate">FIBER SHARING DATABASE</p>
                   <p className="text-xs text-brand-400 font-black uppercase tracking-widest truncate">Network Infra</p>
                 </div>
               </div>
@@ -1586,33 +1684,17 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <ChevronLeft size={13} /> Back to Projects
               </button>
 
-              {currentProject && (() => {
-                const status = currentProject.status || currentProject.designApproval?.status || 'Draft';
-                return (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-black uppercase tracking-wider border flex items-center gap-1 ${
-                    status === 'Approved'
-                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                      : status === 'Pending Approval'
-                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                      : status === 'Rejected'
-                      ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
-                  }`}>
-                    {status === 'Approved' ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" /> : status === 'Pending Approval' ? <Clock className="w-2.5 h-2.5 text-amber-400 animate-pulse" /> : null}
-                    {status === 'Approved' ? 'ผ่านการอนุมัติ' : status === 'Pending Approval' ? 'รออนุมัติ' : status === 'Rejected' ? 'ไม่อนุมัติ' : 'แบบร่าง'}
-                  </span>
-                );
-              })()}
+              {currentProject && <ProjectStatusBadge project={currentProject} />}
             </div>
 
-            {currentProject && (
-              <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2 shadow-inner">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-200 truncate">{currentProject.name}</p>
-                  <p className="text-xs text-slate-500 font-mono truncate">
-                    {currentProject.owners?.join(', ') || currentProject.owner || 'Participating Owners'}
-                  </p>
-                </div>
+            <nav aria-label="เส้นทางหน้า" className="text-xs text-slate-500 truncate">
+              <ol className="flex items-center gap-1 min-w-0">
+                <li><button type="button" onClick={() => navigate('/')} className="hover:text-brand-400">โครงการ</button></li>
+                <li aria-hidden="true">›</li>
+                <li aria-current="page" className="truncate font-bold text-slate-300">{currentProject?.name?.trim() || 'กำลังโหลดโครงการ…'}</li>
+              </ol>
+            </nav>
+            <ProjectContextBar project={currentProject} actions={currentProject ? (<>
                 {getRolePermissions()[appUser?.role || 'Viewer']?.viewApprovalDocs && <button
                   onClick={() => setApprovalModalOpen(true)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 border ${
@@ -1633,8 +1715,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                       : 'ขออนุมัติ Design'}
                   </span>
                 </button>}
-              </div>
-            )}
+            </>) : undefined} />
           </div>
 
           <div className="p-3.5 flex flex-col gap-2 border-b border-slate-800 bg-slate-900/20">
@@ -1798,6 +1879,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                           <li
                             key={route.id}
                             id={`sidebar-route-${route.id}`}
+                            aria-selected={selectedRouteId === route.id}
                             onClick={() => {
                               if (drawingMode === 'none') {
                                 setSelectedRouteId(route.id);
@@ -1805,7 +1887,7 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                                 setDetailPanel({ type: 'route', id: route.id });
                               }
                             }}
-                            className={`p-3 rounded-2xl cursor-pointer text-sm transition-all border ${selectedRouteId === route.id ? 'bg-slate-800 border-brand-500 shadow-lg shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${editingRouteId === route.id ? 'opacity-50 ring-2 ring-amber-500' : ''}`}
+                            className={`ux-selectable p-3 rounded-2xl cursor-pointer text-sm transition-all border ${selectedRouteId === route.id ? 'bg-slate-800 border-brand-500 shadow-lg shadow-brand-500/10' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'} ${editingRouteId === route.id ? 'opacity-50 ring-2 ring-amber-500' : ''}`}
                           >
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
@@ -1890,7 +1972,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                           <li 
                             key={enclosure.id} 
                             id={`sidebar-enclosure-${enclosure.id}`}
-                            className={`p-3 rounded-2xl border text-sm transition-all cursor-pointer group ${
+                            aria-selected={selectedEnclosureId === enclosure.id}
+                            className={`ux-selectable p-3 rounded-2xl border text-sm transition-all cursor-pointer group ${
                               selectedEnclosureId === enclosure.id 
                                 ? 'bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10' 
                                 : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-rose-500/50 hover:bg-slate-800/50'
@@ -1968,7 +2051,8 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                             key={loop.id} 
                             id={`sidebar-loop-${loop.id}`}
                             onClick={() => handleLoopMapSelection(loop)}
-                            className={`p-3 rounded-2xl border text-sm transition-all cursor-pointer hover:border-amber-500/50 hover:bg-slate-800/50 group ${selectedLoopId === loop.id ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}
+                            aria-selected={selectedLoopId === loop.id}
+                            className={`ux-selectable p-3 rounded-2xl border text-sm transition-all cursor-pointer hover:border-amber-500/50 hover:bg-slate-800/50 group ${selectedLoopId === loop.id ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}
                           >
                             <div className="flex justify-between items-center">
                               <div className="flex flex-col min-w-0">
@@ -2019,7 +2103,13 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
       </div>
 
       {/* Main Map Area */}
+      <RouteTitleEffect projectName={currentProject?.name} />
       <div key={activeProjectId} className="flex-1 relative z-0 min-h-0 min-w-0 p-4 bg-slate-950">
+        {sidebarCollapsed && (
+          <div className="absolute top-7 left-7 z-[1000]">
+            <ProjectContextBar project={currentProject} compact />
+          </div>
+        )}
         <div className="w-full h-full rounded-[2rem] overflow-hidden shadow-2xl border border-slate-800 relative">
           <FiberMap
             enclosures={enclosures}
@@ -2384,20 +2474,23 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <p className="text-sm text-slate-400 leading-relaxed font-medium">
                   Are you sure you want to delete this enclosure? Any routes connected to it will lose their connection points.
                 </p>
+                {deleteError && <div className="mt-4 text-left"><InlineError message={deleteError} /></div>}
               </div>
               <div className="p-6 bg-slate-950 flex gap-3">
                 <button 
-                  onClick={() => setDeleteEnclosureId(null)}
+                  onClick={closeDeleteDialog}
+                  disabled={deletePending}
                   className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={confirmDeleteEnclosure}
-                  disabled={quotaExceeded}
-                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={quotaExceeded || deletePending}
+                  aria-busy={deletePending || undefined}
+                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
-                  Delete
+                  {deletePending ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />กำลังลบ…</> : deleteError ? 'ลองใหม่' : 'Delete'}
                 </button>
               </div>
             </motion.div>
@@ -2711,20 +2804,23 @@ function ProjectWorkspace({ user, appUser, quotaExceeded = false }: { user: User
                 <p className="text-sm text-slate-400 leading-relaxed font-medium">
                   Are you sure you want to delete this route? This action cannot be undone and will remove all core data.
                 </p>
+                {deleteError && <div className="mt-4 text-left"><InlineError message={deleteError} /></div>}
               </div>
               <div className="p-6 bg-slate-950 flex gap-3">
                 <button 
-                  onClick={() => setDeleteRouteId(null)}
+                  onClick={closeDeleteDialog}
+                  disabled={deletePending}
                   className="flex-1 py-4 bg-slate-900 text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all border border-slate-800"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={confirmDeleteRoute}
-                  disabled={quotaExceeded}
-                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={quotaExceeded || deletePending}
+                  aria-busy={deletePending || undefined}
+                  className="flex-1 py-4 bg-rose-600 text-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 shadow-lg shadow-rose-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
-                  Delete
+                  {deletePending ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />กำลังลบ…</> : deleteError ? 'ลองใหม่' : 'Delete'}
                 </button>
               </div>
             </motion.div>
@@ -2906,6 +3002,10 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RouteTitleEffect skipProjects />
+      {user && appUser && !needsPasswordChange && (appUser.isApproved !== false || appUser.role === 'Admin') && (
+        <DestinationNavigation user={user} appUser={appUser} />
+      )}
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/pending-approval" element={user && appUser && !needsPasswordChange && appUser.isApproved === false && appUser.role !== 'Admin' ? <PendingApproval email={user.email || ''} /> : <Navigate to="/" />} />

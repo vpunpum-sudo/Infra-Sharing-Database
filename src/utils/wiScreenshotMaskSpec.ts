@@ -23,10 +23,10 @@ const region = (name: string, kind: MaskRegion['kind'], placeholder: string | un
   ({ name, selector: `[data-wi-pii="${name}"]`, kind, placeholder, required, source });
 
 export const HEADER_SPEC: MaskSpec = { regions: [
-  region('account-name', 'text', WI_MASK_PLACEHOLDERS.ownName, true, 'ProjectsDashboard.tsx'),
-  region('account-avatar', 'image', undefined, false, 'ProjectsDashboard.tsx')
+  region('account-name', 'text', WI_MASK_PLACEHOLDERS.ownName, true, 'DashboardHeader.tsx'),
+  region('account-avatar', 'image', undefined, false, 'DashboardHeader.tsx')
 ] };
-const header = (required = true) => [region('account-name', 'text', WI_MASK_PLACEHOLDERS.ownName, required, 'ProjectsDashboard.tsx'), region('account-avatar', 'image', undefined, false, 'ProjectsDashboard.tsx')];
+const header = (required = true) => [region('account-name', 'text', WI_MASK_PLACEHOLDERS.ownName, required, 'DashboardHeader.tsx'), region('account-avatar', 'image', undefined, false, 'DashboardHeader.tsx')];
 const mapHeader = () => [region('map-account-name', 'text', WI_MASK_PLACEHOLDERS.ownName, true, 'App.tsx'), region('map-account-avatar', 'image', undefined, false, 'App.tsx')];
 const creator = () => [region('creator-name', 'text', WI_MASK_PLACEHOLDERS.name(1), false, 'ProjectsDashboard.tsx')];
 const otherProjects = () => [region('other-project-card', 'hide', undefined, true, 'ProjectsDashboard.tsx')];

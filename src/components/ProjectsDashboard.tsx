@@ -11,15 +11,21 @@ import { ProjectScheduleModal, StatusChip } from './ProjectScheduleModal';
 import { useToast } from './Toast';
 import { getRolePermissions, useRolePermissions } from '../services/rolePermissionsStore';
 import { v4 as uuidv4 } from 'uuid';
-import { Layers, Plus, Folder, Trash2, Edit2, LogOut, X, Users, Shield, User as UserIcon, Activity, FileText, Search, ArrowUpRight, Sparkles, SlidersHorizontal, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Image as ImageIcon, Menu, Download, Loader2, CalendarRange } from 'lucide-react';
+import { Plus, Folder, Trash2, Edit2, X, Shield, FileText, Search, ArrowUpRight, Sparkles, Map, Database, Check, ShieldCheck, Clock, CheckCircle2, AlertTriangle, Download, Loader2, CalendarRange } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { logActivity } from '../services/logService';
-import { ThemeToggle } from './ThemeToggle';
+import { DashboardHeader } from './DashboardHeader';
 import { DesignApprovalModal } from './DesignApprovalModal';
 import { ProjectFilesModal } from './ProjectFilesModal';
 import { SigningQueuePanel } from './SigningQueuePanel';
 import { canSeeSigningQueue } from '../utils/approvalQueue';
+import { AsyncActionButton } from './AsyncActionButton';
+import { PageHeader } from './PageHeader';
+import { EmptyState, InlineError, SkeletonList, StaleBanner } from './StateViews';
+import { createSingleFlight, describeActionError } from '../utils/asyncAction';
+import { resolvePageContext } from '../utils/pageContext';
+import { countActiveFilters } from '../utils/selection';
 
 const formatProjectDate = (value?: string) => {
   if (!value) return 'ไม่ระบุ';
@@ -38,8 +44,11 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
   const [projectOwnersInput, setProjectOwnersInput] = useState<CoreOwner[]>(['ITEL']);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [projectsStale, setProjectsStale] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [oldProjects, setOldProjects] = useState<Project[]>([]);
   const [isMigrating, setIsMigrating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,10 +57,13 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
 
   useRolePermissions();
   const userPermissions = appUser ? getRolePermissions()[appUser.role] : getRolePermissions()['Viewer'];
-  const [menuOpen, setMenuOpen] = useState(false);
+  const saveFlight = React.useRef(createSingleFlight()).current;
+  const [savePending, setSavePending] = useState(false);
   const [exportingKmlId, setExportingKmlId] = useState<string | null>(null);
   const [scheduleProject, setScheduleProject] = useState<Project | null>(null);
   const notify = useToast();
+  const { pathname } = useLocation();
+  const pageContext = resolvePageContext(pathname);
   const cardActionClass = 'card-action';
 
   const exportKml = async (project: Project) => {
@@ -83,19 +95,6 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       setExportingKmlId(null);
     }
   };
-  const displayName = appUser?.displayName || user.email?.split('@')[0];
-  const navItems = [
-    ...(userPermissions.viewUsers ? [{ label: 'ผู้ใช้งาน', title: 'จัดการผู้ใช้งาน', path: '/user-management', icon: Users, color: 'text-brand-400' }] : []),
-    ...(appUser?.role === 'Admin' ? [
-      { label: 'ประวัติการใช้งาน', title: 'ประวัติการใช้งานระบบ', path: '/logs', icon: Activity, color: 'text-amber-400' },
-      { label: 'สิทธิ์', title: 'กำหนดสิทธิ์ตามบทบาท', path: '/permission-management', icon: Shield, color: 'text-emerald-400' }
-    ] : []),
-    ...(userPermissions.viewSettings ? [
-      { label: 'โลโก้ Owner', title: 'จัดการรูปภาพโลโก้ของแต่ละ Owner', path: '/settings', icon: ImageIcon, color: 'text-pink-400' },
-      { label: 'ตั้งค่า', title: 'ตั้งค่าระบบ', path: '/settings', icon: SlidersHorizontal, color: 'text-sky-400' }
-    ] : []),
-    { label: 'WI การใช้งาน', title: 'วิธีปฏิบัติงาน (Work Instruction) การใช้งานระบบทั้งหมด', path: '/manual', icon: FileText, color: 'text-brand-400', primary: true }
-  ];
   const missingCreatedDateIds = projects.filter(project => !project.createdAt).map(project => project.id).sort().join('|');
 
   useEffect(() => {
@@ -135,8 +134,11 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
     const unsubscribeProjects = onSnapshot(q, (snapshot: any) => {
       const newProjects = snapshot.docs.map(doc => doc.data() as Project);
       setProjects(newProjects);
+      setProjectsLoaded(true);
+      setProjectsStale(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, projectsPath);
+      setProjectsStale(true);
+      try { handleFirestoreError(error, OperationType.LIST, projectsPath); } catch { /* logged; the stale banner explains it */ }
     });
 
     // Check for old projects
@@ -194,21 +196,23 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       }
       setOldProjects([]);
       await logActivity('migrate_projects', `Migrated ${oldProjects.length} old projects to new structure`);
-      setSuccessMessage('ย้ายข้อมูลโครงการแล้ว');
+      notify('ย้ายข้อมูลโครงการแล้ว');
     } catch (error) {
       console.error("Error migrating projects:", error);
-      setErrorMessage('Failed to migrate projects. See console for details.');
+      notify('ย้ายข้อมูลโครงการไม่สำเร็จ กรุณาลองใหม่หรือตรวจสอบ console', 'error');
     } finally {
       setIsMigrating(false);
     }
   };
 
+  // Throws after surfacing the failure so AsyncActionButton returns to idle with an error ring.
   const handleSaveProject = async () => {
-    if (!projectNameInput.trim() || !user) return;
-    
+    if (!projectNameInput.trim() || !user || projectOwnersInput.length === 0 || quotaExceeded) return;
+    setSaveError(null);
+    const path = editingProjectId ? `projects/${editingProjectId}` : `projects`;
     try {
+      let successText: string;
       if (editingProjectId) {
-        const path = `projects/${editingProjectId}`;
         await setDoc(doc(db, path), { 
           name: projectNameInput.trim(), 
           routeCode: routeCodeInput.trim(),
@@ -216,7 +220,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           owner: projectOwnersInput[0] || 'ITEL'
         }, { merge: true });
         await logActivity('edit_project', `Edited project ${projectNameInput.trim()}`, { projectId: editingProjectId, owners: projectOwnersInput });
-        setSuccessMessage('บันทึกโครงการแล้ว');
+        successText = 'บันทึกโครงการแล้ว';
       } else {
         const newProject: Project = { 
           id: uuidv4(), 
@@ -227,45 +231,62 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
           owners: projectOwnersInput,
           owner: projectOwnersInput[0] || 'ITEL'
         };
-        const path = `projects/${newProject.id}`;
-        await setDoc(doc(db, path), newProject);
+        await setDoc(doc(db, `projects/${newProject.id}`), newProject);
         await logActivity('create_project', `Created project ${newProject.name}`, { projectId: newProject.id, owners: projectOwnersInput });
-        setSuccessMessage('สร้างโครงการแล้ว');
+        successText = 'สร้างโครงการแล้ว';
       }
-      
       setProjectNameInput('');
       setRouteCodeInput('');
       setEditingProjectId(null);
       setProjectModalOpen(false);
-      
-      setTimeout(() => setSuccessMessage(null), 3000);
+      notify(successText);
     } catch (error: any) {
-      const path = editingProjectId ? `projects/${editingProjectId}` : `projects`;
-      handleFirestoreError(error, editingProjectId ? OperationType.UPDATE : OperationType.CREATE, path);
+      try { handleFirestoreError(error, editingProjectId ? OperationType.UPDATE : OperationType.CREATE, path); } catch { /* logged */ }
+      const message = describeActionError(error, editingProjectId ? 'บันทึกโครงการไม่สำเร็จ กรุณาลองใหม่' : 'สร้างโครงการไม่สำเร็จ กรุณาลองใหม่');
+      setSaveError(message);
+      notify(message, 'error');
+      throw error;
     }
   };
 
+  // All entry points acquire the same guard before React can render pending state.
+  const submitProject = () => saveFlight.run(async () => {
+    setSavePending(true);
+    try {
+      await handleSaveProject();
+    } finally {
+      setSavePending(false);
+    }
+  });
+  const submitFromKeyboard = () => { void submitProject().catch(() => undefined); };
+
   const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setDeleteError(null);
     setDeleteProjectId(projectId);
   };
 
   const confirmDeleteProject = async () => {
     if (!deleteProjectId || !user) return;
-    
+    const path = `projects/${deleteProjectId}`;
+    setDeletePending(true);
+    setDeleteError(null);
     try {
       const projectToDelete = projects.find(p => p.id === deleteProjectId);
-      const path = `projects/${deleteProjectId}`;
       await deleteDoc(doc(db, path));
       if (projectToDelete) {
         await logActivity('delete_project', `Deleted project ${projectToDelete.name}`, { projectId: deleteProjectId });
       }
+      setDeletePending(false);
       setDeleteProjectId(null);
-      setSuccessMessage('ลบโครงการแล้ว');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      notify('ลบโครงการแล้ว');
     } catch (error: any) {
-      const path = `projects/${deleteProjectId}`;
-      handleFirestoreError(error, OperationType.DELETE, path);
+      try { handleFirestoreError(error, OperationType.DELETE, path); } catch { /* logged */ }
+      const message = describeActionError(error, 'ลบโครงการไม่สำเร็จ กรุณาลองใหม่');
+      setDeleteError(message);
+      notify(message, 'error');
+      setDeletePending(false);
+      throw error;
     }
   };
 
@@ -278,6 +299,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       ? project.owners 
       : (project.owner ? [project.owner] : ['ITEL'])) as CoreOwner[];
     setProjectOwnersInput(existingOwners);
+    setSaveError(null);
     setProjectModalOpen(true);
   };
 
@@ -292,6 +314,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       const defaultOwner: CoreOwner = (appUser?.role === 'Viewer') && appUser.owner ? appUser.owner : 'ITEL';
       setProjectOwnersInput([defaultOwner]);
     }
+    setSaveError(null);
     setProjectModalOpen(true);
   };
 
@@ -316,6 +339,10 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
     return matchesSearch && matchesOwner;
   });
 
+  const activeFilterCount = countActiveFilters({ search: searchQuery, owner: selectedOwnerFilter }, { owner: 'All' });
+  const clearFilters = () => { setSearchQuery(''); setSelectedOwnerFilter('All'); };
+  const canCreateProjects = !appUser || getRolePermissions()[appUser.role].createProjects;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-x-hidden transition-colors duration-200">
       {/* Background ambient lighting effects */}
@@ -323,101 +350,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
       <div className="fixed bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-sky-500/5 rounded-full blur-[140px] pointer-events-none"></div>
       <div className="fixed top-[40%] left-[30%] w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[160px] pointer-events-none"></div>
 
-      {/* Modern Top Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-3 transition-all">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
-            <Layers className="text-white w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-base sm:text-lg font-extrabold text-white tracking-tight font-display">FIBER SHARING DATABASE</h1>
-              <span className="hidden sm:inline px-2 py-0.5 text-xs font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30 rounded-full">GIS Suite</span>
-            </div>
-            <p className="hidden sm:block text-xs text-slate-400 font-medium">ระบบจัดการโครงข่ายใยแก้วนำแสง</p>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* Desktop: one button per destination */}
-          <nav aria-label="เมนูหลัก" className="hidden lg:flex items-center gap-1.5">
-            {navItems.map(item => (
-              <button key={item.label} type="button" onClick={() => navigate(item.path)} title={item.title} aria-label={item.title}
-                className={item.primary
-                  ? 'px-3 py-1.5 text-brand-300 hover:text-white bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm'
-                  : 'px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold border border-transparent hover:border-slate-700'}>
-                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <ThemeToggle />
-
-          <div className="h-5 w-px bg-slate-800 mx-1 hidden lg:block"></div>
-
-          <button type="button"
-            className="hidden lg:flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 pl-2.5 pr-2 py-1 rounded-xl transition-all group"
-            onClick={() => navigate('/profile')}
-            title="ตั้งค่าโปรไฟล์" aria-label="ตั้งค่าโปรไฟล์"
-          >
-            <div className="flex flex-col items-end">
-              <span data-wi-pii="account-name" className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{displayName}</span>
-              <div className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-xs text-slate-400 font-semibold uppercase">{appUser?.role || 'Viewer'}</span>
-              </div>
-            </div>
-            <div className="w-7 h-7 bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all overflow-hidden border border-slate-600">
-              {appUser?.photoURL ? (
-                <img data-wi-pii="account-avatar" src={appUser.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <UserIcon size={14} />
-              )}
-            </div>
-          </button>
-
-          <button type="button"
-            onClick={logout}
-            className="hidden lg:block p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all border border-transparent hover:border-rose-500/20"
-            title="ออกจากระบบ" aria-label="ออกจากระบบ"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Phones and tablets: everything moves into one menu */}
-          <div className="relative lg:hidden">
-            <button type="button" onClick={() => setMenuOpen(open => !open)} aria-expanded={menuOpen} aria-controls="dashboard-menu"
-              aria-label="เปิดเมนู" className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700/60">
-              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-            {menuOpen && <>
-              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div id="dashboard-menu" role="menu"
-                className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                  className="flex w-full items-center gap-3 border-b border-slate-800 px-4 py-3 text-left hover:bg-slate-800">
-                  <UserIcon className="w-4 h-4 text-slate-300" />
-                  <span className="min-w-0">
-                    <span data-wi-pii="account-name" className="block truncate text-sm font-bold text-slate-100">{displayName}</span>
-                    <span className="block text-xs text-slate-400">{appUser?.role || 'Viewer'}</span>
-                  </span>
-                </button>
-                {navItems.map(item => (
-                  <button key={item.label} type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate(item.path); }}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800">
-                    <item.icon className={`w-4 h-4 ${item.color}`} /> {item.label}
-                  </button>
-                ))}
-                <button type="button" role="menuitem" onClick={logout}
-                  className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm font-semibold text-rose-300 hover:bg-rose-500/10">
-                  <LogOut className="w-4 h-4" /> ออกจากระบบ
-                </button>
-              </div>
-            </>}
-          </div>
-        </div>
-      </header>
+      <DashboardHeader user={user} appUser={appUser} />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 relative z-10">
@@ -440,7 +373,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     <Sparkles size={12} /> Workspaces Overview
                   </span>
                 </div>
-                <h2 className="text-2xl font-bold text-white tracking-tight font-display">โครงการโครงข่าย</h2>
+                <PageHeader title={pageContext.title} breadcrumbs={pageContext.breadcrumbs} />
                 <p className="text-slate-300 mt-1 text-sm font-medium">เลือกโครงการเพื่อดูเส้นทาง จุด Splice และการจัดสรร Core</p>
               </div>
 
@@ -459,6 +392,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                   <button 
                     onClick={openCreateModal}
                     disabled={quotaExceeded}
+                    title={quotaExceeded ? 'โควต้าการเขียนข้อมูลเต็ม ไม่สามารถสร้างโครงการได้' : undefined}
                     className="btn-primary py-2.5 px-5 text-xs font-bold shadow-lg shadow-brand-500/20"
                   >
                     <Plus className="w-4 h-4" />
@@ -502,6 +436,12 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     {owner === 'All' ? 'ทั้งหมด' : owner}
                   </button>
                 ))}
+                {activeFilterCount > 0 && (
+                  <>
+                    <span className="text-xs font-bold text-brand-300 whitespace-nowrap ml-1.5">ตัวกรอง {activeFilterCount} รายการ</span>
+                    <button type="button" onClick={clearFilters} className="px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap text-slate-300 hover:text-white bg-slate-800 border border-slate-700/60">ล้างตัวกรอง</button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -512,31 +452,34 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 <h3 className="text-xl font-bold text-white mb-1 font-display">ไม่มีสิทธิ์ดูโครงการ</h3>
                 <p className="text-slate-300 text-xs max-w-sm mx-auto">บทบาทของคุณยังไม่ได้รับสิทธิ์ View Projects กรุณาติดต่อผู้ดูแลระบบ</p>
               </div>
+            ) : !projectsLoaded && !projectsStale ? (
+              <SkeletonList rows={3} label="กำลังโหลดโครงการ…" />
+            ) : !projectsLoaded ? (
+              <InlineError message="โหลดรายการโครงการไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่" onRetry={() => window.location.reload()} retryLabel="โหลดใหม่" />
             ) : filteredProjects.length === 0 ? (
-              <div className="card p-16 text-center max-w-lg mx-auto">
-                <div className="w-16 h-16 bg-slate-800/80 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-700">
-                  <Folder className="w-8 h-8 text-slate-400" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-1 font-display">
-                  {searchQuery ? 'ไม่พบโครงการที่ค้นหา' : 'ยังไม่มีโครงการ'}
-                </h3>
-                <p className="text-slate-300 mb-6 text-xs max-w-sm mx-auto">
-                  {searchQuery 
-                    ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรอง Owner' 
-                    : 'สร้างโครงการแรกเพื่อวาดเส้นทาง วางจุด Splice และจัดสรร Core'}
-                </p>
-                {(!appUser || getRolePermissions()[appUser.role].createProjects) && !searchQuery && (
-                  <button 
-                    onClick={openCreateModal}
-                    className="btn-primary text-xs"
-                  >
-                    <Plus className="w-4 h-4" />
-                    สร้างโครงการแรก
-                  </button>
-                )}
-              </div>
+              activeFilterCount > 0 ? (
+                <EmptyState
+                  icon={<Folder className="w-8 h-8" />}
+                  title="ไม่พบโครงการที่ตรงกับตัวกรอง"
+                  description="ลองเปลี่ยนคำค้นหาหรือตัวกรอง Owner"
+                  action={<button type="button" onClick={clearFilters} className="btn-secondary text-xs">ล้างตัวกรอง</button>}
+                />
+              ) : (
+                <EmptyState
+                  icon={<Folder className="w-8 h-8" />}
+                  title="ยังไม่มีโครงการ"
+                  description="สร้างโครงการแรกเพื่อวาดเส้นทาง วางจุด Splice และจัดสรร Core"
+                  action={canCreateProjects ? (
+                    <button onClick={openCreateModal} disabled={quotaExceeded} className="btn-primary text-xs">
+                      <Plus className="w-4 h-4" />
+                      สร้างโครงการแรก
+                    </button>
+                  ) : undefined}
+                />
+              )
             ) : (
               <div className="flex flex-col gap-3" aria-label="Project workspaces">
+                {projectsStale && <StaleBanner message="เชื่อมต่อข้อมูลล่าสุดไม่ได้ กำลังแสดงข้อมูลที่โหลดไว้ก่อนหน้า" onRefresh={() => window.location.reload()} />}
                 {filteredProjects.map(project => {
                   const orderMap: Record<string, number> = { 'ITEL': 1, 'SYMC': 2, 'UIH': 3 };
                   const owners = [...(project.owners || (project.owner ? [project.owner] : ['ITEL']))].sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
@@ -790,7 +733,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     <p className="text-xs text-slate-400">ตั้งชื่อโครงการและเลือก Operator ที่มีสิทธิ์</p>
                   </div>
                 </div>
-                <button type="button" aria-label="ปิด" onClick={() => setProjectModalOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
+                <button type="button" aria-label="ปิด" disabled={savePending} onClick={() => setProjectModalOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
                   <X size={18} />
                 </button>
               </div>
@@ -805,7 +748,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="w-full bg-slate-950/80 border border-slate-700 p-3 rounded-xl text-white text-sm focus:border-brand-500 focus:outline-none transition-colors"
                     value={projectNameInput}
                     onChange={e => setProjectNameInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSaveProject()}
+                    onKeyDown={e => e.key === 'Enter' && submitFromKeyboard()}
                   />
                 </div>
 
@@ -819,7 +762,7 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                     className="w-full bg-slate-950/80 border border-slate-700 p-3 rounded-xl text-white text-sm focus:border-brand-500 focus:outline-none transition-colors"
                     value={routeCodeInput}
                     onChange={e => setRouteCodeInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSaveProject()}
+                    onKeyDown={e => e.key === 'Enter' && submitFromKeyboard()}
                   />
                 </div>
 
@@ -883,15 +826,20 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
                 )}
               </div>
 
+              {saveError && <div className="mt-6"><InlineError message={saveError} /></div>}
+
               <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-800">
-                <button onClick={() => setProjectModalOpen(false)} className="btn-secondary text-xs">ยกเลิก</button>
-                <button 
-                  onClick={handleSaveProject} 
+                <button disabled={savePending} onClick={() => setProjectModalOpen(false)} className="btn-secondary text-xs">ยกเลิก</button>
+                <AsyncActionButton
+                  onAction={submitProject}
+                  pending={savePending}
+                  pendingLabel={editingProjectId ? 'กำลังบันทึก…' : 'กำลังสร้าง…'}
                   disabled={quotaExceeded || !projectNameInput.trim() || projectOwnersInput.length === 0}
-                  className="btn-primary text-xs"
+                  disabledReason={quotaExceeded ? 'โควต้าการเขียนข้อมูลเต็ม' : !projectNameInput.trim() ? 'กรุณากรอกชื่อโครงการ' : projectOwnersInput.length === 0 ? 'ต้องเลือกอย่างน้อย 1 Operator' : undefined}
+                  className="text-xs"
                 >
                   {editingProjectId ? 'บันทึกการแก้ไข' : 'สร้างโครงการ'}
-                </button>
+                </AsyncActionButton>
               </div>
             </div>
           </motion.div>
@@ -913,34 +861,25 @@ export default function ProjectsDashboard({ user, appUser, quotaExceeded = false
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
               เส้นทาง จุด Enclosure และการเชื่อมต่อ Splice ทั้งหมดของโครงการนี้จะถูกลบถาวร และกู้คืนไม่ได้
             </p>
+            {deleteError && <div className="mb-4 text-left"><InlineError message={deleteError} /></div>}
             <div className="flex gap-3">
-              <button onClick={() => setDeleteProjectId(null)} className="btn-secondary flex-1 text-xs">ยกเลิก</button>
-              <button 
-                onClick={confirmDeleteProject} 
+              <button onClick={() => { if (!deletePending) { setDeleteProjectId(null); setDeleteError(null); } }} disabled={deletePending} className="btn-secondary flex-1 text-xs disabled:opacity-60">ยกเลิก</button>
+              <AsyncActionButton
+                onAction={confirmDeleteProject}
+                pending={deletePending}
+                pendingLabel="กำลังลบ…"
+                variant="danger"
                 disabled={quotaExceeded}
-                className="flex-1 px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-500 transition-all text-xs shadow-lg shadow-rose-600/20"
+                disabledReason={quotaExceeded ? 'โควต้าการเขียนข้อมูลเต็ม' : undefined}
+                className="flex-1 px-5 py-2.5 rounded-xl font-bold text-xs"
               >
-                ลบโครงการ
-              </button>
+                {deleteError ? 'ลองใหม่' : 'ลบโครงการ'}
+              </AsyncActionButton>
             </div>
           </motion.div>
         </div>
       )}
 
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {successMessage && (
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 30 }}
-            className="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl z-[4000] flex items-center gap-2.5 border border-slate-700"
-          >
-            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-            <span className="font-semibold text-xs">{successMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
