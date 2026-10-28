@@ -1688,12 +1688,15 @@ export default function FiberMap({
                 <CircleMarker 
                   key={getEnclosureMarkerKey(enclosure.id, namesEnabled)}
                   center={[enclosure.position.lat, enclosure.position.lng]} 
-                  radius={isEditingThis ? 9 : 7}
+                  radius={selectedEnclosureId === enclosure.id || isEditingThis ? 9 : 7}
                   bubblingMouseEvents={false}
                   pathOptions={{ 
                     fillColor: color,
                     fillOpacity: 1,
-                    stroke: false
+                    stroke: selectedEnclosureId === enclosure.id || isEditingThis,
+                    color: '#ffffff',
+                    weight: 4,
+                    className: selectedEnclosureId === enclosure.id || isEditingThis ? 'enclosure-circle-selected' : undefined
                   }}
                   eventHandlers={{
                     click: (e) => handleEnclosureClick(enclosure, e),
@@ -1730,13 +1733,21 @@ export default function FiberMap({
                     contextmenu: (e) => handleRouteContextMenu(route, e)
                   }}
                 />
+                {/* Selected route: white casing + blue halo underneath, so it differs from the lighter hover highlight. */}
+                {selectedRouteId === route.id && (
+                  <Polyline
+                    positions={route.path.map(p => [p.lat, p.lng])}
+                    interactive={false}
+                    pathOptions={{ color: '#1d4ed8', weight: 13, opacity: 0.35, className: `wi-route-halo wi-route-${route.id}` }}
+                  />
+                )}
                 <Polyline
                   positions={route.path.map(p => [p.lat, p.lng])}
                   bubblingMouseEvents={false}
                   pathOptions={{
-                    color: (selectedRouteId === route.id || hoveredObjectId === route.id) ? '#3b82f6' : getRouteColor(route),
-                    weight: (selectedRouteId === route.id || hoveredObjectId === route.id) ? 5.5 : 4,
-                    opacity: 0.8,
+                    color: selectedRouteId === route.id ? '#1d4ed8' : hoveredObjectId === route.id ? '#60a5fa' : getRouteColor(route),
+                    weight: selectedRouteId === route.id ? 7 : hoveredObjectId === route.id ? 5.5 : 4,
+                    opacity: selectedRouteId === route.id ? 1 : 0.8,
                     className: `wi-route-line wi-route-${route.id}`
                   }}
                   eventHandlers={{

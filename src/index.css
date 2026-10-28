@@ -1366,3 +1366,80 @@ html:not(.light-theme) .wi-toolbar { background: #0f172a; border-color: #1e293b;
 /* Map legend: top-right beside the search bar; below it on phones where the bar is full width. */
 .map-legend-control { margin-top: 10px !important; margin-right: 10px !important; }
 @media (max-width: 639px) { .map-legend-control { margin-top: 56px !important; } }
+
+/* ===== Interaction tokens and state classes (system feedback & selection UX) ===== */
+:root {
+  --ux-duration-fast: 120ms;
+  --ux-duration-base: 220ms;
+  --ux-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ux-focus-ring: #60a5fa;
+  --ux-selected-bg: rgba(37, 99, 235, 0.16);
+  --ux-selected-border: #3b82f6;
+  --ux-selected-accent: #60a5fa;
+  --ux-success: #34d399;
+  --ux-warn: #fbbf24;
+  --ux-danger: #fb7185;
+  --ux-radius: 0.75rem;
+  --ux-elevation-1: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --ux-elevation-2: 0 8px 24px rgba(2, 6, 23, 0.45);
+  --ux-skeleton-base: rgba(51, 65, 85, 0.55);
+  --ux-skeleton-shine: rgba(100, 116, 139, 0.45);
+}
+.light-theme {
+  --ux-focus-ring: #2563eb;
+  --ux-selected-bg: rgba(37, 99, 235, 0.1);
+  --ux-selected-border: #2563eb;
+  --ux-selected-accent: #1d4ed8;
+  --ux-success: #059669;
+  --ux-warn: #b45309;
+  --ux-danger: #e11d48;
+  --ux-elevation-1: 0 1px 2px rgba(15, 23, 42, 0.12);
+  --ux-elevation-2: 0 8px 24px rgba(15, 23, 42, 0.16);
+  --ux-skeleton-base: #e2e8f0;
+  --ux-skeleton-shine: #f1f5f9;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--ux-focus-ring);
+  outline-offset: 2px;
+}
+.leaflet-container :focus-visible { outline: none; }
+
+.ux-selectable { transition: background-color var(--ux-duration-fast) var(--ux-ease-standard), border-color var(--ux-duration-fast) var(--ux-ease-standard), box-shadow var(--ux-duration-fast) var(--ux-ease-standard); }
+.ux-selected, .ux-selectable[aria-selected="true"], .ux-selectable[aria-current="page"], .ux-selectable[aria-pressed="true"] {
+  background: var(--ux-selected-bg) !important;
+  border-color: var(--ux-selected-border) !important;
+  box-shadow: inset 3px 0 0 var(--ux-selected-accent);
+  color: var(--ux-selected-accent);
+}
+.ux-pressable { transition: transform var(--ux-duration-fast) var(--ux-ease-standard); }
+.ux-pressable:active:not(:disabled) { transform: scale(0.97); }
+
+.ux-skeleton {
+  background: linear-gradient(90deg, var(--ux-skeleton-base) 25%, var(--ux-skeleton-shine) 50%, var(--ux-skeleton-base) 75%);
+  background-size: 200% 100%;
+  animation: ux-shimmer 1.4s linear infinite;
+  border-radius: var(--ux-radius);
+}
+@keyframes ux-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.ux-state-error { border: 1px solid color-mix(in srgb, var(--ux-danger) 45%, transparent); background: color-mix(in srgb, var(--ux-danger) 12%, transparent); color: var(--ux-danger); }
+.ux-state-warn { border: 1px solid color-mix(in srgb, var(--ux-warn) 45%, transparent); background: color-mix(in srgb, var(--ux-warn) 12%, transparent); color: var(--ux-warn); }
+.ux-state-success { border: 1px solid color-mix(in srgb, var(--ux-success) 45%, transparent); background: color-mix(in srgb, var(--ux-success) 12%, transparent); color: var(--ux-success); }
+.ux-error-ring { box-shadow: 0 0 0 2px var(--ux-danger); }
+
+.ux-toast { animation: ux-toast-in var(--ux-duration-base) var(--ux-ease-standard); }
+@keyframes ux-toast-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.ux-toast-progress { transform-origin: left; animation-name: ux-toast-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes ux-toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+.enclosure-map-icon-selected { filter: drop-shadow(0 0 0 #fff) drop-shadow(0 0 4px var(--ux-selected-border)) drop-shadow(0 0 8px var(--ux-selected-border)); outline: 3px solid #fff; outline-offset: 2px; border-radius: 9999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ux-skeleton, .ux-toast, .ux-toast-progress, .animate-ping, .animate-pulse { animation: none !important; }
+  .ux-selectable, .ux-pressable { transition: none !important; }
+  .ux-pressable:active:not(:disabled) { transform: none; }
+}
+
+/* Circle fallback markers retain their status fill and gain a non-color selection ring. */
+.enclosure-circle-selected { filter: drop-shadow(0 0 3px var(--ux-selected-border)); }
