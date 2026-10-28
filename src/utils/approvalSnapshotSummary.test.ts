@@ -32,3 +32,15 @@ test('route distance is the drawn path, independent of the stored length and ML 
   const km = summarizeSnapshot(s).routes.map(row => row.cells[3]);
   assert.deepEqual(km, ['1.11', '3.34', '1.11', '2.22', '-', '-']);
 });
+
+test('9/25: malformed non-finite path uses endpoint fallback or unknown, stored column unchanged', () => {
+  const s = snapshot();
+  const path = [{ lat: 1.7e308, lng: 0 }, { lat: -1.7e308, lng: 0 }];
+  Object.assign(s.collections, { routes: [
+    { id: 'unknown', totalLength: 900, path },
+    { id: 'fallback', totalLength: 900, path, startEnclosureId: 'a', endEnclosureId: 'b' },
+  ], enclosures: [{ id: 'a', position: { lat: 0, lng: 0 } }, { id: 'b', position: { lat: 0, lng: .02 } }] });
+  const rows = summarizeSnapshot(s).routes;
+  assert.deepEqual(rows.map(r => r.cells[3]), ['-', '2.22']);
+  assert.deepEqual(rows.map(r => r.cells[4]), [900, 900]);
+});

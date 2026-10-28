@@ -24,6 +24,7 @@ import {
 import { OwnerLogo } from './OwnerLogo';
 import { getEffectiveOwnerLogo } from '../services/ownerLogosService';
 import { getClosestPointOnRoute } from '../utils/geo';
+import { documentRouteDistances, aggregateDistanceMeters, distanceWithUnit, resolveOperationKmInput, submittedOperationKm } from '../utils/approvalDocumentDistance';
 import { renderPrintableProjectMap } from '../utils/printProjectMap';
 import { normalizePrintLogo } from '../utils/printLogo';
 import { getApprovalAllocation } from '../utils/approvalAllocation';
@@ -208,6 +209,7 @@ export function DesignApprovalModal({
   const [contractorSaveSuccess, setContractorSaveSuccess] = useState(false);
   const [contractorSaveError, setContractorSaveError] = useState<string | null>(null);
   const [operationKmInput, setOperationKmInput] = useState(formValues.totalOperationDistanceKm?.toString() || '');
+  const operationKmTouchedFor = useRef<string | null>(null);
   const [rewindTarget, setRewindTarget] = useState<'Draft' | 'Planning' | 'OM'>('Draft');
   const [targetInstallDate, setTargetInstallDate] = useState(formValues.estimatedInstallationDate);
   const pendingDraftWrites = useRef<Set<Promise<void>>>(new Set());
@@ -241,6 +243,7 @@ export function DesignApprovalModal({
   useEffect(() => {
     const prior = previousFormValues.current;
     const reset = prior.projectId !== project.id;
+    if (reset) operationKmTouchedFor.current = null;
     if (reset || prior.values.designNotes !== formValues.designNotes) setRequestNotes(formValues.designNotes);
     if (reset || prior.values.contractorName !== formValues.contractorName) setContractorInput(formValues.contractorName);
     if (reset || prior.values.contractorContact !== formValues.contractorContact) setContractorContactInput(formValues.contractorContact);
@@ -693,32 +696,12 @@ export function DesignApprovalModal({
       return [];
     }
 
+    const distances = documentRouteDistances(effectiveRoutes, effectiveEnclosures);
     // Map each distinct shared fiber route into structured table rows
     return effectiveRoutes.map((route, idx) => {
       const cores = route.cores || [];
       const startEnc = effectiveEnclosures.find(e => e.id === route.startEnclosureId) || sldEnclosures[0];
       const endEnc = effectiveEnclosures.find(e => e.id === route.endEnclosureId) || sldEnclosures[sldEnclosures.length - 1];
-
-      // Calculate realistic distance of this specific fiber line
-      let distKm = '0.00';
-      if (route.totalLength && route.totalLength > 0 && route.totalLength < 100000) {
-        distKm = (route.totalLength / 1000).toFixed(2);
-      } else if (route.markStart !== undefined && route.markEnd !== undefined && Math.abs(route.markEnd - route.markStart) > 0 && Math.abs(route.markEnd - route.markStart) < 100000) {
-        distKm = (Math.abs(route.markEnd - route.markStart) / 1000).toFixed(2);
-      } else if (route.path && route.path.length >= 2) {
-        let distMeters = 0;
-        for (let i = 0; i < route.path.length - 1; i++) {
-          const p1 = L.latLng(route.path[i].lat, route.path[i].lng);
-          const p2 = L.latLng(route.path[i + 1].lat, route.path[i + 1].lng);
-          distMeters += p1.distanceTo(p2);
-        }
-        distKm = (distMeters / 1000).toFixed(2);
-      } else if (startEnc?.position && endEnc?.position) {
-        const p1 = L.latLng(startEnc.position.lat, startEnc.position.lng);
-        const p2 = L.latLng(endEnc.position.lat, endEnc.position.lng);
-        const distMeters = p1.distanceTo(p2);
-        distKm = (distMeters / 1000).toFixed(2);
-      }
 
       // Determine participating owners specific to THIS route line strictly from the route itself (no project fallback)
       const routeOwners: CoreOwner[] = (route.tierSharingPartners && route.tierSharingPartners.length > 0)
@@ -760,7 +743,8 @@ export function DesignApprovalModal({
         routeName: displayRouteName,
         capacity: capacity,
         sectionName: displaySectionName,
-        distanceKm: distKm,
+        distanceKm: distances[idx].text,
+        distanceMeters: distances[idx].meters,
         symcCores: symcCount,
         uihCores: uihCount,
         itelCores: itelCount,
@@ -771,16 +755,14 @@ export function DesignApprovalModal({
 
   // Aggregate totals across all fiber optic routes
   const fiberRouteTotals = useMemo(() => {
-    let totalDist = 0;
+    const distance = aggregateDistanceMeters(fiberRouteSchedule.map(r => ({ meters: r.distanceMeters })));
     let totalSYMC = 0;
     let totalUIH = 0;
     let totalITEL = 0;
     let totalAllCores = 0;
     const countedCables = new Set<string>();
 
-    fiberRouteSchedule.forEach((r, index) => {
-      const rawLength = effectiveRoutes[index]?.totalLength;
-      totalDist += rawLength !== undefined && rawLength > 0 ? rawLength / 1000 : (parseFloat(r.distanceKm) || 0);
+    fiberRouteSchedule.forEach((r) => {
       // Split segments are shown separately, but their shared cable cores count once.
       if (!countedCables.has(r.cableId)) {
         totalSYMC += r.symcCores || 0;
@@ -792,7 +774,7 @@ export function DesignApprovalModal({
     });
 
     return {
-      distanceKm: totalDist.toFixed(2),
+      distanceKm: distance.totalText,
       symcCores: totalSYMC,
       uihCores: totalUIH,
       itelCores: totalITEL,
@@ -801,9 +783,7 @@ export function DesignApprovalModal({
   }, [fiberRouteSchedule, effectiveRoutes]);
 
   const fiberOpticSummary = useMemo(() => {
-    const distanceByType = new Map<string, number>();
-
-    fiberRouteSchedule.forEach((route, index) => {
+    const entries = fiberRouteSchedule.map((route, index) => {
       const capacityLabel = `OFC ${route.capacity} Core`;
       const typeName = effectiveRoutes[index]?.fiberType?.trim();
       const label = !typeName || /^\d+$/.test(typeName)
@@ -811,15 +791,9 @@ export function DesignApprovalModal({
         : typeName.includes(String(route.capacity))
           ? typeName
           : `${capacityLabel} (${typeName})`;
-      const rawLength = effectiveRoutes[index]?.totalLength;
-      distanceByType.set(label, (distanceByType.get(label) || 0) +
-        (rawLength !== undefined && rawLength > 0 ? rawLength / 1000 : (parseFloat(route.distanceKm) || 0)));
+      return { meters: route.distanceMeters, group: label };
     });
-
-    return Array.from(distanceByType, ([label, distanceKm]) => ({
-      label,
-      distanceKm: distanceKm.toFixed(2)
-    }));
+    return aggregateDistanceMeters(entries).groups.map(({ group, text }) => ({ label: group, distanceKm: text }));
   }, [fiberRouteSchedule, effectiveRoutes]);
 
   // Helper to dynamically calculate per-route fiber and enclosure sharing configuration
@@ -1121,12 +1095,15 @@ export function DesignApprovalModal({
     return '312 Core';
   };
 
-  const totalLengthKm = fiberRouteTotals.distanceKm;
+  const documentDistanceKm = fiberRouteTotals.distanceKm;
+  const liveDistanceKm = aggregateDistanceMeters(documentRouteDistances(liveSource.routes, liveSource.enclosures)).totalText;
   useEffect(() => {
-    if (project.designApproval?.totalOperationDistanceKm == null && project.approvalDraft?.totalOperationDistanceKm == null) {
-      setOperationKmInput(current => current || totalLengthKm);
-    }
-  }, [project.id, project.designApproval?.totalOperationDistanceKm, project.approvalDraft?.totalOperationDistanceKm, totalLengthKm]);
+    const touched = operationKmTouchedFor.current === project.id;
+    const storedKm = project.designApproval?.totalOperationDistanceKm ?? project.approvalDraft?.totalOperationDistanceKm;
+    setOperationKmInput(current => resolveOperationKmInput({ current, touched, storedKm,
+      ready: readiness.ready, defaultKm: liveDistanceKm }));
+  }, [project.id, project.designApproval?.totalOperationDistanceKm, project.approvalDraft?.totalOperationDistanceKm,
+    readiness.ready, liveDistanceKm]);
 
   // Canvas drawing listeners
   useEffect(() => {
@@ -1433,8 +1410,7 @@ export function DesignApprovalModal({
         contractorPhone: contractorPhoneInput.trim(),
         contractorPoNumber: contractorPoInput.trim(),
         contractorScope: contractorScopeInput.trim(),
-        totalOperationDistanceKm: Number.isFinite(Number.parseFloat(operationKmInput)) && Number.parseFloat(operationKmInput) >= 0
-          ? Number.parseFloat(operationKmInput) : Number.parseFloat(totalLengthKm),
+        totalOperationDistanceKm: submittedOperationKm(operationKmInput, liveDistanceKm),
         estimatedInstallationDate: targetInstallDate,
         routeEnclosureSelections,
         planningSignOffs: initialPlanningSignOffs,
@@ -1739,7 +1715,7 @@ export function DesignApprovalModal({
       return {
         name: route.name || 'Fiber Route',
         color: getRouteColor(route),
-        distanceKm: routeSummary?.distanceKm || (route.totalLength ? (route.totalLength / 1000).toFixed(2) : '-'),
+        distanceKm: routeSummary?.distanceKm ?? '-',
         fiberType: route.fiberType?.trim() || activeFiberTypes.find(type => type.cores === route.capacity)?.name || `OFC ${route.capacity} Core`,
         points: routePoints.length >= 2 ? routePoints : (start && end ? [start, end] : routePoints)
       };
@@ -2020,7 +1996,7 @@ export function DesignApprovalModal({
       </div>
       <div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
         <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">Shared Cable Distance</span>
-        <strong style="color: #d97706; font-size: 15px;">${totalLengthKm} km.</strong>
+        <strong style="color: #d97706; font-size: 15px;">${documentDistanceKm} km.</strong>
       </div>
       <div style="background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: left;">
         <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: bold; display: block;">Total Enclosures</span>
@@ -2042,7 +2018,7 @@ export function DesignApprovalModal({
       </div>
     </div>
     <div style="margin-bottom: 16px;">
-      <div class="metric-badge">ระยะดำเนินการ ${totalLengthKm} km.</div>
+      <div class="metric-badge">ระยะดำเนินการ ${documentDistanceKm} km.</div>
     </div>
     <table>
       <thead>
@@ -2106,7 +2082,7 @@ export function DesignApprovalModal({
                 OFC ${routeSched.capacity} Core
               </span>
               <span style="background: #334155; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
-                ระยะทาง ${routeSched.distanceKm} km
+                ระยะทาง ${distanceWithUnit(routeSched.distanceKm, 'km')}
               </span>
               <span style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
                 Tier: ${routeSched.tier || projectTierCompactLabel}
@@ -2286,7 +2262,7 @@ export function DesignApprovalModal({
               <span style="font-size: 11px; color: #94a3b8;">(${routeSched.sectionName})</span>
             </div>
             <div style="font-size: 11px; color: #94a3b8;">
-              ระยะทาง: <strong style="color: white;">${routeSched.distanceKm} km</strong> | ขนาด: <strong style="color: #facc15;">OFC ${totalC} Core</strong>
+              ระยะทาง: <strong style="color: white;">${distanceWithUnit(routeSched.distanceKm, 'km')}</strong> | ขนาด: <strong style="color: #facc15;">OFC ${totalC} Core</strong>
             </div>
           </div>
           ${fiberImgUrl ? `
@@ -2389,7 +2365,7 @@ export function DesignApprovalModal({
               <tr>
                 <td style="vertical-align: top; overflow-wrap: break-word;"><strong>${escapePrintText(route.tier)}</strong></td>
                 <td style="vertical-align: top; text-align: left; overflow-wrap: break-word;"><strong>${route.routeName.split(/\s+-\s+/).map(escapePrintText).join(' –<br>')}</strong></td>
-                <td style="vertical-align: top;">OFC ${route.capacity} Core<br><strong>${route.distanceKm} กม.</strong></td>
+                <td style="vertical-align: top;">OFC ${route.capacity} Core<br><strong>${distanceWithUnit(route.distanceKm, 'กม.')}</strong></td>
                 <td style="vertical-align: top; text-align: left;">
                   ${participatingOwners.map(owner => `
                     <div><strong style="color: ${owner === 'SYMC' ? '#db2777' : owner === 'UIH' ? '#0038b8' : '#d97706'};">${owner}:</strong> ${getCoreShareText(getOwnerCoreCount(route, owner), route.capacity)}</div>
@@ -2405,7 +2381,7 @@ export function DesignApprovalModal({
             <tr style="background: #e0f2fe; font-weight: 700;">
               <td>รวม</td>
               <td>${approvalSummaryRows.length} เส้น Fiber Optic</td>
-              <td>${totalLengthKm} กม.</td>
+              <td>${documentDistanceKm} กม.</td>
               <td style="text-align: left;">${participatingOwners.map(owner => `<div>${owner}: ${owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>`).join('')}</td>
               <td style="text-align: left;">${approvalEnclosureTypeTotals.length ? approvalEnclosureTypeTotals.map(type => `<div>${escapePrintText(type.name)} <strong>(${type.count} หัว)</strong></div>`).join('') : '-'}</td>
             </tr>
@@ -2507,7 +2483,7 @@ export function DesignApprovalModal({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium truncate">
-                {activeProject.name} &bull; {participatingOwners.join(' + ')} &bull; {sldEnclosures.length} Enclosures &bull; {totalLengthKm} km
+                {activeProject.name} &bull; {participatingOwners.join(' + ')} &bull; {sldEnclosures.length} Enclosures &bull; {documentDistanceKm} km
               </p>
             </div>
           </div>
@@ -2777,7 +2753,7 @@ export function DesignApprovalModal({
                         </div>
                         <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                           <p className="text-[10px] text-slate-400 font-bold uppercase">Shared Cable Distance</p>
-                          <p className="text-xs font-black text-amber-400">{totalLengthKm} km.</p>
+                          <p className="text-xs font-black text-amber-400">{documentDistanceKm} km.</p>
                         </div>
                         <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                           <p className="text-[10px] text-slate-400 font-bold uppercase">Total Enclosures</p>
@@ -2794,7 +2770,7 @@ export function DesignApprovalModal({
                       <div className="flex flex-wrap items-center gap-3">
                         <div className="bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-md flex items-center gap-2">
                           <Cable size={14} />
-                          <span>ระยะดำเนินการ {totalLengthKm} km.</span>
+                          <span>ระยะดำเนินการ {documentDistanceKm} km.</span>
                         </div>
                       </div>
 
@@ -2842,7 +2818,7 @@ export function DesignApprovalModal({
                                 รวมทั้งโครงการ (Total Infra Sharing)
                               </td>
                               <td className="p-3 border-r border-slate-700 text-amber-400 text-sm font-black">
-                                {fiberRouteTotals.distanceKm} km.
+                                {distanceWithUnit(fiberRouteTotals.distanceKm, 'km.')}
                               </td>
                               {participatingOwners.map(owner => (
                                 <td 
@@ -2917,7 +2893,7 @@ export function DesignApprovalModal({
                             {effectiveRoutes.map((r, i) => {
                               const routeData = fiberRouteSchedule[i] || fiberRouteSchedule.find(s => s.routeName === r.name) || {
                                 tier: r.tier || projectTierCompactLabel,
-                                distanceKm: '0.00',
+                                distanceKm: '-',
                                 symcCores: 0,
                                 uihCores: 0,
                                 itelCores: 0,
@@ -2971,7 +2947,7 @@ export function DesignApprovalModal({
 
                                       <div className="text-[10px] font-mono text-slate-600 flex justify-between pt-0.5">
                                         <span>ระยะทาง (Distance):</span>
-                                        <span className="font-bold text-slate-800">{r.totalLength ? `${(r.totalLength / 1000).toFixed(2)} km` : `${routeData.distanceKm || '0.00'} km`}</span>
+                                        <span className="font-bold text-slate-800">{distanceWithUnit(routeData.distanceKm, 'km')}</span>
                                       </div>
                                     </div>
                                   </Tooltip>
@@ -3109,7 +3085,7 @@ export function DesignApprovalModal({
                             {effectiveRoutes.map((r, i) => {
                               const routeData = fiberRouteSchedule[i] || fiberRouteSchedule.find(s => s.routeName === r.name) || {
                                 tier: r.tier || projectTierCompactLabel,
-                                distanceKm: '0.00',
+                                distanceKm: '-',
                                 symcCores: 0,
                                 uihCores: 0,
                                 itelCores: 0,
@@ -3136,7 +3112,7 @@ export function DesignApprovalModal({
 
                                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
                                     <span>Tier: <strong className="text-sky-300">{routeData.tier || r.tier || projectTierCompactLabel}</strong></span>
-                                    <span>ระยะทาง: <strong className="text-white">{routeData.distanceKm} km</strong></span>
+                                    <span>ระยะทาง: <strong className="text-white">{distanceWithUnit(routeData.distanceKm, 'km')}</strong></span>
                                   </div>
 
                                   <div className="bg-slate-900/90 px-2 py-1 rounded border border-slate-800 text-[10.5px] font-mono text-amber-300/90">
@@ -3164,9 +3140,9 @@ export function DesignApprovalModal({
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-amber-400 min-w-0 space-y-1">
                           <div className="text-[10px] text-slate-400 uppercase">Fiber Optic</div>
                           {fiberOpticSummary.map(({ label, distanceKm }) => (
-                            <div key={label} className="break-words leading-snug">{label}: {distanceKm} km.</div>
+                            <div key={label} className="break-words leading-snug">{label}: {distanceWithUnit(distanceKm, 'km.')}</div>
                           ))}
-                          <div className="border-t border-slate-800 pt-1 text-[10px] text-amber-300">รวม {totalLengthKm} km.</div>
+                          <div className="border-t border-slate-800 pt-1 text-[10px] text-amber-300">รวม {documentDistanceKm} km.</div>
                         </div>
                         <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-pink-400">
                           Enclosures: {sldEnclosures.length} EA.
@@ -3243,7 +3219,7 @@ export function DesignApprovalModal({
                                       OFC {routeSched.capacity} Core
                                     </span>
                                     <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[11px] font-bold border border-slate-700">
-                                      ระยะทาง {routeSched.distanceKm} km
+                                      ระยะทาง {distanceWithUnit(routeSched.distanceKm, 'km')}
                                     </span>
                                     <span className="approval-dark-badge-sky px-2 py-0.5 rounded bg-sky-950 text-sky-300 font-mono text-[11px] font-bold border border-sky-800">
                                       Tier: {routeSched.tier || projectTierCompactLabel}
@@ -3477,7 +3453,7 @@ export function DesignApprovalModal({
                                 <span className="text-amber-400 font-extrabold">{routeSched.routeName}</span> ({routeSched.sectionName})
                               </span>
                               <span className="text-slate-400 font-mono text-[11px]">
-                                ระยะทาง: <strong className="text-white">{routeSched.distanceKm} km</strong> &bull; ขนาด: <strong className="text-amber-300">OFC {totalC} Core</strong>
+                                ระยะทาง: <strong className="text-white">{distanceWithUnit(routeSched.distanceKm, 'km')}</strong> &bull; ขนาด: <strong className="text-amber-300">OFC {totalC} Core</strong>
                               </span>
                             </div>
 
@@ -3520,7 +3496,7 @@ export function DesignApprovalModal({
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-2 border-t border-slate-800">
                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
                                         <span className="text-slate-400 text-[10px] block">ระยะทางสายเคเบิล:</span>
-                                        <strong className="text-emerald-400 text-xs">{routeSched.distanceKm} km</strong>
+                                        <strong className="text-emerald-400 text-xs">{distanceWithUnit(routeSched.distanceKm, 'km')}</strong>
                                       </div>
                                       <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
                                         <span className="text-slate-400 text-[10px] block">Enclosure ที่เกาะอยู่:</span>
@@ -3771,7 +3747,7 @@ export function DesignApprovalModal({
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <span className="font-extrabold text-white text-xs">สรุปเส้น Fiber Optic และการใช้งานร่วมกัน</span>
                             <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-500/20">
-                              {approvalSummaryRows.length} เส้น | {totalLengthKm} กม.
+                              {approvalSummaryRows.length} เส้น | {documentDistanceKm} กม.
                             </span>
                           </div>
                           <div className="overflow-x-auto rounded-lg border border-slate-700">
@@ -3796,7 +3772,7 @@ export function DesignApprovalModal({
                                     <td className="p-2 border-r border-slate-800 font-semibold break-words">{route.routeName}</td>
                                     <td className="p-2 border-r border-slate-800">
                                       <div>OFC {route.capacity} Core</div>
-                                      <strong className="text-emerald-400">{route.distanceKm} กม.</strong>
+                                      <strong className="text-emerald-400">{distanceWithUnit(route.distanceKm, 'กม.')}</strong>
                                     </td>
                                     <td className="p-2 border-r border-slate-800 space-y-1">
                                       {participatingOwners.map(owner => (
@@ -3818,7 +3794,7 @@ export function DesignApprovalModal({
                                 <tr>
                                   <td className="p-2 border-r border-slate-700">รวม</td>
                                   <td className="p-2 border-r border-slate-700">{approvalSummaryRows.length} เส้น Fiber Optic</td>
-                                  <td className="p-2 border-r border-slate-700">{totalLengthKm} กม.</td>
+                                  <td className="p-2 border-r border-slate-700">{documentDistanceKm} กม.</td>
                                   <td className="p-2 border-r border-slate-700">
                                     {participatingOwners.map(owner => (
                                       <div key={owner}>{owner}: {owner === 'SYMC' ? fiberRouteTotals.symcCores : owner === 'UIH' ? fiberRouteTotals.uihCores : fiberRouteTotals.itelCores} Core</div>
@@ -4155,7 +4131,7 @@ export function DesignApprovalModal({
                     step="0.01"
                     min="0"
                     value={operationKmInput}
-                    onChange={e => setOperationKmInput(e.target.value)}
+                    onChange={e => { operationKmTouchedFor.current = project.id; setOperationKmInput(e.target.value); }}
                     onBlur={() => saveDraftField('totalOperationDistanceKm', Number.parseFloat(operationKmInput) || 0)}
                     className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-sky-500"
                   />
