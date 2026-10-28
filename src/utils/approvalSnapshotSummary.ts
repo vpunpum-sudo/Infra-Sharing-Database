@@ -10,13 +10,9 @@ const text = (v: unknown) => typeof v === 'string' ? v : '-';
 const ownerList = (items: unknown[]) => [...new Set(items.filter(o => ['ITEL', 'SYMC', 'UIH'].includes(o as string)))].sort().join(', ') || '-';
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isPoint = (p: any) => Boolean(p) && finite(p.lat) && finite(p.lng);
-// Same order as the route table in the approval document: stored length, then marks, then the path, then the end enclosures.
+// The distance as designed: the length of the drawn path, never the stored length or the ML marks.
+// Routes without a usable path fall back to the straight line between their end enclosures.
 function routeDistanceKm(route: Record<string, any>, enclosures: Map<string, any>): string {
-  if (finite(route.totalLength) && route.totalLength > 0 && route.totalLength < 100000) return (route.totalLength / 1000).toFixed(2);
-  if (finite(route.markStart) && finite(route.markEnd)) {
-    const span = Math.abs(route.markEnd - route.markStart);
-    if (span > 0 && span < 100000) return (span / 1000).toFixed(2);
-  }
   const path = Array.isArray(route.path) ? route.path.filter(isPoint) : [];
   if (path.length >= 2) return (path.slice(1).reduce((sum: number, point: any, i: number) => sum + getDistance(path[i], point), 0) / 1000).toFixed(2);
   const from = enclosures.get(route.startEnclosureId)?.position, to = enclosures.get(route.endEnclosureId)?.position;
