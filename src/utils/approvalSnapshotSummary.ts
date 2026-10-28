@@ -1,5 +1,5 @@
 import type { ApprovalSnapshot } from './approvalSnapshot';
-import { getDistance } from './geo';
+import { routeDistanceMeters, distanceKmText } from './geo';
 export type SummaryRow = { id: string; cells: Array<string | number> };
 export type SnapshotSummary = ReturnType<typeof summarizeSnapshot>;
 const valid = (items: unknown, skipped: { count: number }): Record<string, any>[] => {
@@ -8,16 +8,8 @@ const valid = (items: unknown, skipped: { count: number }): Record<string, any>[
 };
 const text = (v: unknown) => typeof v === 'string' ? v : '-';
 const ownerList = (items: unknown[]) => [...new Set(items.filter(o => ['ITEL', 'SYMC', 'UIH'].includes(o as string)))].sort().join(', ') || '-';
-const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const isPoint = (p: any) => Boolean(p) && finite(p.lat) && finite(p.lng);
-// The distance as designed: the length of the drawn path, never the stored length or the ML marks.
-// Routes without a usable path fall back to the straight line between their end enclosures.
-function routeDistanceKm(route: Record<string, any>, enclosures: Map<string, any>): string {
-  const path = Array.isArray(route.path) ? route.path.filter(isPoint) : [];
-  if (path.length >= 2) return (path.slice(1).reduce((sum: number, point: any, i: number) => sum + getDistance(path[i], point), 0) / 1000).toFixed(2);
-  const from = enclosures.get(route.startEnclosureId)?.position, to = enclosures.get(route.endEnclosureId)?.position;
-  return isPoint(from) && isPoint(to) ? (getDistance(from, to) / 1000).toFixed(2) : '-';
-}
+const routeDistanceKm = (route: unknown, enclosures: unknown): string =>
+  distanceKmText(routeDistanceMeters(route, enclosures));
 export function summarizeSnapshot(snapshot: Pick<ApprovalSnapshot, 'collections'>) {
   const c = snapshot?.collections; const skipped = { count: 0 };
   const types = new Map(valid(c?.enclosureTypes, skipped).map(t => [t.id, text(t.name)]));

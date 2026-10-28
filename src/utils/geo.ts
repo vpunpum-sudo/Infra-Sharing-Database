@@ -96,3 +96,38 @@ export function splitRoutePath(path: Point[], point: Point) {
   if (firstLength < 1 || secondLength < 1) throw new Error('Choose an Enclosure between the ends of the route.');
   return { first, second, point: inserted.point, fraction: firstLength / (firstLength + secondLength) };
 }
+
+/** Designed path length, falling back only to the route's explicit end enclosures. */
+export function routeDistanceMeters(route: unknown, enclosures: unknown): number | undefined {
+  if (!route || typeof route !== 'object') return undefined;
+  const r = route as Record<string, unknown>;
+  const isPoint = (value: unknown): value is Point => {
+    if (!value || typeof value !== 'object') return false;
+    const p = value as Point;
+    return typeof p.lat === 'number' && Number.isFinite(p.lat) &&
+      typeof p.lng === 'number' && Number.isFinite(p.lng);
+  };
+  const path = Array.isArray(r.path) ? r.path.filter(isPoint) : [];
+  if (path.length >= 2) {
+    const meters = routeLength(path);
+    if (Number.isFinite(meters) && meters >= 0) return meters;
+  }
+  const enclosure = (id: unknown): unknown => {
+    if (typeof id !== 'string') return undefined;
+    if (enclosures instanceof Map) return enclosures.get(id);
+    if (Array.isArray(enclosures)) return enclosures.find(e => e && typeof e === 'object' && e.id === id);
+    return undefined;
+  };
+  const position = (entry: unknown): unknown => entry && typeof entry === 'object'
+    ? (entry as { position?: unknown }).position : undefined;
+  const from = position(enclosure(r.startEnclosureId));
+  const to = position(enclosure(r.endEnclosureId));
+  if (!isPoint(from) || !isPoint(to)) return undefined;
+  const meters = getDistance(from, to);
+  return Number.isFinite(meters) && meters >= 0 ? meters : undefined;
+}
+
+export function distanceKmText(meters: number | undefined): string {
+  return typeof meters === 'number' && Number.isFinite(meters) && meters >= 0
+    ? (meters / 1000).toFixed(2) : '-';
+}
