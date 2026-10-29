@@ -80,3 +80,10 @@ test('a key without a PNG reports its figure', () => {
 test('a key with the wrong callout count reports its figure', () => {
   assert.throws(() => checkScreenshotContent({ ...WI_SCREENSHOT_MARKS, dashboard: Array.from({ length: 5 }, () => ({ x: 10, y: 10 })) }, () => true), /dashboard: mark count/);
 });
+
+test('every table-of-contents anchor target is unique', () => {
+  // The section ids mirror WorkInstruction.tsx; chapters and procedures are linked from the table of contents.
+  const ids = ['purpose', 'scope', 'definitions', 'roles', 'procedures', 'records', 'references', 'revisions',
+    ...WI_CHAPTERS.flatMap(chapter => [chapter.id, ...chapter.procedures.map(procedure => procedure.id)])];
+  assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), []);
+});
