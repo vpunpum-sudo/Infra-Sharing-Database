@@ -72,7 +72,10 @@ export default function WorkInstruction() {
             {sections.map(([id, title]) => (
               <li key={id}><a href={`#wi-${id}`}>{title}</a>
                 {id === 'procedures' && <ol>{WI_CHAPTERS.map((chapter, c) =>
-                  <li key={chapter.id}><a href={`#wi-${chapter.id}`}>5.{c + 1} {chapter.title}</a></li>)}</ol>}
+                  <li key={chapter.id}><a href={`#wi-${chapter.id}`}>5.{c + 1} {chapter.title}</a>
+                    <ol>{chapter.procedures.map((procedure, p) =>
+                      <li key={procedure.id}><a href={`#wi-${procedure.id}`}>5.{c + 1}.{p + 1} {procedure.title}</a></li>)}</ol>
+                  </li>)}</ol>}
               </li>
             ))}
           </ol>
@@ -98,7 +101,7 @@ export default function WorkInstruction() {
             <div key={chapter.id} id={`wi-${chapter.id}`} className="wi-chapter">
               <h3>5.{c + 1} {chapter.title}</h3>
               {chapter.procedures.map((procedure, p) => (
-                <div key={procedure.id} className="wi-procedure">
+                <div key={procedure.id} id={`wi-${procedure.id}`} className="wi-procedure">
                   <h4>5.{c + 1}.{p + 1} {procedure.title}</h4>
                   <p className="wi-who"><b>ผู้ปฏิบัติ:</b> {procedure.who}</p>
                   {procedure.detail.map(text => <p key={text} className="wi-detail">{text}</p>)}
