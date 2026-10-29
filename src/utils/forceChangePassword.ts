@@ -12,9 +12,8 @@ type Deps = { updatePassword: (password: string) => Promise<void>; clearFlag: ()
 export type PasswordResult = { status: 'done' | 'validation_failed' | 'update_failed' | 'flag_failed_password_active'; message: string };
 
 export async function run(newPassword: string, confirmPassword: string, deps: Deps): Promise<PasswordResult> {
-  if (newPassword !== newPassword.trim()) return { status: 'validation_failed', message: PASSWORD_MESSAGES.spaces };
-  if (newPassword.length < 6) return { status: 'validation_failed', message: PASSWORD_MESSAGES.length };
-  if (newPassword !== confirmPassword) return { status: 'validation_failed', message: PASSWORD_MESSAGES.mismatch };
+  const validation = validateNewPassword(newPassword, confirmPassword);
+  if (validation) return { status: 'validation_failed', message: validation };
   try { await deps.updatePassword(newPassword); }
   catch (error) {
     const code = (error as { code?: string })?.code;
@@ -26,4 +25,11 @@ export async function run(newPassword: string, confirmPassword: string, deps: De
 export async function retryClearFlag(deps: Pick<Deps, 'clearFlag'>): Promise<PasswordResult> {
   try { await deps.clearFlag(); return { status: 'done', message: PASSWORD_MESSAGES.done }; }
   catch { return { status: 'flag_failed_password_active', message: PASSWORD_MESSAGES.flagFailed }; }
+}
+
+export function validateNewPassword(next: string, confirm: string): string | null {
+  if (next !== next.trim()) return PASSWORD_MESSAGES.spaces;
+  if (next.length < 6) return PASSWORD_MESSAGES.length;
+  if (next !== confirm) return PASSWORD_MESSAGES.mismatch;
+  return null;
 }

@@ -40,7 +40,6 @@ export const WI_MASK_SPECS: Record<FigureId, MaskSpec> = {
   profile: { regions: [
     ...header(), region('profile-display-name', 'input', WI_MASK_PLACEHOLDERS.ownName, true, 'ProfileSettings.tsx'),
     region('profile-email', 'input', WI_MASK_PLACEHOLDERS.email(1), true, 'ProfileSettings.tsx'),
-    region('profile-image-url', 'input', WI_MASK_PLACEHOLDERS.profileImageLink, true, 'ProfileSettings.tsx'),
     region('profile-avatar', 'image', undefined, false, 'ProfileSettings.tsx')
   ] },
   map: { regions: mapRegions() },
