@@ -84,6 +84,19 @@ For approval-email functions, also follow `APPROVAL_EMAIL_SETUP.md`.
 - Rules have a hard budget of 1,000 evaluated expressions and 10 distinct document reads per request. The suite's
   budget test (`limits.rules.test.mjs`) keeps a margin; when a change eats it, restructure instead of lowering the margin.
 
+### Storage rules changes
+
+`npm run verify` does not exercise `storage.rules`. Profile-photo changes also require
+`npm run test:profile-emulator` in a shell with a JRE, Firebase CLI and local sockets.
+The suite uses only `demo-profile-settings` and checks ownership, create-only objects,
+name/type/size boundaries, unchanged path denials, Auth re-authentication and photo-only
+Firestore merges. Browser evidence is required by the feature plan at independent review.
+Rules are not deployed by these checks. A production rules deployment needs separate human
+authorization naming **Storage rules** and the project. Rollback is redeploying the previous
+`storage.rules` from git; uploaded objects and bearer URLs remain until separately deleted.
+After an authorized deployment, upload, replace and remove an approved test account's photo,
+check its header and stored URL length, and verify another account cannot access its path.
+
 ## Conductor merge-gate todos
 
 Create these todos for each feature and treat open items as blockers:

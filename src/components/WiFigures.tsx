@@ -130,8 +130,8 @@ function Profile() {
     <Frame title="Profile Settings" height={250}>
       <div className="wf-header"><b>FIBER SHARING DATABASE</b><Row gap={8}><A n={2}><span className="wf-icon">☀</span></A><A n={1}><span className="wf-box">ชื่อผู้ใช้ · DESIGN</span></A><A n={3}><span className="wf-icon">⎋</span></A></Row></div>
       <div className="wf-pad wf-grid2">
-        <A n={4} className="wf-block"><div className="wf-card"><b>Personal Information</b><Field label="Display Name" value="ชื่อ นามสกุล" wide /><Field label="Profile Image URL" value="https://…/photo.jpg" wide /></div></A>
-        <A n={5} className="wf-block"><div className="wf-card"><b>Security &amp; Password</b><Field label="New Password" value="••••••••" wide /><Field label="Confirm New Password" value="••••••••" wide /></div></A>
+        <A n={4} className="wf-block"><div className="wf-card"><b>Personal Information</b><Field label="Display Name" value="ชื่อ นามสกุล" wide /><span className="wf-box">เลือกรูปจากอุปกรณ์ · ใช้รูปนี้</span></div></A>
+        <A n={5} className="wf-block"><div className="wf-card"><b>Security &amp; Password</b><Field label="รหัสผ่านปัจจุบัน" value="••••••••" wide /><Field label="New Password" value="••••••••" wide /><Field label="Confirm New Password" value="••••••••" wide /></div></A>
       </div>
     </Frame>
   );

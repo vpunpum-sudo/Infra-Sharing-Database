@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "test:functions": "npm --prefix functions test",
+    "test:profile-emulator": "node tests/profile-emulator/run.mjs",
     "test:rules": "node tests/rules/run.mjs",
     "verify": "npm run lint && npm test && npm run test:functions && npm run build",
     "wi:screenshots": "node --import tsx scripts/wi-screenshots.ts"

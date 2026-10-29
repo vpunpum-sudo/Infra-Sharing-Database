@@ -9,3 +9,4 @@ coverage/
 .context/
 .wi-screenshots-tmp-*/
 test-results/
+tests/profile-emulator/.rules/

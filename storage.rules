@@ -7,5 +7,19 @@ service firebase.storage {
     match /project-files/{allPaths=**} {
       allow read, write: if false;
     }
+
+    // New objects only: replacing a photo never overwrites the currently served bytes.
+    // `resource == null` keeps create strictly for new objects, including in the Storage emulator,
+    // which evaluates every finished upload as `create` even when the object already exists.
+    match /profile-photos/{uid}/{fileName} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid
+        && fileName.matches('avatar-[0-9]{13}-[0-9a-f]{16}\\.jpg');
+      allow create: if request.auth != null && request.auth.uid == uid
+        && fileName.matches('avatar-[0-9]{13}-[0-9a-f]{16}\\.jpg')
+        && resource == null
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size > 0
+        && request.resource.size <= 262144;
+    }
   }
 }
